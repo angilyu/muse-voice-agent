@@ -1,0 +1,40 @@
+[project]
+name = "muse-voice-agent"
+version = "0.1.0"
+description = "LiveKit + LangGraph phone agent that Meta Muse can drive over MCP to book restaurants and get handyman quotes"
+readme = "README.md"
+authors = [
+    { email = "angilyu@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "langchain[openai]>=1.4",
+    "langgraph>=1.2",
+    "livekit-agents[langchain]~=1.8",
+    "mcp>=2.2",
+    "pydantic>=2",
+    "python-dotenv>=1.2.3",
+    "uvicorn>=0.54.0",
+]
+
+[project.scripts]
+muse-voice-agent = "muse_voice_agent.agent:main"
+muse-voice-mcp = "muse_voice_agent.mcp_server:main"
+
+[build-system]
+requires = ["uv_build>=0.9.27,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[[tool.uv.index]]
+url = "https://pypi.org/simple/"
+default = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

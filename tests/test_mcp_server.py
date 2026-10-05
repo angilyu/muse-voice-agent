@@ -1,0 +1,163 @@
+import asyncio
+from dataclasses import replace
+
+import httpx
+import pytest
+from mcp import Client
+
+from muse_voice_agent import dispatcher
+from muse_voice_agent.config import Settings
+from muse_voice_agent.mcp_server import build_app, build_server
+from muse_voice_agent.store import CallStore
+
+
+@pytest.fixture
+def settings(tmp_path) -> Settings:
+    return replace(
+        Settings(),
+        dry_run=True,
+        mcp_auth_token="test-token",
+        call_db_path=tmp_path / "calls.db",
+        allowed_dial_prefixes=["+1"],
+        max_concurrent_calls=3,
+        default_customer_name="Angi",
+    )
+
+
+@pytest.fixture(autouse=True)
+def fast_simulation(monkeypatch):
+    original = dispatcher._simulate_call
+
+    async def fast(call_id, task, store, delay=0.05):
+        await original(call_id, task, store, delay=delay)
+
+    monkeypatch.setattr(dispatcher, "_simulate_call", fast)
+
+
+def _data(result) -> dict:
+    assert not result.is_error, result
+    return result.structured_content
+
+
+async def test_lists_expected_tools(settings):
+    async with Client(build_server(settings)) as client:
+        tools = {t.name for t in (await client.list_tools()).tools}
+    assert tools == {
+        "book_restaurant_reservation",
+        "request_handyman_quote",
+        "get_call_status",
+        "list_calls",
+    }
+
+
+async def test_restaurant_booking_dry_run_end_to_end(settings):
+    async with Client(build_server(settings)) as client:
+        started = _data(
+            await client.call_tool(
+                "book_restaurant_reservation",
+                {
+                    "restaurant_name": "Luigi's",
+                    "phone_number": "(415) 555-0123",
+                    "party_size": 4,
+                    "date": "Friday",
+                    "time": "7pm",
+                },
+            )
+        )
+        assert started["phone_number"] == "+14155550123"
+        assert started["done"] is False
+
+        for _ in range(50):
+            status = _data(
+                await client.call_tool(
+                    "get_call_status", {"call_id": started["call_id"], "include_transcript": True}
+                )
+            )
+            if status["done"]:
+                break
+            await asyncio.sleep(0.02)
+
+    assert status["status"] == "completed"
+    assert status["outcome"] == "booked"
+    assert status["details"]["party_size"] == 4
+    assert status["simulated"] is True
+    assert len(status["transcript"]) >= 2
+
+
+async def test_handyman_quote_dry_run(settings):
+    async with Client(build_server(settings)) as client:
+        started = _data(
+            await client.call_tool(
+                "request_handyman_quote",
+                {
+                    "business_name": "Bob's Fixit",
+                    "phone_number": "+14155550199",
+                    "job_description": "replace a leaking kitchen faucet",
+                    "location": "94110",
+                },
+            )
+        )
+        await asyncio.sleep(0.2)
+        status = _data(await client.call_tool("get_call_status", {"call_id": started["call_id"]}))
+        listed = _data(await client.call_tool("list_calls", {}))
+    assert status["outcome"] == "quote_received"
+    assert listed["calls"][0]["call_id"] == started["call_id"]
+
+
+async def test_rejects_disallowed_country_and_bad_numbers(settings):
+    async with Client(build_server(settings)) as client:
+        foreign = _data(
+            await client.call_tool(
+                "book_restaurant_reservation",
+                {
+                    "restaurant_name": "Le Bistro",
+                    "phone_number": "+33142685300",
+                    "party_size": 2,
+                    "date": "Friday",
+                    "time": "8pm",
+                },
+            )
+        )
+        bad = _data(
+            await client.call_tool(
+                "book_restaurant_reservation",
+                {
+                    "restaurant_name": "X",
+                    "phone_number": "12",
+                    "party_size": 2,
+                    "date": "Friday",
+                    "time": "8pm",
+                },
+            )
+        )
+    assert foreign["error"] == "rejected"
+    assert bad["error"] == "invalid_request"
+    assert CallStore(settings.call_db_path).list_calls() == []
+
+
+async def test_live_mode_requires_livekit_config(settings):
+    live = replace(settings, dry_run=False, livekit_url="", sip_outbound_trunk_id="")
+    async with Client(build_server(live)) as client:
+        res = _data(
+            await client.call_tool(
+                "request_handyman_quote",
+                {
+                    "business_name": "Bob's",
+                    "phone_number": "+14155550199",
+                    "job_description": "fix a door",
+                    "location": "94110",
+                },
+            )
+        )
+    assert res["error"] == "rejected"
+    assert "SIP_OUTBOUND_TRUNK_ID" in res["message"]
+
+
+async def test_http_app_requires_bearer_token(settings):
+    app = build_app(settings)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://tunnel.example") as http:
+        assert (await http.get("/healthz")).status_code == 200
+        assert (await http.post("/mcp", json={})).status_code == 401
+        wrong = await http.post("/mcp", json={}, headers={"Authorization": "Bearer nope"})
+        assert wrong.status_code == 401
