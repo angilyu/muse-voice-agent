@@ -7,3 +7,10 @@ data/
 *.db
 *.db-*
 .DS_Store
+
+# editor swap/backup files and any local env variants (may hold secrets)
+*.swp
+*.swo
+*~
+.env*
+!.env.example

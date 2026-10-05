@@ -143,14 +143,15 @@ The `Dockerfile` builds the MCP server only (Retell backend, no LiveKit extra) a
 region **Oregon** (closest to Retell), health check path `/healthz`, and these environment
 variables copied from `.env`:
 
-`DRY_RUN=false`, `VOICE_BACKEND=retell`, `MCP_AUTH_TOKEN`, `OPENAI_API_KEY`, `LLM_MODEL`,
+`DRY_RUN=false`, `VOICE_BACKEND=retell`, `KEEPALIVE_SECONDS=600`, `MCP_AUTH_TOKEN`, `OPENAI_API_KEY`, `LLM_MODEL`,
 `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_FROM_NUMBER`, `RETELL_WS_SECRET`, plus
 `PUBLIC_BASE_URL=https://<service>.onrender.com` (the server re-points the Retell agent there on
 every start). Then give Muse `https://<service>.onrender.com/mcp`.
 
-Free-plan caveats: the service sleeps after 15 idle minutes (first request then takes ~1 minute;
-an uptime pinger on `/healthz` every 10 minutes keeps it awake within the 750 free hours), and the
-filesystem is ephemeral, so the SQLite call log resets on every restart or deploy.
+Free-plan caveats: the service sleeps after 15 idle minutes (first request then takes ~1 minute).
+Set `KEEPALIVE_SECONDS=600` and the server pings its own `PUBLIC_BASE_URL/healthz` every 10
+minutes to stay awake (~744 of the 750 free hours/month). The filesystem is ephemeral, so the
+SQLite call log resets on every restart or deploy.
 
 To build locally behind a corporate proxy, pass
 `--build-arg PYPI_INDEX_URL=<your mirror>/simple/`.

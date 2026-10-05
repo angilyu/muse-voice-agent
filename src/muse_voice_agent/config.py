@@ -65,6 +65,8 @@ class Settings:
     mcp_host: str = field(default_factory=lambda: _str("MCP_HOST", "127.0.0.1"))
     mcp_port: int = field(default_factory=lambda: _int("MCP_PORT", 8765))
     mcp_auth_token: str = field(default_factory=lambda: _str("MCP_AUTH_TOKEN"), repr=False)
+    # >0: ping PUBLIC_BASE_URL/healthz this often so free hosts don't sleep (600 on Render Free)
+    keepalive_seconds: int = field(default_factory=lambda: _int("KEEPALIVE_SECONDS", 0))
 
     # Behaviour / safety
     dry_run: bool = field(default_factory=lambda: _bool("DRY_RUN", True))

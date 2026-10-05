@@ -6,3 +6,6 @@ data
 tests
 scripts
 **/__pycache__
+.env*
+*.swp
+*.swo

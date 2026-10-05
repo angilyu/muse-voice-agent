@@ -28,6 +28,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .config import Settings, get_settings
 from .dispatcher import CallRejected, start_call
+from .keepalive import KeepAliveMiddleware
 from .retell import RetellWebsocketRouter, sync_agent_websocket_url
 from .store import FINAL_STATUSES, CallStore
 from .tasks import HandymanQuote, RestaurantReservation
@@ -230,9 +231,14 @@ def build_app(
         host=settings.mcp_host,
     )
     # HTTP requests need the bearer token; websockets are only Retell's (secret-path protected).
-    return RetellWebsocketRouter(
+    app = RetellWebsocketRouter(
         BearerAuthMiddleware(app, settings.mcp_auth_token), settings, store, model_factory
     )
+    if settings.keepalive_seconds > 0 and settings.public_base_url:
+        app = KeepAliveMiddleware(
+            app, f"{settings.public_base_url}/healthz", settings.keepalive_seconds
+        )
+    return app
 
 
 def main() -> None:
