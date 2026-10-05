@@ -1,13 +1,14 @@
 [project]
 name = "muse-voice-agent"
 version = "0.1.0"
-description = "LiveKit + LangGraph phone agent that Meta Muse can drive over MCP to book restaurants and get handyman quotes"
+description = "Retell + LangGraph phone agent that Meta Muse can drive over MCP to book restaurants and get handyman quotes"
 readme = "README.md"
 authors = [
     { email = "angilyu@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "httpx>=0.28",
     "langchain[openai]>=1.4",
     "langgraph>=1.2",
     "livekit-agents[langchain]~=1.8",
@@ -15,6 +16,7 @@ dependencies = [
     "pydantic>=2",
     "python-dotenv>=1.2.3",
     "uvicorn>=0.54.0",
+    "websockets>=15",
 ]
 
 [project.scripts]

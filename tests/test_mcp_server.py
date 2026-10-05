@@ -136,7 +136,9 @@ async def test_rejects_disallowed_country_and_bad_numbers(settings):
 
 
 async def test_live_mode_requires_livekit_config(settings):
-    live = replace(settings, dry_run=False, livekit_url="", sip_outbound_trunk_id="")
+    live = replace(
+        settings, dry_run=False, voice_backend="livekit", livekit_url="", sip_outbound_trunk_id=""
+    )
     async with Client(build_server(live)) as client:
         res = _data(
             await client.call_tool(

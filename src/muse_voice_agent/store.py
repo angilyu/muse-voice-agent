@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS calls (
     transcript_json TEXT NOT NULL DEFAULT '[]',
     error TEXT,
     dry_run INTEGER NOT NULL DEFAULT 0,
+    provider_call_id TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -40,6 +41,9 @@ class CallStore:
         with self._conn() as c:
             c.execute("PRAGMA journal_mode=WAL")
             c.executescript(_SCHEMA)
+            cols = {r["name"] for r in c.execute("PRAGMA table_info(calls)")}
+            if "provider_call_id" not in cols:
+                c.execute("ALTER TABLE calls ADD COLUMN provider_call_id TEXT")
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
@@ -93,6 +97,10 @@ class CallStore:
                 "UPDATE calls SET transcript_json = ?, updated_at = ? WHERE id = ?",
                 (json.dumps(transcript), time.time(), call_id),
             )
+
+    def set_transcript(self, call_id: str, turns: list[dict[str, Any]]) -> None:
+        """Replace the transcript wholesale (Retell sends the full transcript on every update)."""
+        self.update_call(call_id, transcript_json=json.dumps(turns))
 
     def get_call(self, call_id: str) -> dict[str, Any] | None:
         with self._conn() as c:

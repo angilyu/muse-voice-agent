@@ -5,13 +5,18 @@ Run:
 Then expose it publicly (Muse runs in Meta's cloud), e.g.:
     cloudflared tunnel --url http://127.0.0.1:8765
 and give Muse  https://<tunnel-host>/mcp  plus  Authorization: Bearer <MCP_AUTH_TOKEN>.
+
+With VOICE_BACKEND=retell the same server also hosts Retell's custom-LLM websocket at
+/retell/llm/<RETELL_WS_SECRET>/<retell_call_id>; set PUBLIC_BASE_URL to the tunnel URL and the
+Retell agent is re-pointed at it on startup.
 """
 
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
-from typing import Any
+from typing import Any, Callable
 
 import uvicorn
 from mcp.server.mcpserver import MCPServer
@@ -23,6 +28,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .config import Settings, get_settings
 from .dispatcher import CallRejected, start_call
+from .retell import RetellWebsocketRouter, sync_agent_websocket_url
 from .store import FINAL_STATUSES, CallStore
 from .tasks import HandymanQuote, RestaurantReservation
 
@@ -208,17 +214,25 @@ class BearerAuthMiddleware:
         await self.app(scope, receive, send)
 
 
-def build_app(settings: Settings | None = None, store: CallStore | None = None) -> ASGIApp:
+def build_app(
+    settings: Settings | None = None,
+    store: CallStore | None = None,
+    model_factory: Callable[[], Any] = lambda: None,
+) -> ASGIApp:
     settings = settings or get_settings()
     if not settings.mcp_auth_token:
         raise SystemExit("MCP_AUTH_TOKEN must be set in .env (the server is meant to be public).")
+    store = store or CallStore(settings.call_db_path)
     mcp = build_server(settings, store)
     # Auth is enforced by the bearer token; Host-header checks would reject tunnel hostnames.
     app = mcp.streamable_http_app(
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
         host=settings.mcp_host,
     )
-    return BearerAuthMiddleware(app, settings.mcp_auth_token)
+    # HTTP requests need the bearer token; websockets are only Retell's (secret-path protected).
+    return RetellWebsocketRouter(
+        BearerAuthMiddleware(app, settings.mcp_auth_token), settings, store, model_factory
+    )
 
 
 def main() -> None:
@@ -226,6 +240,15 @@ def main() -> None:
     settings = get_settings()
     mode = "DRY_RUN (simulated calls)" if settings.dry_run else "LIVE (real phone calls)"
     logger.info("MCP server on http://%s:%s/mcp - %s", settings.mcp_host, settings.mcp_port, mode)
+    if not settings.dry_run and settings.voice_backend == "retell":
+        missing = settings.missing_for_live_calls()
+        if missing:
+            logger.warning("Retell not configured (missing %s); calls will be rejected", missing)
+        elif not settings.public_base_url:
+            logger.warning("PUBLIC_BASE_URL not set; Retell agent websocket URL was not synced")
+        else:
+            url = asyncio.run(sync_agent_websocket_url(settings))
+            logger.info("Retell agent %s -> %s/...", settings.retell_agent_id, url.rsplit("/", 1)[0])
     uvicorn.run(build_app(settings), host=settings.mcp_host, port=settings.mcp_port)
 
 

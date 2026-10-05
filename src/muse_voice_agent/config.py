@@ -34,10 +34,22 @@ def _list(name: str, default: str) -> list[str]:
 
 @dataclass(frozen=True)
 class Settings:
+    # Which voice/telephony stack places live calls: "retell" or "livekit"
+    voice_backend: str = field(default_factory=lambda: _str("VOICE_BACKEND", "retell").lower())
+
+    # Retell (telephony + STT/TTS; our LangGraph graph is its custom LLM over a websocket)
+    retell_api_key: str = field(default_factory=lambda: _str("RETELL_API_KEY"), repr=False)
+    retell_agent_id: str = field(default_factory=lambda: _str("RETELL_AGENT_ID"))
+    retell_from_number: str = field(default_factory=lambda: _str("RETELL_FROM_NUMBER"))
+    retell_voice_id: str = field(default_factory=lambda: _str("RETELL_VOICE_ID", "cartesia-Cleo"))
+    retell_ws_secret: str = field(default_factory=lambda: _str("RETELL_WS_SECRET"), repr=False)
+    # Public https:// base URL of this server (e.g. the cloudflared tunnel); Retell connects back to it
+    public_base_url: str = field(default_factory=lambda: _str("PUBLIC_BASE_URL").rstrip("/"))
+
     # LiveKit
     livekit_url: str = field(default_factory=lambda: _str("LIVEKIT_URL"))
     livekit_api_key: str = field(default_factory=lambda: _str("LIVEKIT_API_KEY"))
-    livekit_api_secret: str = field(default_factory=lambda: _str("LIVEKIT_API_SECRET"))
+    livekit_api_secret: str = field(default_factory=lambda: _str("LIVEKIT_API_SECRET"), repr=False)
     sip_outbound_trunk_id: str = field(default_factory=lambda: _str("SIP_OUTBOUND_TRUNK_ID"))
     agent_name: str = field(default_factory=lambda: _str("AGENT_NAME", "muse-voice-agent"))
 
@@ -52,7 +64,7 @@ class Settings:
     # MCP server
     mcp_host: str = field(default_factory=lambda: _str("MCP_HOST", "127.0.0.1"))
     mcp_port: int = field(default_factory=lambda: _int("MCP_PORT", 8765))
-    mcp_auth_token: str = field(default_factory=lambda: _str("MCP_AUTH_TOKEN"))
+    mcp_auth_token: str = field(default_factory=lambda: _str("MCP_AUTH_TOKEN"), repr=False)
 
     # Behaviour / safety
     dry_run: bool = field(default_factory=lambda: _bool("DRY_RUN", True))
@@ -70,13 +82,34 @@ class Settings:
     )
 
     def missing_for_live_calls(self) -> list[str]:
-        required = {
-            "LIVEKIT_URL": self.livekit_url,
-            "LIVEKIT_API_KEY": self.livekit_api_key,
-            "LIVEKIT_API_SECRET": self.livekit_api_secret,
-            "SIP_OUTBOUND_TRUNK_ID": self.sip_outbound_trunk_id,
-        }
+        if self.voice_backend == "livekit":
+            required = {
+                "LIVEKIT_URL": self.livekit_url,
+                "LIVEKIT_API_KEY": self.livekit_api_key,
+                "LIVEKIT_API_SECRET": self.livekit_api_secret,
+                "SIP_OUTBOUND_TRUNK_ID": self.sip_outbound_trunk_id,
+            }
+        elif self.voice_backend == "retell":
+            required = {
+                "RETELL_API_KEY": self.retell_api_key,
+                "RETELL_AGENT_ID": self.retell_agent_id,
+                "RETELL_FROM_NUMBER": self.retell_from_number,
+                "RETELL_WS_SECRET": self.retell_ws_secret,
+            }
+        else:
+            return [f"VOICE_BACKEND (unknown value {self.voice_backend!r}; use retell or livekit)"]
         return [k for k, v in required.items() if not v]
+
+    def retell_llm_websocket_url(self) -> str:
+        """URL Retell dials for the custom LLM; Retell appends /{retell_call_id}."""
+        if not self.public_base_url or not self.retell_ws_secret:
+            raise ValueError("PUBLIC_BASE_URL and RETELL_WS_SECRET must be set")
+        base = self.public_base_url
+        if base.startswith("https://"):
+            base = "wss://" + base[len("https://") :]
+        elif base.startswith("http://"):
+            base = "ws://" + base[len("http://") :]
+        return f"{base}/retell/llm/{self.retell_ws_secret}"
 
 
 def get_settings() -> Settings:

@@ -1,4 +1,4 @@
-"""Starts calls: either a real LiveKit outbound call or a simulated one (DRY_RUN)."""
+"""Starts calls: a real outbound call via Retell or LiveKit, or a simulated one (DRY_RUN)."""
 
 from __future__ import annotations
 
@@ -49,9 +49,11 @@ async def start_call(
     call_id = record["id"]
 
     if settings.dry_run:
-        t = asyncio.create_task(_simulate_call(call_id, task, store))
-        _background.add(t)
-        t.add_done_callback(_background.discard)
+        _spawn(_simulate_call(call_id, task, store))
+        return store.get_call(call_id)  # type: ignore[return-value]
+
+    if settings.voice_backend == "retell":
+        await _start_retell_call(call_id, task, settings, store)
         return store.get_call(call_id)  # type: ignore[return-value]
 
     from livekit import api
@@ -72,6 +74,39 @@ async def start_call(
     finally:
         await lkapi.aclose()
     return store.get_call(call_id)  # type: ignore[return-value]
+
+
+def _spawn(coro) -> None:  # noqa: ANN001
+    t = asyncio.create_task(coro)
+    _background.add(t)
+    t.add_done_callback(_background.discard)
+
+
+async def _start_retell_call(
+    call_id: str, task: RestaurantReservation | HandymanQuote, settings: Settings, store: CallStore
+) -> None:
+    from . import retell
+
+    try:
+        async with retell.client_factory(settings) as client:
+            resp = await client.create_phone_call(
+                from_number=settings.retell_from_number,
+                to_number=task.phone_number,
+                agent_id=settings.retell_agent_id,
+                metadata={retell.METADATA_KEY: call_id},
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.exception("retell create-phone-call failed")
+        store.update_call(call_id, status="failed", error=f"retell create-phone-call failed: {e}")
+        return
+
+    retell_call_id = resp["call_id"]
+    fields: dict[str, Any] = {"provider_call_id": retell_call_id}
+    record = store.get_call(call_id)
+    if record and record["status"] == "queued":  # the websocket may already have marked it in_progress
+        fields["status"] = "dialing"
+    store.update_call(call_id, **fields)
+    _spawn(retell.monitor_call(settings, store, call_id, retell_call_id))
 
 
 async def _simulate_call(
