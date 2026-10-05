@@ -1436,7 +1436,6 @@ dependencies = [
     { name = "httpx" },
     { name = "langchain", extra = ["openai"] },
     { name = "langgraph" },
-    { name = "livekit-agents", extra = ["langchain"] },
     { name = "mcp" },
     { name = "pydantic" },
     { name = "python-dotenv" },
@@ -1444,8 +1443,14 @@ dependencies = [
     { name = "websockets" },
 ]
 
+[package.optional-dependencies]
+livekit = [
+    { name = "livekit-agents", extra = ["langchain"] },
+]
+
 [package.dev-dependencies]
 dev = [
+    { name = "livekit-agents", extra = ["langchain"] },
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
@@ -1455,16 +1460,18 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28" },
     { name = "langchain", extras = ["openai"], specifier = ">=1.4" },
     { name = "langgraph", specifier = ">=1.2" },
-    { name = "livekit-agents", extras = ["langchain"], specifier = "~=1.8" },
+    { name = "livekit-agents", extras = ["langchain"], marker = "extra == 'livekit'", specifier = "~=1.8" },
     { name = "mcp", specifier = ">=2.2" },
     { name = "pydantic", specifier = ">=2" },
     { name = "python-dotenv", specifier = ">=1.2.3" },
     { name = "uvicorn", specifier = ">=0.54.0" },
     { name = "websockets", specifier = ">=15" },
 ]
+provides-extras = ["livekit"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "livekit-agents", extras = ["langchain"], specifier = "~=1.8" },
     { name = "pytest", specifier = ">=9.1.1" },
     { name = "pytest-asyncio", specifier = ">=1.4.0" },
 ]

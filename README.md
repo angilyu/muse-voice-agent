@@ -122,7 +122,7 @@ uv run python scripts/smoke_test.py https://<random>.trycloudflare.com/mcp   # s
 ```
 
 (Use a named Cloudflare tunnel or deploy the server somewhere if you want a stable URL. Quick
-tunnels change on every restart.)
+tunnels change on every restart. See [Deploy to Render](#deploy-to-render).)
 
 Then send Muse one message:
 
@@ -135,6 +135,25 @@ Then send Muse one message:
 When Muse asks for the credential, enter the `MCP_AUTH_TOKEN` value from `.env` in the secure
 prompt. Don't paste it into the chat. Then try: *"Use my phone agent to book a table for 2 at
 <restaurant> (<phone>) this Friday at 7:30, flexible 6:30–8:30."*
+
+## Deploy to Render
+
+The `Dockerfile` builds the MCP server only (Retell backend, no LiveKit extra) and listens on
+`0.0.0.0:10000`. On Render, create a **Web Service** from this repo with runtime **Docker**,
+region **Oregon** (closest to Retell), health check path `/healthz`, and these environment
+variables copied from `.env`:
+
+`DRY_RUN=false`, `VOICE_BACKEND=retell`, `MCP_AUTH_TOKEN`, `OPENAI_API_KEY`, `LLM_MODEL`,
+`RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_FROM_NUMBER`, `RETELL_WS_SECRET`, plus
+`PUBLIC_BASE_URL=https://<service>.onrender.com` (the server re-points the Retell agent there on
+every start). Then give Muse `https://<service>.onrender.com/mcp`.
+
+Free-plan caveats: the service sleeps after 15 idle minutes (first request then takes ~1 minute;
+an uptime pinger on `/healthz` every 10 minutes keeps it awake within the 750 free hours), and the
+filesystem is ephemeral, so the SQLite call log resets on every restart or deploy.
+
+To build locally behind a corporate proxy, pass
+`--build-arg PYPI_INDEX_URL=<your mirror>/simple/`.
 
 ## MCP tools
 

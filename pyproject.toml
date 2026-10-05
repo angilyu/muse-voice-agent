@@ -11,13 +11,16 @@ dependencies = [
     "httpx>=0.28",
     "langchain[openai]>=1.4",
     "langgraph>=1.2",
-    "livekit-agents[langchain]~=1.8",
     "mcp>=2.2",
     "pydantic>=2",
     "python-dotenv>=1.2.3",
     "uvicorn>=0.54.0",
     "websockets>=15",
 ]
+
+[project.optional-dependencies]
+# Only needed for VOICE_BACKEND=livekit (the agent.py worker); the Retell deploy omits it.
+livekit = ["livekit-agents[langchain]~=1.8"]
 
 [project.scripts]
 muse-voice-agent = "muse_voice_agent.agent:main"
@@ -29,6 +32,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "livekit-agents[langchain]~=1.8",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
 ]
