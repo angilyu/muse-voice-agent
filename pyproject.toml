@@ -3,6 +3,9 @@ name = "muse-voice-agent"
 version = "0.1.0"
 description = "MCP server that lets an AI assistant phone businesses for you: bookings, quotes, availability and questions (Retell + LangGraph)"
 readme = "README.md"
+license = "LicenseRef-Proprietary"
+license-files = ["LICENSE"]
+classifiers = ["Private :: Do Not Upload"]
 authors = [
     { email = "angilyu@gmail.com" }
 ]
@@ -37,9 +40,6 @@ dev = [
     "pytest-asyncio>=1.4.0",
 ]
 
-[[tool.uv.index]]
-url = "https://pypi.org/simple/"
-default = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -10,6 +10,7 @@ your repair is ready, and it reports back a structured result.
 ![LangGraph](https://img.shields.io/badge/agent-LangGraph-1c3c3c)
 ![Retell AI](https://img.shields.io/badge/voice-Retell%20AI-ff6b35)
 ![Deploy: Docker](https://img.shields.io/badge/deploy-Docker-2496ed)
+![License: proprietary](https://img.shields.io/badge/license-proprietary-lightgrey)
 
 ```text
 You    → Muse:  "Call Hotel Zed and ask if they have a king room Oct 10–12 and the rate. Don't book."
@@ -90,7 +91,6 @@ Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
 git clone https://github.com/angilyu/MuseVoiceAgent && cd MuseVoiceAgent
-uv lock --default-index https://pypi.org/simple   # see the note below
 uv sync
 cp .env.example .env
 echo "MCP_AUTH_TOKEN=$(python -c 'import secrets;print(secrets.token_urlsafe(32))')" >> .env
@@ -99,10 +99,6 @@ uv run pytest                                              # unit + MCP tests
 uv run muse-voice-mcp                                      # terminal 1: server on :8765
 uv run python scripts/smoke_test.py --call +14155550123    # terminal 2: simulated booking
 ```
-
-> **Package index:** `pyproject.toml` and `uv.lock` currently point at a private PyPI mirror. The
-> `uv lock` line above switches the lock file to public PyPI. To make the change permanent,
-> remove the `[[tool.uv.index]]` block from `pyproject.toml`.
 
 The smoke test talks to the server over HTTP exactly as an MCP client would. It lists the tools,
 starts a simulated call and polls it until it's done.
@@ -300,3 +296,8 @@ Most errands don't need a shortcut, because `place_call` already covers them.
 - [ ] Persistent call log (Postgres or a mounted disk) for hosted deployments
 - [ ] Callback handling when a business calls the number back
 - [ ] Multi-language calls
+
+## License
+
+Copyright © 2026 Wenjing Yu. All rights reserved. This is proprietary software; see [LICENSE](LICENSE).
+For licensing or commercial use, contact [@angilyu](https://github.com/angilyu).
