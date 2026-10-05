@@ -290,6 +290,72 @@ Adding a new shortcut takes three steps:
 
 Most errands don't need a shortcut, because `place_call` already covers them.
 
+## Evals
+
+The top-level `evals/` package is for hill-climbing prompts, models and graph changes.
+It includes 58 Bay Area phone-errand cases across restaurants, home services, travel, auto,
+healthcare, retail, pets, housing, classes and other local services. Each case stores the MCP-style
+brief, a hidden business persona, expected outcomes/facts and edge-case checks.
+
+### Text conversation eval
+
+The text harness runs simulated calls through the same production pieces Retell uses: task
+validation, `build_system_prompt`, the LangGraph graph, `record_outcome`, and per-turn transcript
+conversion from `retell.py`. A simulator LLM speaks as the business; a judge LLM scores the result.
+
+```bash
+uv run --offline python -m evals.text \
+  --cases all --repeats 1 --concurrency 2 \
+  --agent-model openai:gpt-4.1-mini \
+  --simulator-model openai:gpt-4.1-mini \
+  --judge-model openai:gpt-4.1 \
+  --out evals/results/text-my-run.json
+
+uv run --offline python -m evals.text --cases tag:smoke --repeats 1 --concurrency 1
+uv run --offline python -m evals.text compare evals/results/text-a.json evals/results/text-b.json
+```
+
+Scoring combines deterministic checks (allowed outcome, required facts, AI disclosure, no
+unauthorized booking/deposit/address/card sharing, turn count, no markdown/emoji in spoken text),
+LLM-judge 1–5 rubric scores (success, factuality, safety, efficiency, naturalness, twist handling),
+and speakability proxies (sentence length, one question at a time, no URLs/parentheticals/raw phone
+numbers). Results include aggregate pass rates, per-tag breakdowns, latencies and token/cost
+estimates when the providers report usage. `evals/results/` is git-ignored.
+
+### Voice quality eval
+
+The voice scorer analyzes existing Retell calls without placing new calls:
+
+```bash
+uv run --offline python -m evals.voice score --latest 3 \
+  --agent-id agent_9d63522dcd7094db78634855a6 \
+  --out evals/results/voice-latest.json
+
+uv run --offline python -m evals.voice score --retell-call-id <retell_call_id>
+uv run --offline python -m evals.voice compare evals/results/voice-a.json evals/results/voice-b.json
+```
+
+It fetches `get-call`/`list-calls` via the existing Retell client and computes response-latency
+p50/p90/max, time to first agent utterance, overlaps/barge-ins, dead-air gaps, talk ratio, words per
+minute, turn count, call duration, disconnection reason and whether the agent ended cleanly. Add
+`--audio-judge` to download the recording in memory and send it to an audio-capable OpenAI model for
+naturalness, pronunciation, pacing, interruption handling, perceived latency and ASR-recovery
+scores. Do not commit raw transcripts or recordings from real calls.
+
+### Optional live voice eval setup
+
+`evals.voice live` is intentionally double-gated and should be used only with numbers/agents you
+already own. Set up a second Retell phone number with a persona agent whose prompt is built from an
+eval case's hidden business persona, then have this agent call that number and score the resulting
+Retell call. This costs Retell/Twilio per-minute charges on both sides and may require a second
+phone number; the harness does **not** buy numbers or create/modify Retell agents.
+
+```bash
+EVALS_ALLOW_LIVE_CALLS=1 uv run --offline python -m evals.voice live \
+  --cases tag:smoke --persona-phone-number +1YOUR_PERSONA_NUMBER \
+  --allow-live-calls I_UNDERSTAND_THIS_PLACES_REAL_CALLS
+```
+
 ## Roadmap
 
 - [ ] Lower turn latency (faster model, prompt caching, fewer graph steps per turn)

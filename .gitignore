@@ -6,6 +6,8 @@ __pycache__/
 data/
 *.db
 *.db-*
+evals/results/*
+!evals/results/.gitkeep
 .DS_Store
 
 # editor swap/backup files and any local env variants (may hold secrets)

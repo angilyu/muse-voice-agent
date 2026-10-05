@@ -71,8 +71,14 @@ class RetellClient:
     async def aclose(self) -> None:
         await self._http.aclose()
 
-    async def _req(self, method: str, path: str, body: dict[str, Any] | None = None) -> Any:
-        resp = await self._http.request(method, path, json=body)
+    async def _req(
+        self,
+        method: str,
+        path: str,
+        body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
+        resp = await self._http.request(method, path, json=body, params=params)
         if resp.status_code >= 400:
             raise RetellError(f"{method} {path} -> {resp.status_code}: {resp.text[:500]}")
         return resp.json() if resp.content else None
@@ -94,6 +100,25 @@ class RetellClient:
 
     async def get_call(self, retell_call_id: str) -> dict[str, Any]:
         return await self._req("GET", f"/v2/get-call/{retell_call_id}")
+
+    async def list_calls(
+        self, *, limit: int = 20, agent_id: str | None = None
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit}
+        if agent_id:
+            params["agent_id"] = agent_id
+        try:
+            data = await self._req("GET", "/v2/list-calls", params=params)
+        except RetellError:
+            body: dict[str, Any] = {"limit": limit}
+            if agent_id:
+                body["filter_criteria"] = {"agent_id": [agent_id]}
+            data = await self._req("POST", "/v2/list-calls", body)
+        if isinstance(data, dict):
+            for key in ("calls", "data", "results"):
+                if isinstance(data.get(key), list):
+                    return data[key]
+        return data if isinstance(data, list) else []
 
     async def list_agents(self) -> list[dict[str, Any]]:
         return await self._req("GET", "/list-agents")
