@@ -36,6 +36,7 @@ my faucet"*, and this agent places the actual phone call.
 | `src/muse_voice_agent/graph.py` | LangGraph conversation graph and the `record_outcome` tool |
 | `src/muse_voice_agent/tasks.py` | Restaurant/handyman task schemas and the per-call system prompts |
 | `src/muse_voice_agent/store.py` | SQLite call log shared by the MCP server and the worker |
+| `scripts/setup_twilio_trunk.py` | Provisions the Twilio SIP trunk and the LiveKit outbound trunk |
 | `scripts/smoke_test.py` | Calls the MCP server over HTTP the same way Muse does |
 
 ## 1. Install
@@ -55,7 +56,8 @@ uv sync
 | --- | --- | --- |
 | `OPENAI_API_KEY` | platform.openai.com (or change `LLM_MODEL` to another `provider:model`) | live calls, console |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | cloud.livekit.io → Settings → API keys | live calls, console |
-| `SIP_OUTBOUND_TRUNK_ID` | step 4 below | live calls |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | console.twilio.com → Account Info | trunk setup (step 4) |
+| `SIP_OUTBOUND_TRUNK_ID` | written by `scripts/setup_twilio_trunk.py` | live calls |
 | `DEFAULT_CUSTOMER_NAME`, `DEFAULT_CALLBACK_NUMBER` | you | optional |
 
 `DRY_RUN=true` (the default) simulates every call, so you can wire Muse up before you have any keys.
@@ -77,17 +79,14 @@ uv run muse-voice-agent console
 
 ## 4. Enable real phone calls
 
-1. Buy a number and create an Elastic SIP trunk with a provider, e.g.
-   [Twilio](https://docs.livekit.io/telephony/start/providers/twilio.md) or
-   [Telnyx](https://docs.livekit.io/telephony/start/providers/telnyx.md).
-2. Create the LiveKit outbound trunk:
+1. In Twilio, get a voice-capable number and put `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` in `.env`.
+2. Provision everything (Twilio Elastic SIP trunk, credential list, number, and the LiveKit
+   outbound trunk). Re-running it is safe, because it reuses anything that already exists:
    ```bash
-   cat > outbound-trunk.json <<'EOF'
-   { "trunk": { "name": "muse-outbound", "address": "<your-trunk>.pstn.twilio.com",
-                "numbers": ["+1XXXXXXXXXX"], "auth_username": "<user>", "auth_password": "<pass>" } }
-   EOF
-   lk sip outbound create outbound-trunk.json   # prints ST_xxx → SIP_OUTBOUND_TRUNK_ID
+   uv run python scripts/setup_twilio_trunk.py +1XXXXXXXXXX   # writes SIP_OUTBOUND_TRUNK_ID to .env
    ```
+   (Other providers: see [Telnyx](https://docs.livekit.io/telephony/start/providers/telnyx.md) and
+   use `lk sip outbound create` manually.)
 3. Set `DRY_RUN=false` in `.env`, then run both processes:
    ```bash
    uv run muse-voice-agent dev    # terminal 1: worker (registers as AGENT_NAME)
