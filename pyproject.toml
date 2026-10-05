@@ -1,7 +1,7 @@
 [project]
 name = "muse-voice-agent"
 version = "0.1.0"
-description = "Retell + LangGraph phone agent that Meta Muse can drive over MCP to book restaurants and get handyman quotes"
+description = "MCP server that lets an AI assistant phone businesses for you: bookings, quotes, availability and questions (Retell + LangGraph)"
 readme = "README.md"
 authors = [
     { email = "angilyu@gmail.com" }
