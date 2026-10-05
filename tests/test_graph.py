@@ -124,3 +124,33 @@ async def test_livekit_llm_adapter_streams_only_spoken_text():
 
     assert spoken.strip() == "Okay, thanks, bye!"
     assert outcomes[0].outcome == "unavailable"
+
+
+async def test_info_only_call_cannot_report_a_booking():
+    from muse_voice_agent.tasks import GeneralCall
+
+    task = GeneralCall(
+        business_name="Hotel Zed",
+        phone_number="+14155550100",
+        customer_name="Angi",
+        goal="Check king room availability Oct 10-12",
+        questions=["Is a king room available?"],
+    )
+    outcomes: list[CallOutcome] = []
+    tool_call = {
+        "name": "record_outcome",
+        "args": {
+            "outcome": "booked",
+            "summary": "Booked a king room.",
+            "answers": [{"question": "Is a king room available?", "answer": "yes, $210"}],
+        },
+        "id": "call_1",
+    }
+    model = FakeToolModel(
+        messages=iter([AIMessage(content="", tool_calls=[tool_call]), AIMessage(content="Bye!")])
+    )
+    graph = build_call_graph(task, outcomes.append, model=model)
+    await _run(graph, [HumanMessage(content="Hotel Zed, how can I help?")])
+    assert outcomes[0].outcome == "needs_followup"
+    assert "not authorized" in outcomes[0].follow_up
+    assert outcomes[0].answers[0].answer == "yes, $210"

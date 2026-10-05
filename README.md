@@ -11,7 +11,7 @@ Agents backend is kept as an alternative (`VOICE_BACKEND=livekit`).
    │  MCP over HTTPS + bearer token
    ▼
  cloudflared tunnel ──► muse-voice-mcp (:8765)
-                          │ book_restaurant_reservation / request_handyman_quote
+                          │ place_call / book_restaurant_reservation / request_handyman_quote
                           │ get_call_status / list_calls
                           │
                           ├─ DRY_RUN=true  → simulated call (no phone needed)
@@ -39,7 +39,7 @@ the LLM in custom-LLM mode; OpenAI does.
 | `src/muse_voice_agent/retell.py` | Retell REST client, custom-LLM websocket (runs the graph per turn), call monitor |
 | `src/muse_voice_agent/agent.py` | Optional LiveKit worker (`VOICE_BACKEND=livekit`) |
 | `src/muse_voice_agent/graph.py` | LangGraph conversation graph and the `record_outcome` tool |
-| `src/muse_voice_agent/tasks.py` | Restaurant/handyman task schemas and the per-call system prompts |
+| `src/muse_voice_agent/tasks.py` | Call briefs (general, restaurant, handyman), input checks, and the per-call system prompts |
 | `src/muse_voice_agent/store.py` | SQLite call log shared by the MCP server and the worker |
 | `scripts/setup_twilio_trunk.py` | Provisions the Twilio SIP trunk (and the LiveKit outbound trunk) |
 | `scripts/setup_retell.py` | Creates/updates the Retell custom-LLM agent and imports the Twilio number |
@@ -128,13 +128,14 @@ Then send Muse one message:
 
 > Build a custom integration to my phone-calling agent. It's an MCP server over streamable HTTP at
 > `https://<random>.trycloudflare.com/mcp` and needs a bearer token (ask me through the secure
-> credential flow). It can call restaurants to book tables and call handymen for quotes. Connect,
+> credential flow). It can call any business to check availability, ask questions, or book within limits I set. Connect,
 > list the tools, test `list_calls`, and save it as a reusable skill. Always confirm the business,
 > number, and details with me before starting a call, and require my approval for call tools.
 
 When Muse asks for the credential, enter the `MCP_AUTH_TOKEN` value from `.env` in the secure
 prompt. Don't paste it into the chat. Then try: *"Use my phone agent to book a table for 2 at
-<restaurant> (<phone>) this Friday at 7:30, flexible 6:30–8:30."*
+<restaurant> (<phone>) this Friday at 7:30, flexible 6:30–8:30."* or *"Call Hotel Zed (<phone>) and
+ask if they have a king room Oct 10–12 and the nightly rate. Don't book."*
 
 ## Deploy to Render
 
@@ -160,9 +161,10 @@ To build locally behind a corporate proxy, pass
 
 | Tool | Purpose |
 | --- | --- |
-| `book_restaurant_reservation(restaurant_name, phone_number, party_size, date, time, …)` | Starts a booking call, returns `call_id` immediately |
-| `request_handyman_quote(business_name, phone_number, job_description, location, …)` | Starts a quote call (never books) |
-| `get_call_status(call_id, include_transcript=False)` | Status, outcome (`booked`, `quote_received`, `unavailable`, `declined`, `needs_followup`, `voicemail`), details, transcript |
+| `place_call(business_name, phone_number, goal, questions, shareable_details, authority, limits, …)` | General errand call from a brief: availability checks, questions, simple bookings. `authority` is `info_only` (default, commits to nothing) or `may_book_within_limits` (needs `limits`) |
+| `book_restaurant_reservation(restaurant_name, phone_number, party_size, date, time, …)` | Restaurant shortcut: starts a booking call, returns `call_id` immediately |
+| `request_handyman_quote(business_name, phone_number, job_description, location, …)` | Handyman shortcut: starts a quote call (never books) |
+| `get_call_status(call_id, include_transcript=False)` | Status, outcome (`booked`, `quote_received`, `info_received`, `unavailable`, `declined`, `needs_followup`, `voicemail`), details (incl. `answers` per question, `reference`), transcript |
 | `list_calls(limit=10)` | Recent calls |
 
 Calls take minutes, so the tools return right away and Muse polls `get_call_status` until `done` is true.
@@ -176,5 +178,8 @@ Calls take minutes, so the tools return right away and Muse polls `get_call_stat
 - The agent says it's an AI assistant in its first sentence. It never shares payment details or
   addresses, and it won't agree to deposits or fees; it records `needs_followup` instead.
 - The handyman flow only gathers quotes and availability. It never books.
+- `place_call` is info-only unless Muse passes `may_book_within_limits` with explicit `limits`; if an
+  info-only call still reports `booked`, the server downgrades it to `needs_followup`.
+- `place_call` rejects briefs containing card numbers (Luhn-valid) or SSNs.
 - Calls are capped at `MAX_CALL_SECONDS`, and the agent hangs up after recording an outcome.
 - Check local laws on AI-voice disclosure and call recording before calling real businesses.

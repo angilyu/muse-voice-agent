@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
 
 E164 = re.compile(r"^\+[1-9]\d{6,14}$")
 
@@ -63,11 +63,95 @@ class HandymanQuote(_BaseTask):
     budget: str | None = Field(default=None, description="Optional budget to mention if asked")
 
 
-CallTask = Annotated[Union[RestaurantReservation, HandymanQuote], Field(discriminator="kind")]
+Authority = Literal["info_only", "may_book_within_limits"]
+
+# Card numbers (13-19 digits, optional spaces/dashes) and US SSNs must never be handed to the agent.
+_CARD = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
+_SSN = re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")
+
+
+def _luhn_ok(digits: str) -> bool:
+    total = 0
+    for i, ch in enumerate(reversed(digits)):
+        n = int(ch)
+        if i % 2:
+            n = n * 2 - 9 if n > 4 else n * 2
+        total += n
+    return total % 10 == 0
+
+
+def _reject_sensitive(text: str, field: str) -> None:
+    cards = (re.sub(r"\D", "", m.group()) for m in _CARD.finditer(text))
+    if _SSN.search(text) or any(_luhn_ok(d) for d in cards):
+        raise ValueError(f"{field} looks like it contains a card or social security number; remove it")
+
+
+class GeneralCall(_BaseTask):
+    """Any errand Muse can describe as a brief: availability checks, questions, simple bookings."""
+
+    kind: Literal["general"] = "general"
+    goal: str = Field(min_length=3, max_length=1000, description="What the call should accomplish")
+    questions: list[str] = Field(
+        default_factory=list, max_length=10, description="Specific questions to get answered"
+    )
+    shareable_details: dict[str, str] = Field(
+        default_factory=dict,
+        description="Facts the agent may share if relevant (dates, party size, order number...)",
+    )
+    authority: Authority = Field(
+        default="info_only",
+        description="info_only: ask and commit to nothing. may_book_within_limits: may book/"
+        "reserve/schedule only within `limits`.",
+    )
+    limits: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Required with may_book_within_limits, e.g. 'Oct 10-12, king room, max $250/night'",
+    )
+
+    @field_validator("questions")
+    @classmethod
+    def _questions(cls, v: list[str]) -> list[str]:
+        cleaned = [q.strip() for q in v if q and q.strip()]
+        for q in cleaned:
+            if len(q) > 300:
+                raise ValueError("each question must be 300 characters or fewer")
+            _reject_sensitive(q, "questions")
+        return cleaned
+
+    @field_validator("shareable_details")
+    @classmethod
+    def _details(cls, v: dict[str, str]) -> dict[str, str]:
+        if len(v) > 20:
+            raise ValueError("at most 20 shareable_details")
+        for k, val in v.items():
+            if len(k) > 60 or len(val) > 300:
+                raise ValueError("shareable_details keys must be <=60 and values <=300 characters")
+            _reject_sensitive(f"{k} {val}", "shareable_details")
+        return v
+
+    @field_validator("goal", "limits")
+    @classmethod
+    def _no_sensitive(cls, v: str | None, info) -> str | None:  # noqa: ANN001
+        if v:
+            _reject_sensitive(v, info.field_name)
+        return v
+
+    @model_validator(mode="after")
+    def _limits_required(self) -> "GeneralCall":
+        if self.authority == "may_book_within_limits" and not (self.limits or "").strip():
+            raise ValueError("limits are required when authority is may_book_within_limits")
+        return self
+
+
+AnyTask = RestaurantReservation | HandymanQuote | GeneralCall
+CallTask = Annotated[
+    Union[RestaurantReservation, HandymanQuote, GeneralCall], Field(discriminator="kind")
+]
 CALL_TASK_ADAPTER: TypeAdapter[CallTask] = TypeAdapter(CallTask)
 
 
-def parse_task(data: dict) -> RestaurantReservation | HandymanQuote:
+def parse_task(data: dict) -> AnyTask:
     return CALL_TASK_ADAPTER.validate_python(data)
 
 
@@ -91,7 +175,7 @@ How to behave on the phone:
 """
 
 
-def build_system_prompt(task: RestaurantReservation | HandymanQuote) -> str:
+def build_system_prompt(task: AnyTask) -> str:
     callback_clause = (
         f" and the callback number {task.callback_number} if they ask for one"
         if task.callback_number
@@ -99,6 +183,8 @@ def build_system_prompt(task: RestaurantReservation | HandymanQuote) -> str:
     )
     rules = _COMMON_RULES.format(customer_name=task.customer_name, callback_clause=callback_clause)
 
+    if isinstance(task, GeneralCall):
+        return _general_goal(task) + "\n" + rules
     if isinstance(task, RestaurantReservation):
         goal = f"""You are calling {task.business_name} to book a table.
 Reservation request:
@@ -128,3 +214,42 @@ to anything. Use outcome "quote_received", "declined" (they don't do this work) 
 (e.g. they need a site visit or photos first)."""
 
     return goal + "\n" + rules
+
+
+def _general_goal(task: GeneralCall) -> str:
+    details = (
+        "\n".join(f"- {k}: {v}" for k, v in task.shareable_details.items())
+        or "- none beyond the customer's name"
+    )
+    questions = (
+        "\n".join(f"{i}. {q}" for i, q in enumerate(task.questions, 1))
+        or "(none listed; get whatever information the goal needs)"
+    )
+    if task.authority == "may_book_within_limits":
+        authority = f"""You MAY book, reserve or schedule, but only if every part of it fits these limits:
+{task.limits}
+If what they offer falls outside the limits, do not accept it; note the offer and use outcome
+"unavailable" or "needs_followup". If you do book, read the final details back to confirm, ask for
+a confirmation or reference number, and use outcome "booked"."""
+    else:
+        authority = """You may NOT book, reserve, order, schedule or agree to anything. You are only gathering
+information. If they offer to book or hold something, politely say {customer} will call back to
+confirm, and note what they offered.""".format(customer=task.customer_name)
+
+    return f"""You are calling {task.business_name} on behalf of {task.customer_name}.
+Goal: {task.goal}
+
+Details you may share if they are relevant or asked for:
+{details}
+
+Questions to get answered:
+{questions}
+
+Authority:
+{authority}
+
+Ask one question at a time. When you record the outcome, put each question and the answer you got
+(or "not answered") in `answers`, put any price in `quote`, any date/time availability in
+`availability`, and any confirmation number in `reference`. Use outcome "info_received" when you got
+the information, "booked" only if you were allowed to book and did, otherwise "unavailable",
+"declined" or "needs_followup"."""

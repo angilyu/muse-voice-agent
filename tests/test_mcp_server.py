@@ -45,6 +45,7 @@ async def test_lists_expected_tools(settings):
     assert tools == {
         "book_restaurant_reservation",
         "request_handyman_quote",
+        "place_call",
         "get_call_status",
         "list_calls",
     }
@@ -102,6 +103,51 @@ async def test_handyman_quote_dry_run(settings):
         listed = _data(await client.call_tool("list_calls", {}))
     assert status["outcome"] == "quote_received"
     assert listed["calls"][0]["call_id"] == started["call_id"]
+
+
+async def test_general_call_dry_run_returns_answers(settings):
+    async with Client(build_server(settings)) as client:
+        started = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    "business_name": "Hotel Zed",
+                    "phone_number": "+14155550100",
+                    "goal": "Check king room availability for Oct 10-12",
+                    "questions": ["Is a king room available?", "Nightly rate incl. tax?"],
+                    "shareable_details": {"dates": "Oct 10-12", "guests": "2 adults"},
+                },
+            )
+        )
+        assert started["kind"] == "general"
+        await asyncio.sleep(0.2)
+        status = _data(await client.call_tool("get_call_status", {"call_id": started["call_id"]}))
+    assert status["outcome"] == "info_received"
+    assert [a["question"] for a in status["details"]["answers"]] == [
+        "Is a king room available?",
+        "Nightly rate incl. tax?",
+    ]
+
+
+async def test_general_call_validation(settings):
+    base = {"business_name": "Spa", "phone_number": "+14155550100", "goal": "Book a massage"}
+    async with Client(build_server(settings)) as client:
+        no_limits = _data(
+            await client.call_tool("place_call", {**base, "authority": "may_book_within_limits"})
+        )
+        card = _data(
+            await client.call_tool(
+                "place_call", {**base, "shareable_details": {"card": "4111 1111 1111 1111"}}
+            )
+        )
+        tracking = _data(
+            await client.call_tool(
+                "place_call", {**base, "shareable_details": {"tracking": "1234567890123456"}}
+            )
+        )
+    assert no_limits["error"] == "invalid_request" and "limits" in no_limits["message"]
+    assert card["error"] == "invalid_request" and "card" in card["message"]
+    assert tracking["error"] is None and tracking["kind"] == "general"  # long non-card numbers (order/tracking) are allowed
 
 
 async def test_rejects_disallowed_country_and_bad_numbers(settings):

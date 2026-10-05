@@ -19,16 +19,22 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
-from .tasks import HandymanQuote, RestaurantReservation, build_system_prompt
+from .tasks import AnyTask, GeneralCall, build_system_prompt
 
 Outcome = Literal[
     "booked",
     "quote_received",
+    "info_received",
     "unavailable",
     "declined",
     "needs_followup",
     "voicemail",
 ]
+
+
+class Answer(BaseModel):
+    question: str
+    answer: str = Field(description='What they said, or "not answered"')
 
 
 class CallOutcome(BaseModel):
@@ -44,6 +50,10 @@ class CallOutcome(BaseModel):
     availability: str | None = Field(default=None, description="Earliest availability offered")
     contact_person: str | None = Field(default=None, description="Who you spoke with")
     follow_up: str | None = Field(default=None, description="Anything the customer must do next")
+    answers: list[Answer] | None = Field(
+        default=None, description="Each question you were asked to get answered, with the answer"
+    )
+    reference: str | None = Field(default=None, description="Confirmation / reference number")
 
 
 class CallState(TypedDict):
@@ -60,7 +70,7 @@ def _text(chunk: AIMessageChunk) -> str:
 
 
 def build_call_graph(
-    task: RestaurantReservation | HandymanQuote,
+    task: AnyTask,
     on_outcome: Callable[[CallOutcome], None],
     model: BaseChatModel | None = None,
 ):
@@ -80,7 +90,21 @@ def build_call_graph(
         if recorded["done"]:
             return "Outcome already recorded. Just say goodbye."
         recorded["done"] = True
-        on_outcome(CallOutcome(**kwargs))
+        outcome = CallOutcome(**kwargs)
+        if (
+            isinstance(task, GeneralCall)
+            and task.authority == "info_only"
+            and outcome.outcome == "booked"
+        ):
+            # The brief didn't authorize a booking; never report one as done.
+            note = "Agent was not authorized to book; confirm with the business yourself."
+            outcome = outcome.model_copy(
+                update={
+                    "outcome": "needs_followup",
+                    "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
+                }
+            )
+        on_outcome(outcome)
         return "Outcome recorded. Now say a brief, polite goodbye and stop talking."
 
     tools = [record_outcome]

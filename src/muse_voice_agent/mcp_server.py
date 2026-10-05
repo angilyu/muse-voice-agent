@@ -31,16 +31,23 @@ from .dispatcher import CallRejected, start_call
 from .keepalive import KeepAliveMiddleware
 from .retell import RetellWebsocketRouter, sync_agent_websocket_url
 from .store import FINAL_STATUSES, CallStore
-from .tasks import HandymanQuote, RestaurantReservation
+from .tasks import Authority, GeneralCall, HandymanQuote, RestaurantReservation
 
 logger = logging.getLogger("muse_voice_agent.mcp")
 
 INSTRUCTIONS = """\
 Places real phone calls to businesses on the user's behalf using an AI voice agent.
-- Use book_restaurant_reservation or request_handyman_quote to start a call. They return a call_id
-  immediately; the call itself takes 1-5 minutes.
-- Poll get_call_status(call_id) every ~20 seconds until `done` is true, then report the summary.
-- Always confirm the business, phone number, and request details with the user before calling.
+- place_call handles any errand you can describe as a brief: availability checks (hotels, salons,
+  clinics), questions to a business (hours, walk-ins, order status, pricing), or simple bookings.
+  book_restaurant_reservation and request_handyman_quote are tuned shortcuts for those two cases.
+- place_call defaults to authority="info_only" (the agent commits to nothing). Use
+  "may_book_within_limits" only when the user explicitly asked you to book, and put every limit
+  they gave (dates, times, price cap, "no deposit") in `limits`.
+- Only put details the user is comfortable sharing in shareable_details. Never include card numbers,
+  SSNs, passwords, or a full home address.
+- Every call tool returns a call_id immediately; the call itself takes 1-5 minutes. Poll
+  get_call_status(call_id) every ~20 seconds until `done` is true, then report the summary and answers.
+- Always confirm the business, phone number, and the brief with the user before calling.
 - Phone numbers should be E.164 (e.g. +14155550123).
 """
 
@@ -165,6 +172,56 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             location=location,
             preferred_timing=preferred_timing,
             budget=budget,
+            callback_number=callback_number or settings.default_callback_number or None,
+        )
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="Call a business for any errand",
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        )
+    )
+    async def place_call(
+        business_name: str,
+        phone_number: str,
+        goal: str,
+        questions: list[str] | None = None,
+        shareable_details: dict[str, str] | None = None,
+        authority: Authority = "info_only",
+        limits: str | None = None,
+        customer_name: str | None = None,
+        callback_number: str | None = None,
+    ) -> dict[str, Any]:
+        """Phone any business with a brief: check availability, ask questions, or book within limits.
+
+        Examples: hotel room availability and rates, whether a salon takes walk-ins, if an order or
+        repair is ready, a clinic's next opening, store hours or stock. Returns a call_id right away.
+
+        Args:
+            business_name: Name of the business.
+            phone_number: Business phone number, E.164 (e.g. +14155550123).
+            goal: One or two sentences on what the call should accomplish.
+            questions: Specific questions to get answered (up to 10), answered back in `answers`.
+            shareable_details: Facts the agent may share if relevant, e.g. {"dates": "Oct 10-12",
+                "guests": "2 adults", "order number": "A1234"}. No card numbers or SSNs.
+            authority: "info_only" (default; commit to nothing) or "may_book_within_limits".
+            limits: Required for may_book_within_limits, e.g. "Oct 10-12 only, king bed, max
+                $250/night incl. tax, free cancellation, no deposit".
+            customer_name: Name to give (defaults to DEFAULT_CUSTOMER_NAME).
+            callback_number: Number the business may call back (shared only if asked).
+        """
+        return await _start(
+            GeneralCall,
+            business_name=business_name,
+            phone_number=phone_number,
+            customer_name=customer_name or settings.default_customer_name or "",
+            goal=goal,
+            questions=questions or [],
+            shareable_details=shareable_details or {},
+            authority=authority,
+            limits=limits,
             callback_number=callback_number or settings.default_callback_number or None,
         )
 

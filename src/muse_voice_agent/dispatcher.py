@@ -9,7 +9,7 @@ from typing import Any
 
 from .config import Settings
 from .store import CallStore
-from .tasks import HandymanQuote, RestaurantReservation
+from .tasks import AnyTask, GeneralCall, RestaurantReservation
 
 logger = logging.getLogger("muse_voice_agent.dispatcher")
 
@@ -20,7 +20,7 @@ class CallRejected(Exception):
     pass
 
 
-def _check_allowed(task: RestaurantReservation | HandymanQuote, settings: Settings, store: CallStore):
+def _check_allowed(task: AnyTask, settings: Settings, store: CallStore):
     if settings.allowed_dial_prefixes and not any(
         task.phone_number.startswith(p) for p in settings.allowed_dial_prefixes
     ):
@@ -34,7 +34,7 @@ def _check_allowed(task: RestaurantReservation | HandymanQuote, settings: Settin
 
 
 async def start_call(
-    task: RestaurantReservation | HandymanQuote, settings: Settings, store: CallStore
+    task: AnyTask, settings: Settings, store: CallStore
 ) -> dict[str, Any]:
     _check_allowed(task, settings, store)
 
@@ -83,7 +83,7 @@ def _spawn(coro) -> None:  # noqa: ANN001
 
 
 async def _start_retell_call(
-    call_id: str, task: RestaurantReservation | HandymanQuote, settings: Settings, store: CallStore
+    call_id: str, task: AnyTask, settings: Settings, store: CallStore
 ) -> None:
     from . import retell
 
@@ -110,7 +110,7 @@ async def _start_retell_call(
 
 
 async def _simulate_call(
-    call_id: str, task: RestaurantReservation | HandymanQuote, store: CallStore, delay: float = 2.0
+    call_id: str, task: AnyTask, store: CallStore, delay: float = 2.0
 ) -> None:
     """Fake a call end-to-end so the Muse <-> MCP wiring can be tested without a phone line."""
     await asyncio.sleep(delay / 2)
@@ -123,7 +123,15 @@ async def _simulate_call(
     )
     await asyncio.sleep(delay / 2)
 
-    if isinstance(task, RestaurantReservation):
+    if isinstance(task, GeneralCall):
+        details = {
+            "outcome": "info_received",
+            "summary": f"[SIMULATED] {task.business_name} answered: {task.goal}",
+            "answers": [
+                {"question": q, "answer": "simulated answer"} for q in task.questions
+            ],
+        }
+    elif isinstance(task, RestaurantReservation):
         details = {
             "outcome": "booked",
             "summary": f"[SIMULATED] Table for {task.party_size} at {task.business_name} on "
