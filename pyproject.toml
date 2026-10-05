@@ -7,7 +7,7 @@ license = "LicenseRef-Proprietary"
 license-files = ["LICENSE"]
 classifiers = ["Private :: Do Not Upload"]
 authors = [
-    { email = "angilyu@gmail.com" }
+    { name = "Wenjing Yu", email = "angilyu@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
