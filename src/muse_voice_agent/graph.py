@@ -119,9 +119,10 @@ def build_call_graph(
     if model is None:
         from langchain.chat_models import init_chat_model
 
-        from .config import get_settings
+        from .config import get_settings, llm_model_init_args
 
-        model = init_chat_model(get_settings().llm_model, temperature=0.3)
+        model_name, model_kwargs = llm_model_init_args(get_settings().llm_model, temperature=0.3)
+        model = init_chat_model(model_name, **model_kwargs)
 
     system_prompt = build_system_prompt(task)
     recorded: dict[str, bool] = {"done": False}

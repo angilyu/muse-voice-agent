@@ -135,11 +135,11 @@ By default, every model runs on **GitHub Copilot** through the
 | Agent under test | `copilot:gpt-5.4@low` | Won the bake-off below. Also served by the OpenAI API, so production can adopt it. |
 | Business simulator | `copilot:claude-haiku-4.5` | Fast, cheap, stays in character |
 | Judge | `copilot:claude-sonnet-5.5` | A different family from the agent, to limit self-preference |
-| Agent with `--latency` | `$LLM_MODEL` or `openai:gpt-4.1-mini` | The production model on your OpenAI key; simulator and judge stay on Copilot |
+| Agent with `--latency` | `$LLM_MODEL` or `openai:gpt-5.4@low` | The production model on your OpenAI key; simulator and judge stay on Copilot |
 
 Model strings are either `copilot:<model>[@<reasoning-effort>]` or any LangChain
-`provider:model`, such as `openai:gpt-4.1-mini`. Override them with `--agent-model`,
-`--simulator-model` and `--judge-model`.
+`provider:model[@<reasoning-effort>]`, such as `openai:gpt-5.4@low` or
+`openai:gpt-4.1-mini`. Override them with `--agent-model`, `--simulator-model` and `--judge-model`.
 
 > **Latency caveat:** Copilot response times are not production response times. Use `--latency`
 > whenever you care about speed. Every run records `agent_latency_representative` so the two

@@ -30,7 +30,7 @@ SIMULATOR_PROMPT_VERSION = "business-simulator-v2-2026-10-05"
 DEFAULT_AGENT_MODEL = "copilot:gpt-5.4@low"
 DEFAULT_SIMULATOR_MODEL = "copilot:claude-haiku-4.5"
 DEFAULT_JUDGE_MODEL = "copilot:claude-sonnet-5.5"
-PROD_AGENT_MODEL = "openai:gpt-4.1-mini"
+PROD_AGENT_MODEL = "openai:gpt-5.4@low"
 
 SIMULATOR_SYSTEM = f"""You are simulating the business side of a phone call for a private eval.
 Prompt version: {SIMULATOR_PROMPT_VERSION}.
