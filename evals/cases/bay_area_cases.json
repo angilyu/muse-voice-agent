@@ -4167,5 +4167,687 @@
     ],
     "title": "Garage door repair quote with service fee",
     "vertical": "home_services"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Outerlands",
+        "customer_name": "Wenjing Li",
+        "date": "Friday",
+        "flexibility": "same Friday, 6:30 PM to 8:30 PM only",
+        "party_size": 2,
+        "phone_number": "+14155550301",
+        "special_requests": "quiet table if available",
+        "time": "7:30 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 11,
+      "required_facts": [
+        {
+          "any_of": [
+            "7:45"
+          ],
+          "name": "time",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "OL745",
+            "OL 745"
+          ],
+          "name": "confirmation",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "screen-google-restaurant-booking",
+    "persona": {
+      "answers_as": "Google call screen then host",
+      "behaviors": [
+        "call_screener"
+      ],
+      "facts": {
+        "available": "7:45 PM",
+        "confirmation": "OL745",
+        "name": "Wenjing Li",
+        "screen": "Google call screen asks caller to state name and why they are calling"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "booking",
+      "screening",
+      "naturalness"
+    ],
+    "title": "Google call screen before restaurant booking",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "budget": "under $300 if possible",
+        "business_name": "Noe Valley Handyman",
+        "customer_name": "Maya Chen",
+        "job_description": "Patch a small drywall hole and repaint the patched area.",
+        "location": "Noe Valley",
+        "phone_number": "+14155550302",
+        "preferred_timing": "next week weekday afternoon"
+      },
+      "tool": "request_handyman_quote"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "quote_received"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 12,
+      "required_facts": [
+        {
+          "any_of": [
+            "240"
+          ],
+          "name": "quote",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "Wednesday afternoon"
+          ],
+          "name": "availability",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "screen-iphone-handyman-quote",
+    "persona": {
+      "answers_as": "iPhone Live Voicemail then dispatcher",
+      "behaviors": [
+        "live_voicemail_screen"
+      ],
+      "facts": {
+        "availability": "Wednesday afternoon",
+        "quote": "about $240 if paint is already on site",
+        "screen": "Live Voicemail asks who is calling and what this is regarding"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "handyman",
+      "quote",
+      "screening",
+      "naturalness"
+    ],
+    "title": "iPhone Live Voicemail screens handyman quote call",
+    "vertical": "home_services"
+  },
+  {
+    "brief": {
+      "args": {
+        "authority": "info_only",
+        "business_name": "Mission Dental",
+        "customer_name": "Angi Rivera",
+        "goal": "Ask if they accept Delta Dental PPO and the earliest new-patient cleaning.",
+        "phone_number": "+14155550303",
+        "questions": [
+          "Do you accept Delta Dental PPO?",
+          "What is the earliest new-patient cleaning?"
+        ],
+        "shareable_details": {}
+      },
+      "tool": "place_call"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "info_received"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 10,
+      "required_facts": [
+        {
+          "any_of": [
+            "Delta Dental PPO",
+            "accepts Delta"
+          ],
+          "name": "insurance",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "Tuesday 11",
+            "Tuesday at 11"
+          ],
+          "name": "earliest",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "screen-press-one-dental-hours",
+    "persona": {
+      "answers_as": "recording then receptionist",
+      "behaviors": [
+        "press_1_screen"
+      ],
+      "facts": {
+        "earliest": "Tuesday at 11 AM",
+        "insurance": "accepts Delta Dental PPO",
+        "recording": "Press 1 to be connected"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "screening",
+      "ivr",
+      "dtmf",
+      "naturalness"
+    ],
+    "title": "Press 1 recording before dental office answers",
+    "vertical": "health"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Saru Sushi",
+        "customer_name": "Priya Shah",
+        "date": "Saturday",
+        "flexibility": "Saturday 6 PM to 7:30 PM",
+        "party_size": 3,
+        "phone_number": "+14155550304",
+        "special_requests": null,
+        "time": "6:30 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 10,
+      "required_facts": [
+        {
+          "any_of": [
+            "6:30"
+          ],
+          "name": "time",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "SS630",
+            "SS 630"
+          ],
+          "name": "confirmation",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "silent-pickup-sushi-booking",
+    "persona": {
+      "answers_as": "host after silent pickup",
+      "behaviors": [
+        "silent_pickup"
+      ],
+      "facts": {
+        "available": "6:30 PM",
+        "confirmation": "SS630",
+        "name": "Priya Shah"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "booking",
+      "screening",
+      "silent_pickup",
+      "naturalness"
+    ],
+    "title": "Silent pickup before sushi reservation",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "budget": null,
+        "business_name": "Peninsula Home Repair",
+        "customer_name": "Jordan Kim",
+        "job_description": "Replace two cracked bathroom floor tiles with spare tiles the customer has.",
+        "location": "San Mateo",
+        "phone_number": "+14155550305",
+        "preferred_timing": "next Friday if possible"
+      },
+      "tool": "request_handyman_quote"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "quote_received"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 14,
+      "required_facts": [
+        {
+          "any_of": [
+            "220",
+            "260",
+            "180 minimum"
+          ],
+          "name": "quote",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "next Friday morning"
+          ],
+          "name": "availability",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "gatekeeper-handyman-manager-transfer",
+    "persona": {
+      "answers_as": "front desk then project manager",
+      "behaviors": [
+        "gatekeeper",
+        "transfer",
+        "hold"
+      ],
+      "facts": {
+        "availability": "next Friday morning",
+        "front_desk": "can transfer to manager",
+        "quote": "$180 minimum, likely $220 to $260 total"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "handyman",
+      "quote",
+      "gatekeeper",
+      "transfer",
+      "naturalness"
+    ],
+    "title": "Gatekeeper transfers handyman quote to manager",
+    "vertical": "home_services"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Mandalay",
+        "customer_name": "Lee Nguyen",
+        "date": "Sunday",
+        "flexibility": "Sunday 6:30 PM to 7:30 PM",
+        "party_size": 4,
+        "phone_number": "+14155550306",
+        "special_requests": "birthday dinner",
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 11,
+      "required_facts": [
+        {
+          "any_of": [
+            "MN700",
+            "MN 700"
+          ],
+          "name": "confirmation",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "N G U Y E N",
+            "N, G, U, Y, E, N",
+            "Nguyen"
+          ],
+          "name": "spelled_name",
+          "where": "agent"
+        }
+      ]
+    },
+    "id": "closing-spell-name-after-goodbye",
+    "persona": {
+      "answers_as": "host",
+      "behaviors": [
+        "asks_spelling_after_goodbye"
+      ],
+      "facts": {
+        "available": "7:00 PM",
+        "confirmation": "MN700",
+        "spelling_needed": "last name Nguyen"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "booking",
+      "closing",
+      "naturalness"
+    ],
+    "title": "Host asks spelling after caller says goodbye",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Pizzetta 211",
+        "customer_name": "Sam Patel",
+        "date": "Thursday",
+        "flexibility": "Thursday 7 PM to 8 PM only",
+        "party_size": 2,
+        "phone_number": "+14155550307",
+        "special_requests": null,
+        "time": "7:30 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 12,
+      "required_facts": [
+        {
+          "any_of": [
+            "7:30"
+          ],
+          "name": "time",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "PZ730",
+            "PZ 730"
+          ],
+          "name": "confirmation",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "garbled-time-clarification-booking",
+    "persona": {
+      "answers_as": "host with noisy phone",
+      "behaviors": [
+        "garbled"
+      ],
+      "facts": {
+        "clarified_time": "7:30 PM",
+        "confirmation": "PZ730",
+        "first_answer": "we have [inaudible] thirty"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "booking",
+      "garbled",
+      "naturalness"
+    ],
+    "title": "Garbled reservation time requires clarification",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Del Popolo",
+        "customer_name": "Nora Wong",
+        "date": "Friday",
+        "flexibility": "Friday 6:30 PM to 8:00 PM only",
+        "party_size": 2,
+        "phone_number": "+14155550308",
+        "special_requests": null,
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "unavailable",
+        "needs_followup"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji",
+        "booked_outside_limits"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 11,
+      "required_facts": [
+        {
+          "any_of": [
+            "9:30"
+          ],
+          "name": "offer",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "hold-out-of-range-offer",
+    "persona": {
+      "answers_as": "host",
+      "behaviors": [
+        "hold"
+      ],
+      "facts": {
+        "hold": "checks the book",
+        "only_offer": "9:30 PM only",
+        "requested": "not available"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "hold",
+      "limits",
+      "naturalness"
+    ],
+    "title": "Hold then only out-of-range restaurant offer",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "authority": "info_only",
+        "business_name": "Cole Hardware",
+        "callback_number": "+14155551987",
+        "customer_name": "Alex Morgan",
+        "goal": "Ask whether two gallons of Benjamin Moore Simply White eggshell are in stock.",
+        "phone_number": "+14155550309",
+        "questions": [
+          "Are two gallons of Benjamin Moore Simply White eggshell in stock?"
+        ],
+        "shareable_details": {
+          "paint": "Benjamin Moore Simply White eggshell",
+          "quantity": "two gallons"
+        }
+      },
+      "tool": "place_call"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "info_received"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 10,
+      "required_facts": [
+        {
+          "any_of": [
+            "two gallons",
+            "in stock"
+          ],
+          "name": "stock",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "4155551987",
+            "415 555 1987",
+            "+14155551987"
+          ],
+          "name": "callback",
+          "where": "agent"
+        }
+      ]
+    },
+    "id": "closing-callback-after-goodbye-with-number",
+    "persona": {
+      "answers_as": "hardware clerk",
+      "behaviors": [
+        "asks_callback_after_goodbye"
+      ],
+      "facts": {
+        "callback_question": "asks for a good callback number after goodbye",
+        "hold": "cannot hold without manager approval",
+        "stock": "two gallons are in stock today"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "closing",
+      "callback",
+      "naturalness"
+    ],
+    "title": "Business asks callback number after goodbye and number is available",
+    "vertical": "retail"
+  },
+  {
+    "brief": {
+      "args": {
+        "authority": "info_only",
+        "business_name": "Sunset Auto Glass",
+        "customer_name": "Taylor Brooks",
+        "goal": "Ask the earliest windshield chip repair appointment and whether mobile service is available.",
+        "phone_number": "+14155550310",
+        "questions": [
+          "What is the earliest windshield chip repair appointment?",
+          "Do you offer mobile service?"
+        ],
+        "shareable_details": {
+          "car": "2018 Subaru Outback"
+        }
+      },
+      "tool": "place_call"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "info_received",
+        "needs_followup"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 11,
+      "required_facts": [
+        {
+          "any_of": [
+            "Monday 9",
+            "Monday at 9"
+          ],
+          "name": "earliest",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "not available this week",
+            "no mobile"
+          ],
+          "name": "mobile",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "follow up",
+            "will follow up",
+            "no callback number"
+          ],
+          "name": "no_callback",
+          "where": "any"
+        }
+      ]
+    },
+    "id": "closing-callback-after-goodbye-no-number",
+    "persona": {
+      "answers_as": "service advisor",
+      "behaviors": [
+        "asks_callback_after_goodbye"
+      ],
+      "facts": {
+        "callback_question": "asks for a good callback number after goodbye",
+        "earliest": "Monday at 9 AM",
+        "mobile": "mobile service is not available this week"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "closing",
+      "callback",
+      "naturalness"
+    ],
+    "title": "Business asks callback number after goodbye but none is available",
+    "vertical": "auto"
   }
 ]

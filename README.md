@@ -60,8 +60,14 @@ flowchart LR
    MCP tools shouldn't block that long.
 2. Retell connects the call and streams the transcript to the server's websocket. On every turn,
    the LangGraph graph (default `gpt-5.4` with low reasoning effort) reads the conversation and a system prompt built from
-   the brief, then streams back what to say next.
-3. When the agent has what it needs, it calls the `record_outcome` tool, says goodbye and hangs up.
+   the brief, then streams back what to say next. The first words ("Hi, this is an assistant calling
+   on behalf of …") are spoken before the model runs. If nobody speaks within `SILENT_PICKUP_MS`
+   after pickup (call screeners often wait), the agent speaks first. It can also press keypad digits
+   (`press_digits`) for "press 1 to connect" screens and phone menus, and stay quiet on hold
+   (`wait_on_hold`).
+3. When the agent has what it needs, it says a short goodbye and calls `record_outcome` in the same
+   reply. It then stays on the line so it can answer follow-ups (e.g. "how do you spell that?")
+   and hangs up (`end_call`) once the business says bye or goes quiet for a few seconds.
    A background monitor also tracks Retell's call state, so calls that end without an outcome
    (no answer, voicemail, hang-up) still get a final result.
 4. The assistant polls `get_call_status(call_id)` until `done` is true, then tells you the result.
@@ -79,8 +85,9 @@ sequenceDiagram
     S->>G: run graph(brief + transcript)
     G-->>R: streamed reply text → spoken
     Note over R,G: repeats each turn
-    G->>S: record_outcome(...)
-    S->>R: end_call
+    G->>S: goodbye + record_outcome(...)
+    Note over R,G: answers any follow-up questions
+    G->>R: end_call after they say bye (or go quiet)
     M->>S: get_call_status(call_id)
     S-->>M: { done: true, outcome, answers, transcript }
 ```
@@ -262,6 +269,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `PUBLIC_BASE_URL` | — | Public https URL; the Retell websocket is synced to it |
 | `ALLOWED_DIAL_PREFIXES` | `+1` | Comma-separated E.164 prefixes the agent may dial |
 | `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `300` / `3` | Limits on call length and simultaneous calls |
+| `SILENT_PICKUP_MS` | `3000` | Retell: if nobody speaks this long after pickup (e.g. a call screener), the agent speaks first; `0` disables |
 | `RETELL_VOICE_ID` | `cartesia-Cleo` | Retell voice |
 | `DEFAULT_CALLBACK_NUMBER` | — | Used when the client doesn't pass one |
 | `DEFAULT_CUSTOMER_NAME` | — | LiveKit console agent only. MCP call tools require the client to pass `customer_name` |
@@ -273,7 +281,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 src/muse_voice_agent/
   mcp_server.py   MCP tools, bearer auth, /healthz, ASGI app
   tasks.py        Brief models (general, restaurant, handyman), validation, system prompts
-  graph.py        LangGraph conversation graph and the typed record_outcome tool
+  graph.py        LangGraph conversation graph, CallControl, and the call tools (record_outcome, end_call, press_digits, wait_on_hold)
   dispatcher.py   Starts calls (Retell, LiveKit, or simulated) and enforces limits
   retell.py       Retell REST client, custom-LLM websocket, call monitor
   agent.py        Optional LiveKit Agents worker (VOICE_BACKEND=livekit)

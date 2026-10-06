@@ -26,7 +26,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .config import Settings
-from .graph import CallOutcome, build_call_graph
+from .graph import CallControl, CallOutcome, build_call_graph
 from .store import FINAL_STATUSES, CallStore
 from .tasks import parse_task
 
@@ -40,6 +40,12 @@ REMINDER_NUDGE = (
     "[The other person has been silent for a while. If you were waiting on them, briefly check "
     "whether they are still there; otherwise continue.]"
 )
+SILENT_PICKUP_NOTE = (
+    "[The call connected but nobody has spoken for a few seconds. It may be a call-screening "
+    "service or a person who didn't hear anything yet. Say why you're calling in one sentence.]"
+)
+# Once we've said goodbye, a few seconds of silence means they're done: hang up.
+CLOSING_REMINDER_MS = 4000
 
 
 class RetellError(Exception):
@@ -197,8 +203,18 @@ class RetellLLMSession:
         store: CallStore,
         model: BaseChatModel | None = None,
         bind_timeout: float = 10.0,
+        settings: Settings | None = None,
+        silent_pickup_seconds: float | None = None,
     ) -> None:
         self.ws = ws
+        self.settings = settings
+        # Speak first if nobody says anything this long after pickup (None disables).
+        self.silent_pickup_seconds = silent_pickup_seconds
+        self.control = CallControl()
+        self._closing_configured = False
+        self._heard_response_request = False
+        self._interrupt_id = 0
+        self._watcher: asyncio.Task | None = None
         self.retell_call_id = retell_call_id
         self.store = store
         self.model = model
@@ -237,8 +253,9 @@ class RetellLLMSession:
         except (WebSocketDisconnect, RuntimeError):
             logger.info("retell websocket closed (retell call %s)", self.retell_call_id)
         finally:
-            if self._turn and not self._turn.done():
-                self._turn.cancel()
+            for task in (self._turn, self._watcher):
+                if task and not task.done():
+                    task.cancel()
 
     async def _handle(self, msg: dict[str, Any]) -> None:
         kind = msg.get("interaction_type")
@@ -250,6 +267,20 @@ class RetellLLMSession:
             self._save_transcript(msg.get("transcript"))
         elif kind in ("response_required", "reminder_required"):
             self._save_transcript(msg.get("transcript"))
+            if kind == "response_required":
+                self._heard_response_request = True
+            elif self.control.closing or self.control.on_hold:
+                # Silence after our goodbye means they're done; silence on hold is expected.
+                await self._send(
+                    {
+                        "response_type": "response",
+                        "response_id": msg["response_id"],
+                        "content": "",
+                        "content_complete": True,
+                        "end_call": self.control.closing,
+                    }
+                )
+                return
             if self._turn and not self._turn.done():
                 self._turn.cancel()  # Retell discards responses to older response_ids anyway
             self._turn = asyncio.create_task(self._respond(msg))
@@ -264,10 +295,59 @@ class RetellLLMSession:
             await self._close(1008)
             return
         self.call_id = call_id
-        self.graph = build_call_graph(parse_task(record["task"]), self._on_outcome, self.model)
+        self.graph = build_call_graph(
+            parse_task(record["task"]), self._on_outcome, self.model, control=self.control
+        )
         self.store.update_call(call_id, status="in_progress", provider_call_id=self.retell_call_id)
         self._bound.set()
         logger.info("retell call %s bound to %s", self.retell_call_id, call_id)
+        if self.settings is not None and self.silent_pickup_seconds is not None:
+            self._watcher = asyncio.create_task(self._watch_silent_pickup())
+
+    def _anyone_spoke(self) -> bool:
+        transcript = self._last_transcript or []
+        return (
+            self._heard_response_request
+            or self.control.opener_spoken
+            or any((u.get("content") or "").strip() for u in transcript)
+        )
+
+    async def _watch_silent_pickup(self) -> None:
+        """Speak first when the line stays silent after pickup.
+
+        Call screeners (and some people) wait for the caller to talk, and Retell's speech-to-text
+        can miss a quiet "Hi?", which used to leave both sides silent until the inactivity timeout.
+        """
+        assert self.settings is not None and self.silent_pickup_seconds is not None
+        try:
+            async with client_factory(self.settings) as client:
+                deadline = time.monotonic() + 120
+                while True:
+                    if self._anyone_spoke() or time.monotonic() > deadline:
+                        return
+                    call = await client.get_call(self.retell_call_id)
+                    status = call.get("call_status")
+                    if status == "ongoing":
+                        break
+                    if status in ("ended", "error", "not_connected"):
+                        return
+                    await asyncio.sleep(0.5)
+            started = call.get("start_timestamp")
+            wait = self.silent_pickup_seconds
+            if isinstance(started, (int, float)):
+                wait = max(0.0, started / 1000 + wait - time.time())
+            await asyncio.sleep(wait)
+            if self._anyone_spoke() or (self._turn and not self._turn.done()):
+                return
+            logger.info("silent pickup on retell call %s; speaking first", self.retell_call_id)
+            self._interrupt_id += 1
+            self._turn = asyncio.create_task(self._run_turn(
+                [HumanMessage(content=SILENT_PICKUP_NOTE)], interrupt_id=self._interrupt_id
+            ))
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.warning("silent-pickup watcher failed (retell call %s): %s", self.retell_call_id, e)
 
     def _on_outcome(self, outcome: CallOutcome) -> None:
         self.outcome = outcome
@@ -288,7 +368,6 @@ class RetellLLMSession:
         self.store.set_transcript(self.call_id, _store_transcript(transcript))
 
     async def _respond(self, msg: dict[str, Any]) -> None:
-        response_id = msg["response_id"]
         try:
             await asyncio.wait_for(self._bound.wait(), self.bind_timeout)
         except asyncio.TimeoutError:
@@ -299,40 +378,59 @@ class RetellLLMSession:
         messages = transcript_to_messages(msg.get("transcript") or [])
         if msg.get("interaction_type") == "reminder_required":
             messages.append(HumanMessage(content=REMINDER_NUDGE))
+        await self._run_turn(messages, response_id=msg["response_id"])
+
+    async def _run_turn(
+        self,
+        messages: list[BaseMessage],
+        *,
+        response_id: int | None = None,
+        interrupt_id: int | None = None,
+    ) -> None:
+        """Run one graph turn and stream it as a response (or an agent_interrupt)."""
+        if interrupt_id is None:
+            base: dict[str, Any] = {"response_type": "response", "response_id": response_id}
+        else:
+            base = {"response_type": "agent_interrupt", "interrupt_id": interrupt_id}
+        # The fixed opener is the first chunk of our first turn; don't let a "Hello?" cut it off.
+        protect_opener = not self.control.opener_spoken
         try:
             async for chunk in self.graph.astream({"messages": messages}, stream_mode="custom"):
                 if chunk:
-                    await self._send(
-                        {
-                            "response_type": "response",
-                            "response_id": response_id,
-                            "content": chunk,
-                            "content_complete": False,
-                        }
-                    )
+                    event = {**base, "content": chunk, "content_complete": False}
+                    if protect_opener:
+                        event["no_interruption_allowed"] = True
+                        protect_opener = False
+                    await self._send(event)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
             logger.exception("graph turn failed (retell call %s)", self.retell_call_id)
             await self._send(
-                {
-                    "response_type": "response",
-                    "response_id": response_id,
-                    "content": "Sorry, could you say that again?",
-                    "content_complete": True,
-                }
+                {**base, "content": "Sorry, could you say that again?", "content_complete": True}
             )
             return
-        await self._send(
-            {
-                "response_type": "response",
-                "response_id": response_id,
-                "content": "",
-                "content_complete": True,
-                # Once the result is recorded, hang up after the goodbye has been spoken.
-                "end_call": self.outcome is not None,
-            }
-        )
+        final: dict[str, Any] = {
+            **base,
+            "content": "",
+            "content_complete": True,
+            "end_call": self.control.end_requested,
+        }
+        if self.control.pending_digits:
+            final["digit_to_press"] = self.control.pending_digits
+            self.control.pending_digits = None
+        await self._send(final)
+        if self.control.closing and not self._closing_configured:
+            self._closing_configured = True
+            await self._send(
+                {
+                    "response_type": "update_agent",
+                    "agent_config": {
+                        "reminder_trigger_ms": CLOSING_REMINDER_MS,
+                        "reminder_max_count": 1,
+                    },
+                }
+            )
 
 
 class RetellWebsocketRouter:
@@ -368,7 +466,14 @@ class RetellWebsocketRouter:
         if not retell_call_id or not hmac.compare_digest(supplied.encode(), secret.encode()):
             await ws.close(code=1008)
             return
-        await RetellLLMSession(ws, retell_call_id, self.store, self.model_factory()).run()
+        await RetellLLMSession(
+            ws,
+            retell_call_id,
+            self.store,
+            self.model_factory(),
+            settings=self.settings,
+            silent_pickup_seconds=(self.settings.silent_pickup_ms / 1000) or None,
+        ).run()
 
 
 # --------------------------------------------------------------------------------------------

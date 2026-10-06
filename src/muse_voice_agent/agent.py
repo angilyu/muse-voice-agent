@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 
 from livekit import api, rtc
 from livekit.agents import (
@@ -24,7 +25,7 @@ from livekit.agents import (
 from livekit.plugins import langchain
 
 from .config import get_settings
-from .graph import CallOutcome, build_call_graph
+from .graph import CallControl, CallOutcome, build_call_graph
 from .store import CallStore
 from .tasks import RestaurantReservation, parse_task
 
@@ -61,8 +62,7 @@ async def entrypoint(ctx: JobContext) -> None:
         task = DEMO_TASK
         logger.info("no call_id in job metadata; running demo task (console mode)")
 
-    loop = asyncio.get_running_loop()
-    outcome_ready = asyncio.Event()
+    control = CallControl()
     result: dict[str, CallOutcome] = {}
 
     def on_outcome(outcome: CallOutcome) -> None:
@@ -76,9 +76,8 @@ async def entrypoint(ctx: JobContext) -> None:
                 summary=outcome.summary,
                 details=outcome.model_dump(exclude_none=True),
             )
-        loop.call_soon_threadsafe(outcome_ready.set)
 
-    graph = build_call_graph(task, on_outcome)
+    graph = build_call_graph(task, on_outcome, control=control)
 
     sip_identity = f"callee-{call_id}" if call_id else None
     if call_id:
@@ -129,18 +128,18 @@ async def entrypoint(ctx: JobContext) -> None:
         if sip_identity and p.identity == sip_identity:
             hung_up.set()
 
+    last_activity = time.monotonic()
+
+    @session.on("user_state_changed")
+    @session.on("agent_state_changed")
+    def _on_state(ev) -> None:  # noqa: ANN001
+        nonlocal last_activity
+        last_activity = time.monotonic()
+
     # The callee speaks first ("Hello, Luigi's"), so no greeting here.
     await session.start(agent=Agent(instructions=""), room=ctx.room)
 
-    waiters = [asyncio.ensure_future(outcome_ready.wait()), asyncio.ensure_future(hung_up.wait())]
-    done, pending = await asyncio.wait(
-        waiters, timeout=settings.max_call_seconds, return_when=asyncio.FIRST_COMPLETED
-    )
-    for w in pending:
-        w.cancel()
-
-    if outcome_ready.is_set() and not hung_up.is_set():
-        # let the goodbye finish playing before hanging up
+    async def wait_for_playout() -> None:
         await asyncio.sleep(0.5)
         speech = session.current_speech
         if speech is not None:
@@ -148,10 +147,33 @@ async def entrypoint(ctx: JobContext) -> None:
                 await asyncio.wait_for(speech.wait_for_playout(), timeout=15)
             except asyncio.TimeoutError:
                 pass
-        await asyncio.sleep(1.0)
+
+    deadline = time.monotonic() + settings.max_call_seconds
+    while not hung_up.is_set() and time.monotonic() < deadline:
+        if control.pending_digits:
+            digits, control.pending_digits = control.pending_digits, None
+            await wait_for_playout()
+            for d in digits:
+                code = {"*": 10, "#": 11}.get(d, int(d) if d.isdigit() else -1)
+                if code >= 0:
+                    await ctx.room.local_participant.publish_dtmf(code=code, digit=d)
+                    await asyncio.sleep(0.3)
+        if control.end_requested:
+            await wait_for_playout()
+            await asyncio.sleep(1.0)
+            break
+        idle = session.current_speech is None and session.user_state != "speaking"
+        if control.closing and idle and time.monotonic() - last_activity > 5:
+            break  # they went quiet after our goodbye
+        await asyncio.sleep(0.25)
 
     if call_id and "outcome" not in result:
-        reason = "callee hung up" if hung_up.is_set() else "max call duration reached"
+        if hung_up.is_set():
+            reason = "callee hung up"
+        elif control.end_requested:
+            reason = "agent hung up"
+        else:
+            reason = "max call duration reached"
         store.update_call(
             call_id,
             status="completed",

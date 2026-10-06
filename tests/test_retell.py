@@ -33,6 +33,7 @@ def settings(tmp_path) -> Settings:
         retell_from_number="+16282779475",
         retell_ws_secret=SECRET,
         public_base_url="https://example.trycloudflare.com",
+        silent_pickup_ms=0,
     )
 
 
@@ -76,8 +77,9 @@ def test_custom_llm_websocket_conversation(settings):
         messages=iter(
             [
                 AIMessage(content="I'd like to book a table for two."),
-                AIMessage(content="", tool_calls=[tool_call]),
-                AIMessage(content="Great, thank you. Goodbye!"),
+                # goodbye and record_outcome in one response: no second model pass
+                AIMessage(content="Perfect, thanks so much. Bye!", tool_calls=[tool_call]),
+                AIMessage(content="Sure, it's A, N, G, I.", tool_calls=[]),
             ]
         )
     )
@@ -116,14 +118,128 @@ def test_custom_llm_websocket_conversation(settings):
             {"interaction_type": "response_required", "response_id": 2, "transcript": transcript}
         )
         text, last = _collect(ws, 2)
-        assert text.strip() == "Great, thank you. Goodbye!"
+        assert text.strip() == "Perfect, thanks so much. Bye!"
+        assert last["end_call"] is False  # stay on in case they have a question
+        assert ws.receive_json() == {
+            "response_type": "update_agent",
+            "agent_config": {"reminder_trigger_ms": 4000, "reminder_max_count": 1},
+        }
+        assert store.get_call(call_id)["outcome"] == "booked"
+
+        transcript += [
+            {"role": "agent", "content": text.strip()},
+            {"role": "user", "content": "Oh wait, how do you spell the name?"},
+        ]
+        ws.send_json(
+            {"interaction_type": "response_required", "response_id": 3, "transcript": transcript}
+        )
+        text, last = _collect(ws, 3)
+        assert text.strip() == "Sure, it's A, N, G, I."
+        assert last["end_call"] is False
+
+        transcript += [
+            {"role": "agent", "content": text.strip()},
+            {"role": "user", "content": "Got it, thanks, bye!"},
+        ]
+        ws.send_json(
+            {"interaction_type": "response_required", "response_id": 4, "transcript": transcript}
+        )
+        text, last = _collect(ws, 4)
+        assert text.strip() == "Bye!"  # answered without the model
         assert last["end_call"] is True
 
     record = store.get_call(call_id)
     assert record["status"] == "completed"
     assert record["outcome"] == "booked"
     assert record["provider_call_id"] == "rc_1"
-    assert [t["role"] for t in record["transcript"]] == ["user", "assistant", "user"]
+    assert [t["role"] for t in record["transcript"]][:3] == ["user", "assistant", "user"]
+
+
+def _bound_session(settings, store, model, path="rc_1"):
+    call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
+    app = build_app(settings, store, model_factory=lambda: model)
+    client = TestClient(app)
+    return call_id, client, f"/retell/llm/{SECRET}/{path}"
+
+
+def test_silence_after_goodbye_hangs_up_but_not_on_hold(settings):
+    store = CallStore(settings.call_db_path)
+    tool_call = {"name": "record_outcome", "args": {"outcome": "booked", "summary": "ok"}, "id": "t"}
+    hold = {"name": "wait_on_hold", "args": {}, "id": "h"}
+    model = FakeToolModel(
+        messages=iter(
+            [
+                AIMessage(content="Book two for Friday at 7?"),
+                AIMessage(content="Sure, no problem.", tool_calls=[hold]),
+                AIMessage(content="Great, thanks. Bye!", tool_calls=[tool_call]),
+            ]
+        )
+    )
+    call_id, client, path = _bound_session(settings, store, model)
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        t = [{"role": "user", "content": "Hello?"}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 1, "transcript": t})
+        _collect(ws, 1)
+        t += [{"role": "agent", "content": "..."}, {"role": "user", "content": "Hold on one sec."}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 2, "transcript": t})
+        text, last = _collect(ws, 2)
+        assert text.strip() == "Sure, no problem." and last["end_call"] is False
+        ws.send_json({"interaction_type": "reminder_required", "response_id": 3, "transcript": t})
+        text, last = _collect(ws, 3)
+        assert text == "" and last["end_call"] is False  # quiet on hold
+        t += [{"role": "user", "content": "Okay, you're booked."}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 4, "transcript": t})
+        _collect(ws, 4)
+        assert ws.receive_json()["response_type"] == "update_agent"
+        ws.send_json({"interaction_type": "reminder_required", "response_id": 5, "transcript": t})
+        text, last = _collect(ws, 5)
+        assert text == "" and last["end_call"] is True
+
+
+def test_press_digits_is_sent_after_speech(settings):
+    store = CallStore(settings.call_db_path)
+    press = {"name": "press_digits", "args": {"digits": "1"}, "id": "p"}
+    model = FakeToolModel(messages=iter([AIMessage(content="Calling for Angi.", tool_calls=[press])]))
+    call_id, client, path = _bound_session(settings, store, model)
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        t = [{"role": "user", "content": "To be connected, press 1."}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 1, "transcript": t})
+        text, last = _collect(ws, 1)
+        assert "Calling for Angi." in text
+        assert last["digit_to_press"] == "1" and last["end_call"] is False
+
+
+def test_silent_pickup_speaks_first_with_protected_opener(settings, monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"call_id": "rc_1", "call_status": "ongoing"})
+
+    monkeypatch.setattr(
+        retell,
+        "client_factory",
+        lambda s: retell.RetellClient(s.retell_api_key, transport=httpx.MockTransport(handler)),
+    )
+    settings = replace(settings, silent_pickup_ms=50)
+    store = CallStore(settings.call_db_path)
+    model = FakeToolModel(messages=iter([AIMessage(content="I'd like to book a table for two.")]))
+    call_id, client, path = _bound_session(settings, store, model)
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        events = []
+        while True:
+            msg = ws.receive_json()
+            assert msg["response_type"] == "agent_interrupt" and msg["interrupt_id"] == 1
+            events.append(msg)
+            if msg["content_complete"]:
+                break
+    assert events[0]["content"].startswith("Hi, this is an assistant calling on behalf of Angi.")
+    assert events[0]["no_interruption_allowed"] is True
+    assert "no_interruption_allowed" not in events[1]
+    assert "".join(e["content"] for e in events).strip().endswith("book a table for two.")
 
 
 def test_websocket_rejects_wrong_secret(settings):

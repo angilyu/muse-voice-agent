@@ -211,3 +211,112 @@ async def test_first_turn_speaks_fixed_opener_before_the_llm():
     last = SlowRecordingModel.seen[0][-1]
     assert isinstance(last, AIMessage) and last.content == opener  # the model knows it was said
     assert opener in SlowRecordingModel.seen[0][0].content  # and the system prompt says not to repeat it
+
+
+@pytest.mark.asyncio
+async def test_goodbye_with_outcome_is_one_pass_and_farewell_skips_the_model():
+    from muse_voice_agent.graph import CallControl
+
+    first = {"name": "record_outcome", "args": {"outcome": "booked", "summary": "2 at 7"}, "id": "a"}
+    fixed = {"name": "record_outcome", "args": {"outcome": "booked", "summary": "2 at 7:30"}, "id": "b"}
+    model = FakeToolModel(
+        messages=iter(
+            [
+                AIMessage(content="Perfect, thanks. Bye!", tool_calls=[first]),
+                AIMessage(content="Oh, 7:30 works too, thanks!", tool_calls=[fixed]),
+            ]
+        )
+    )
+    outcomes: list[CallOutcome] = []
+    control = CallControl(opener_spoken=True)
+    graph = build_call_graph(_task(), outcomes.append, model=model, control=control)
+    history = [
+        AIMessage(content="Hi, this is an assistant calling on behalf of Angi. Table for two Friday at 7?"),
+        HumanMessage(content="Sure, you're booked."),
+    ]
+    assert "".join(await _run(graph, history)).strip() == "Perfect, thanks. Bye!"
+    assert control.closing and not control.end_requested and len(outcomes) == 1
+
+    history += [AIMessage(content="Perfect, thanks. Bye!"), HumanMessage(content="Actually it's 7:30.")]
+    await _run(graph, history)
+    assert outcomes[-1].summary == "2 at 7:30" and not control.end_requested
+
+    history += [AIMessage(content="Oh, 7:30 works too, thanks!"), HumanMessage(content="Okay, bye!")]
+    assert "".join(await _run(graph, history)) == "Bye!"  # model iterator is exhausted: not called
+    assert control.end_requested
+
+
+@pytest.mark.asyncio
+async def test_cut_off_intro_is_flagged_to_the_model():
+    from muse_voice_agent.graph import CallControl
+
+    SlowRecordingModel.seen = []
+    model = SlowRecordingModel(messages=iter([AIMessage(content="Sorry, I'm calling for Angi.")]))
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=CallControl(opener_spoken=True))
+    await _run(graph, [AIMessage(content="Hi,"), HumanMessage(content="Hello? Who is this?")])
+    assert "introduction got cut off" in SlowRecordingModel.seen[0][0].content
+
+
+@pytest.mark.asyncio
+async def test_end_call_and_hold_tools_end_the_turn():
+    from muse_voice_agent.graph import CallControl
+
+    end = {"name": "end_call", "args": {}, "id": "e"}
+    control = CallControl(opener_spoken=True)
+    model = FakeToolModel(messages=iter([AIMessage(content="", tool_calls=[end])]))
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+    await _run(graph, [AIMessage(content="Hi, Angi here."), HumanMessage(content="Wrong number.")])
+    assert control.end_requested
+
+
+@pytest.mark.asyncio
+async def test_first_goodbye_does_not_hang_up_on_a_person_but_voicemail_does():
+    from muse_voice_agent.graph import CallControl
+
+    for outcome, should_end in (("booked", False), ("voicemail", True)):
+        calls = [
+            {"name": "record_outcome", "args": {"outcome": outcome, "summary": "x"}, "id": "r"},
+            {"name": "end_call", "args": {}, "id": "e"},
+        ]
+        control = CallControl(opener_spoken=True)
+        model = FakeToolModel(messages=iter([AIMessage(content="Thanks, bye!", tool_calls=calls)]))
+        graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+        await _run(graph, [AIMessage(content="Hi, for Angi."), HumanMessage(content="You're set.")])
+        assert control.end_requested is should_end
+        assert control.outcome.outcome == outcome
+
+
+@pytest.mark.asyncio
+async def test_punctuation_only_text_is_not_spoken():
+    from muse_voice_agent.graph import CallControl
+
+    control = CallControl(opener_spoken=True)
+    calls = [{"name": "press_digits", "args": {"digits": "1"}, "id": "p"}]
+    model = FakeToolModel(messages=iter([AIMessage(content="...", tool_calls=calls)]))
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+    spoken = []
+    async for chunk in graph.astream(
+        {"messages": [AIMessage(content="Hi, for Angi."), HumanMessage(content="Press 1.")]},
+        stream_mode="custom",
+    ):
+        spoken.append(str(chunk))
+    assert "".join(spoken).strip() == ""
+    assert control.pending_digits == "1"
+
+
+@pytest.mark.asyncio
+async def test_does_not_hang_up_while_their_question_is_pending():
+    from muse_voice_agent.graph import CallControl, CallOutcome
+
+    for their_line, should_end in (
+        ("Want me to add you to the waitlist?", False),
+        ("Thanks, bye!", True),
+    ):
+        control = CallControl(opener_spoken=True, closing=True)
+        control.outcome = CallOutcome(outcome="info_received", summary="x")
+        calls = [{"name": "end_call", "args": {}, "id": "e"}]
+        model = FakeToolModel(messages=iter([AIMessage(content="No thanks. Bye!", tool_calls=calls)]))
+        graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+        control.closing = False  # skip the farewell fast path so the model runs
+        await _run(graph, [AIMessage(content="Hi, for Angi."), HumanMessage(content=their_line)])
+        assert control.end_requested is should_end, their_line

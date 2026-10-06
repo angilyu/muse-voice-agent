@@ -120,6 +120,8 @@ class Settings:
     )
     max_call_seconds: int = field(default_factory=lambda: _int("MAX_CALL_SECONDS", 300))
     max_concurrent_calls: int = field(default_factory=lambda: _int("MAX_CONCURRENT_CALLS", 3))
+    # Retell: speak first if the line is silent this long after pickup (0 disables).
+    silent_pickup_ms: int = field(default_factory=lambda: _int("SILENT_PICKUP_MS", 3000))
     default_customer_name: str = field(default_factory=lambda: _str("DEFAULT_CUSTOMER_NAME"))
     default_callback_number: str = field(default_factory=lambda: _str("DEFAULT_CALLBACK_NUMBER"))
 

@@ -39,6 +39,16 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     latencies: list[float] = []
     costs: list[float] = []
     premium: list[float] = []
+    first_turn_words: list[float] = []
+    mean_turn_words: list[float] = []
+    max_turn_words: list[float] = []
+    turns_over_30 = 0
+    multi_question_turns = 0
+    robotic_phrase_cases = 0
+    repeated_detail_cases = 0
+    never_ended_calls = 0
+    hung_up_on_question = 0
+    hung_up_before_bye = 0
     by_tag: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_vertical: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_difficulty: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -59,6 +69,22 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             costs.append(float(usage["estimated_cost_usd"]))
         if isinstance(usage.get("copilot_premium_requests"), (int, float)):
             premium.append(float(usage["copilot_premium_requests"]))
+        convo = r.get("deterministic", {}).get("conversation", {})
+        if isinstance(convo, dict):
+            if isinstance(convo.get("first_turn_words_excluding_opener"), (int, float)):
+                first_turn_words.append(float(convo["first_turn_words_excluding_opener"]))
+            wpat = convo.get("words_per_agent_turn") or {}
+            if isinstance(wpat.get("mean"), (int, float)):
+                mean_turn_words.append(float(wpat["mean"]))
+            if isinstance(wpat.get("max"), (int, float)):
+                max_turn_words.append(float(wpat["max"]))
+            turns_over_30 += len(convo.get("turns_over_30_words") or [])
+            multi_question_turns += len(convo.get("multiple_question_turns") or [])
+            robotic_phrase_cases += 1 if convo.get("robotic_phrases") else 0
+            repeated_detail_cases += 1 if convo.get("repeated_details") else 0
+            never_ended_calls += 1 if convo.get("never_ended_call") else 0
+            hung_up_on_question += 1 if convo.get("hung_up_with_unanswered_business_question") else 0
+            hung_up_before_bye += 1 if convo.get("hung_up_before_business_bye") else 0
 
     def summarize(group: list[dict[str, Any]]) -> dict[str, Any]:
         return {
@@ -81,6 +107,18 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         },
         "estimated_cost_usd": round(sum(costs), 4),
         "copilot_premium_requests": round(sum(premium), 2),
+        "conversation_metrics": {
+            "first_turn_words_excluding_opener_mean": _mean(first_turn_words),
+            "agent_turn_words_mean": _mean(mean_turn_words),
+            "agent_turn_words_max_mean": _mean(max_turn_words),
+            "turns_over_30_words": turns_over_30,
+            "multiple_question_turns": multi_question_turns,
+            "robotic_phrase_cases": robotic_phrase_cases,
+            "repeated_detail_cases": repeated_detail_cases,
+            "never_ended_calls": never_ended_calls,
+            "hung_up_with_unanswered_business_question": hung_up_on_question,
+            "hung_up_before_business_bye": hung_up_before_bye,
+        },
         "by_tag": {k: summarize(v) for k, v in sorted(by_tag.items())},
         "by_vertical": {k: summarize(v) for k, v in sorted(by_vertical.items())},
         "by_difficulty": {k: summarize(v) for k, v in sorted(by_difficulty.items())},

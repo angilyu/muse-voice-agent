@@ -111,6 +111,8 @@ def select_cases(selector: str, *, seed: int | None = None, limit: int | None = 
         else:
             matches = [c for c in cases if c.id == part]
             if not matches:
+                matches = [c for c in cases if part in c.tags]
+            if not matches:
                 raise ValueError(f"unknown eval case selector: {part}")
             selected.extend(matches)
     unique = list({c.id: c for c in selected}.values())

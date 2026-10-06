@@ -330,6 +330,7 @@ class ChatCopilot(BaseChatModel):
         ok = False
         streamed: set[str] = set()
         last_msg: str | None = None
+        tools_requested = False  # the SDK can keep going after a terminal tool; LangGraph runs it
         usage = {"input_tokens": 0, "output_tokens": 0, "premium_requests": 0.0}
         try:
             await session.send(prompt)
@@ -339,6 +340,8 @@ class ChatCopilot(BaseChatModel):
                 if remaining <= 0:
                     raise TimeoutError(f"Copilot {self.model} did not finish in {self.timeout:.0f}s")
                 data = await asyncio.wait_for(queue.get(), remaining)
+                if tools_requested and isinstance(data, (AssistantMessageDeltaData, AssistantMessageData)):
+                    continue
                 if isinstance(data, AssistantMessageDeltaData) and data.delta_content:
                     text = data.delta_content
                     if last_msg is not None and data.message_id != last_msg:
@@ -366,6 +369,7 @@ class ChatCopilot(BaseChatModel):
                         for i, r in enumerate(data.tool_requests or [])
                     ]
                     if tool_chunks:
+                        tools_requested = True
                         yield ChatGenerationChunk(message=AIMessageChunk(content="", tool_call_chunks=tool_chunks))
                 elif isinstance(data, AssistantUsageData):
                     usage["input_tokens"] += data.input_tokens or 0

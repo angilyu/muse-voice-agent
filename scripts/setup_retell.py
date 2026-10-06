@@ -72,7 +72,8 @@ async def main_async(number: str, public_url: str | None, termination_uri: str |
         "voice_id": settings.retell_voice_id,
         "language": "en-US",
         "max_call_duration_ms": settings.max_call_seconds * 1000,
-        "end_call_after_silence_ms": 30_000,
+        # Long enough to sit on hold; silent pickups are handled by SILENT_PICKUP_MS instead.
+        "end_call_after_silence_ms": 60_000,
         "ring_duration_ms": 30_000,
         "enable_backchannel": False,
     }
