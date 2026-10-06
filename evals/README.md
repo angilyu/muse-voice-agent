@@ -252,6 +252,55 @@ changed: the agent now opens as "an assistant calling on behalf of…" and only 
 when asked, so re-baseline before comparing. The weakest
 categories are pets (0 of 3 passed), auto (1 of 4), voicemail and IVR.
 
+### Voice: 3 real Retell calls (October 2026)
+
+`python -m evals.voice score --latest 3`. The raw output is
+[`results/voice-latest-real.json`](results/voice-latest-real.json). All three were restaurant
+booking calls on the production agent (`openai:gpt-4.1-mini`). They were placed before the Render
+deploy and before the "assistant calling on behalf of…" opening. The audio judge was not run.
+
+| Call | Outcome | Duration | Turns | Response latency p50 / p90 / max | First words | Agent wpm | Barge-ins | Longest dead air |
+| --- | --- | ---: | ---: | --- | ---: | ---: | ---: | ---: |
+| Denny's, 6 people, Tue 6 PM | Only 7 PM free, so it declined | 64 s | 8 | 2.8 / 6.9 / **8.3 s** | **13.5 s** | 195 | 0 | 8.3 s |
+| 2 people, Tue 6:30–8:30 PM | Only 5 PM free, so the user will follow up | 91 s | 15 | 2.2 / 3.5 / 4.1 s | 7.6 s | 198 | 1 | 5.5 s |
+| 2 people, tomorrow 7 PM | 6 PM offered, so it declined and the user will follow up | 68 s | 14 | 1.8 / 2.8 / 3.4 s | 7.3 s | **227** | 2 | 4.1 s |
+
+**What went well**
+
+- All 3 calls ended cleanly: the agent hung up itself after saying goodbye.
+- Retell marked every call successful, with neutral sentiment.
+- Each time, the agent refused a slot that didn't fit the request and didn't invent a booking.
+- The agent never interrupted the business. The 3 overlaps were all the business talking over the
+  agent.
+- The agent talked for 61–65% of the call.
+
+**Where the time goes**
+
+The numbers below are Retell's per-turn latency breakdown, in milliseconds.
+
+| Component | p50 range | Worst turn |
+| --- | --- | ---: |
+| End-to-end | 1,646–2,679 | 8,002 |
+| LLM (LangGraph, gpt-4.1-mini) | 790–1,095 | **7,887** |
+| Speech recognition | 16–160 | 437 |
+| Text-to-speech | 85–90 | 117 |
+| Network round trip to the LLM websocket | ~12 | 14 |
+
+The LLM is almost all of the latency. The 8 s outlier was the first turn of the Denny's call: the
+model built its opening sentence from scratch. That also accounts for that call's 13.5 s to first
+words.
+
+**What to improve next**
+
+1. **Time to first words (7–13.5 s).** Speak a fixed greeting right away and let the LLM take over
+   from the second turn.
+2. **Speaking rate (195–227 wpm).** Conversational speech is about 150–170 wpm. Slow the Retell
+   voice or ask for shorter sentences.
+3. **LLM tail latency.** Try a faster model or shorter prompts and compare p90 latency. Use the
+   OpenAI key for this: Copilot latency doesn't reflect production.
+4. Run `--audio-judge` on the next batch to score how natural the calls sound, and re-run after
+   the new opening.
+
 ## Hill-climbing workflow
 
 1. **Baseline.** Run the full suite and save it, for example `results/before.json`.
