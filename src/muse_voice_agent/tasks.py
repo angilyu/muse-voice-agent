@@ -177,10 +177,10 @@ def parse_task(data: dict) -> AnyTask:
 
 _COMMON_RULES = """
 How to behave on the phone:
-- You are an AI assistant placing a call on behalf of {customer_name}. In your first sentence, say
-  you're their assistant calling on their behalf, e.g. "Hi, this is an assistant calling on behalf
-  of {customer_name}." Do this even if they are rude, it is a wrong number, voicemail, or an IVR.
-  You don't need to mention that you're an AI up front.
+- You are an AI assistant placing a call on behalf of {customer_name}. Your first words are spoken
+  for you automatically as soon as they pick up: "{opening_line}" Continue straight on with why
+  you're calling; never repeat that introduction or say again who you're calling for. You don't
+  need to mention that you're an AI up front.
 - If anyone asks whether you're a robot, an AI, automated or a real person, answer honestly that
   you're an AI assistant, then carry on. If a later question mentions AI again, include "AI
   assistant" in the answer. Never claim or imply that you're human.
@@ -193,13 +193,19 @@ How to behave on the phone:
 - Never agree to deposits, cancellation fees, or prepayment. If one is required, get the details and
   record the outcome as needs_followup instead of confirming.
 - If you reach voicemail or an automated system you can't get through, record outcome "voicemail"
-  or "needs_followup"; if you speak aloud, still identify yourself as {customer_name}'s assistant.
-  For a phone menu, don't just say a digit; briefly identify yourself and the menu choice. Do not
-  use "info_received" for an automated menu or recording unless it answered everything requested.
+  or "needs_followup". If you leave a voicemail message, say briefly who you're calling for, since
+  the recording may have missed your opener. For a phone menu, don't just say a digit; say the menu
+  choice in a short sentence. Do not use "info_received" for an automated menu or recording unless
+  it answered everything requested.
 - As soon as you have the answer (success, refusal, or a blocker), call the record_outcome tool
   exactly once with everything you learned. Do not include a goodbye in that same tool-call response;
   after the tool returns, say one short, polite goodbye and stop talking.
 """
+
+
+def opening_line(task: AnyTask) -> str:
+    """Fixed first sentence, spoken before the LLM runs so the callee hears us immediately."""
+    return f"Hi, this is an assistant calling on behalf of {task.customer_name}."
 
 
 def build_system_prompt(task: AnyTask) -> str:
@@ -208,7 +214,11 @@ def build_system_prompt(task: AnyTask) -> str:
         if task.callback_number
         else ""
     )
-    rules = _COMMON_RULES.format(customer_name=task.customer_name, callback_clause=callback_clause)
+    rules = _COMMON_RULES.format(
+        customer_name=task.customer_name,
+        callback_clause=callback_clause,
+        opening_line=opening_line(task),
+    )
 
     if isinstance(task, GeneralCall):
         return _general_goal(task) + "\n" + rules
@@ -283,7 +293,7 @@ Ask one question at a time. Do not ask a new question and say goodbye in the sam
 record the outcome, make sure every listed question is answered or the business clearly cannot answer
 it. When you record the outcome, put each question and the answer you got (or "not answered") in
 `answers`, put any price in `quote`, any date/time availability in `availability`, and any
-confirmation number in `reference`. Keep outcome facts compact and concrete, e.g. "Saturday 10:20
-AM", "2 in stock; 4 arrive tomorrow", "exact address needed", "free/no fee", or "brings supplies".
+confirmation number in `reference`. Keep outcome facts compact and concrete, e.g. "Thursday 3:45
+PM", "$175 flat fee", "out of stock until Monday", or "photo of the damage needed".
 Use outcome "info_received" when you got the information, "booked" only if you were allowed to book
 and did, otherwise "unavailable", "declined" or "needs_followup"."""

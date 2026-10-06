@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Any
 
 import pytest
@@ -52,12 +54,19 @@ async def _run(graph, messages) -> list[str]:
 @pytest.mark.asyncio
 async def test_speaks_text_without_calling_tool():
     outcomes: list[CallOutcome] = []
-    model = FakeToolModel(messages=iter([AIMessage(content="Hi, this is an AI assistant.")]))
+    model = FakeToolModel(messages=iter([AIMessage(content="Could I book a table for two?")]))
     graph = build_call_graph(_task(), outcomes.append, model=model)
 
-    spoken = await _run(graph, [HumanMessage(content="Hello, Luigi's.")])
+    spoken = await _run(
+        graph,
+        [
+            HumanMessage(content="Hello, Luigi's."),
+            AIMessage(content="Hi, this is an assistant calling on behalf of Angi."),
+            HumanMessage(content="How can I help?"),
+        ],
+    )
 
-    assert "".join(spoken).strip() == "Hi, this is an AI assistant."
+    assert "".join(spoken).strip() == "Could I book a table for two?"
     assert outcomes == []
 
 
@@ -122,7 +131,7 @@ async def test_livekit_llm_adapter_streams_only_spoken_text():
             if chunk.delta and chunk.delta.content:
                 spoken += chunk.delta.content
 
-    assert spoken.strip() == "Okay, thanks, bye!"
+    assert spoken.strip() == "Hi, this is an assistant calling on behalf of Angi. Okay, thanks, bye!"
     assert outcomes[0].outcome == "unavailable"
 
 
@@ -165,3 +174,40 @@ def test_raw_streamed_tool_markup_is_filtered_across_chunks():
     assert "<function=" not in spoken
     assert "record_outcome" not in spoken
     assert spoken.strip() == "Thanks, goodbye!"
+
+
+class SlowRecordingModel(FakeToolModel):
+    """Takes 0.5 s to its first token, like a real LLM over the network."""
+
+    seen: list = []
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
+        SlowRecordingModel.seen.append(list(messages))
+        await asyncio.sleep(0.5)
+        async for chunk in super()._astream(messages, stop, run_manager, **kwargs):
+            yield chunk
+
+
+@pytest.mark.asyncio
+async def test_first_turn_speaks_fixed_opener_before_the_llm():
+    opener = "Hi, this is an assistant calling on behalf of Angi."
+    SlowRecordingModel.seen = []
+    model = SlowRecordingModel(messages=iter([AIMessage(content="Could I book a table for two?")]))
+    graph = build_call_graph(_task(), lambda o: None, model=model)
+
+    spoken = []
+    first_item_after = None
+    start = time.perf_counter()
+    async for item in graph.astream(
+        {"messages": [HumanMessage(content="Hello, Luigi's.")]}, stream_mode="custom"
+    ):
+        if first_item_after is None:
+            first_item_after = time.perf_counter() - start
+        spoken.append(item)
+
+    assert spoken[0] == opener + " "
+    assert first_item_after < 0.2  # doesn't wait for the model's first token
+    assert "".join(spoken).strip() == f"{opener} Could I book a table for two?"
+    last = SlowRecordingModel.seen[0][-1]
+    assert isinstance(last, AIMessage) and last.content == opener  # the model knows it was said
+    assert opener in SlowRecordingModel.seen[0][0].content  # and the system prompt says not to repeat it

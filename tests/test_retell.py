@@ -75,7 +75,7 @@ def test_custom_llm_websocket_conversation(settings):
     model = FakeToolModel(
         messages=iter(
             [
-                AIMessage(content="Hi, I'd like to book a table for two."),
+                AIMessage(content="I'd like to book a table for two."),
                 AIMessage(content="", tool_calls=[tool_call]),
                 AIMessage(content="Great, thank you. Goodbye!"),
             ]
@@ -102,7 +102,9 @@ def test_custom_llm_websocket_conversation(settings):
             {"interaction_type": "response_required", "response_id": 1, "transcript": transcript}
         )
         text, last = _collect(ws, 1)
-        assert text.strip() == "Hi, I'd like to book a table for two."
+        assert text.strip() == (
+            "Hi, this is an assistant calling on behalf of Angi. I'd like to book a table for two."
+        )
         assert last["end_call"] is False
         assert store.get_call(call_id)["status"] == "in_progress"
 

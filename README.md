@@ -180,7 +180,8 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
   unguessable path secret (`RETELL_WS_SECRET`), and it only attaches to calls this server started.
 - **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3) and
   `MAX_CALL_SECONDS` (default 300).
-- **Honest.** The first sentence of every call says it's an assistant calling for a named person.
+- **Honest.** Every call opens with a fixed line, "Hi, this is an assistant calling on behalf of
+  {name}." It's streamed to text-to-speech before the LLM runs, so the business hears it at once.
   If asked, it always says it's an AI, and it never claims to be human.
 - **Discreet.** It never shares payment details or addresses, and never agrees to deposits or fees.
   Those cases come back as `needs_followup` for a human to handle.
