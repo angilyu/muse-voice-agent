@@ -40,6 +40,7 @@ _TOOL_MARKUP = re.compile(r"<function=.*?/>", re.S)
 
 Outcome = Literal[
     "booked",
+    "ordered",
     "quote_received",
     "info_received",
     "unavailable",
@@ -63,6 +64,8 @@ class CallOutcome(BaseModel):
     confirmed_time: str | None = Field(default=None, description="Reservation/appointment time")
     party_size: int | None = Field(default=None, description="Confirmed party size")
     booked_under: str | None = Field(default=None, description="Name the booking is under")
+    order_total: str | None = Field(default=None, description="Total price quoted for an order")
+    pickup_time: str | None = Field(default=None, description="Pickup or ready time for an order")
     quote: str | None = Field(default=None, description="Price, range, or pricing model quoted")
     availability: str | None = Field(default=None, description="Earliest availability offered")
     contact_person: str | None = Field(default=None, description="Who you spoke with")
@@ -240,10 +243,10 @@ def build_call_graph(
         if (
             isinstance(task, GeneralCall)
             and task.authority == "info_only"
-            and outcome.outcome == "booked"
+            and outcome.outcome in {"booked", "ordered"}
         ):
-            # The brief didn't authorize a booking; never report one as done.
-            note = "Agent was not authorized to book; confirm with the business yourself."
+            # The brief didn't authorize a commitment; never report one as done.
+            note = "Agent was not authorized to commit; confirm with the business yourself."
             outcome = outcome.model_copy(
                 update={
                     "outcome": "needs_followup",

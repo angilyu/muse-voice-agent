@@ -86,7 +86,7 @@ class HandymanQuote(_BaseTask):
     budget: str | None = Field(default=None, description="Optional budget to mention if asked")
 
 
-Authority = Literal["info_only", "may_book_within_limits"]
+Authority = Literal["info_only", "may_commit_within_limits", "may_book_within_limits"]
 
 # Card numbers (13-19 digits, optional spaces/dashes) and US SSNs must never be handed to the agent.
 _CARD = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
@@ -110,7 +110,7 @@ def _reject_sensitive(text: str, field: str) -> None:
 
 
 class GeneralCall(_BaseTask):
-    """Any errand Muse can describe as a brief: availability checks, questions, simple bookings."""
+    """Any phone errand Muse can describe as a brief: orders, appointments, questions, bookings."""
 
     kind: Literal["general"] = "general"
     goal: str = Field(min_length=3, max_length=1000, description="What the call should accomplish")
@@ -123,13 +123,15 @@ class GeneralCall(_BaseTask):
     )
     authority: Authority = Field(
         default="info_only",
-        description="info_only: ask and commit to nothing. may_book_within_limits: may book/"
-        "reserve/schedule only within `limits`.",
+        description="info_only: ask and commit to nothing. may_commit_within_limits: may book, "
+        "order, schedule, reschedule, cancel, or reserve only within `limits`. "
+        "may_book_within_limits is a backward-compatible alias.",
     )
     limits: str | None = Field(
         default=None,
         max_length=500,
-        description="Required with may_book_within_limits, e.g. 'Oct 10-12, king room, max $250/night'",
+        description="Required with may_commit_within_limits/may_book_within_limits, e.g. "
+        "'two jasmine milk teas, 25% sugar, less ice, defaults otherwise, pay at pickup'",
     )
 
     @field_validator("questions")
@@ -162,8 +164,13 @@ class GeneralCall(_BaseTask):
 
     @model_validator(mode="after")
     def _limits_required(self) -> "GeneralCall":
-        if self.authority == "may_book_within_limits" and not (self.limits or "").strip():
-            raise ValueError("limits are required when authority is may_book_within_limits")
+        if self.authority in {"may_commit_within_limits", "may_book_within_limits"} and not (
+            self.limits or ""
+        ).strip():
+            raise ValueError(
+                "limits are required when authority is may_commit_within_limits "
+                "or may_book_within_limits"
+            )
         return self
 
 
@@ -221,9 +228,12 @@ Screeners, menus, holds and voicemail:
   for a menu or recording unless it answered everything requested.
 
 Confirming and wrapping up:
-- Before recording a booking or appointment, read the key details back once, the way a person
-  would: "So that's two at 7 on Friday under Wenjing?" Then wait for them to confirm. Don't recite
-  every field and don't do it twice.
+- Before recording a booking, order, appointment, cancellation, reschedule, or other commitment,
+  read the key details back once, the way a person would: "So that's two at 7 on Friday under
+  Wenjing?" Then wait for them to confirm. Don't recite every field and don't do it twice.
+- For food or drink orders, place the order exactly as written. If the brief says to use defaults
+  for unspecified options, answer option questions with "the default is fine" or "regular is fine".
+  Ask for the total and pickup/ready time, and give the customer's name for pickup.
 - Once you have the answer (confirmed, refused or blocked), in ONE reply say a short goodbye like
   "Perfect, thanks so much. Bye!" and call record_outcome with everything you learned, including any
   confirmation number, price or name they gave. Never ask a question in that reply. If their last
@@ -240,6 +250,8 @@ Privacy and commitments:
   customer's name{callback_clause}.
 - Never agree to deposits, cancellation fees, or prepayment. If one is required, get the details and
   record the outcome as needs_followup instead of confirming.
+- For pickup orders, pay-at-pickup is okay when it fits the brief. If the business requires a card
+  or prepayment over the phone, do not place the order; record needs_followup.
 
 Today is {today} (Pacific time).
 """
@@ -312,14 +324,16 @@ def _general_goal(task: GeneralCall) -> str:
         "\n".join(f"{i}. {q}" for i, q in enumerate(task.questions, 1))
         or "(none listed; get whatever information the goal needs)"
     )
-    if task.authority == "may_book_within_limits":
-        authority = f"""You MAY book, reserve or schedule, but only if every part of it fits these limits:
+    if task.authority in {"may_commit_within_limits", "may_book_within_limits"}:
+        authority = f"""You MAY book, order, reserve, schedule, reschedule, cancel, or otherwise commit, but only if every part of it fits these limits:
 {task.limits}
 If what they offer falls outside the limits, do not accept it; note the offer and use outcome
-"unavailable" or "needs_followup". If the offer fits, book it under {task.customer_name} using only
-the shareable details above. Ask for a confirmation or reference number before ending. Do not treat
-missing phone, email, address, or other unprovided details as a blocker unless the business refuses
-to hold or confirm without them."""
+"unavailable" or "needs_followup". If the offer fits, commit under {task.customer_name} using only
+the shareable details above. For food or drink pickup orders, ordering with pay-at-pickup is allowed;
+never give a card number, and use needs_followup if a card or prepayment is required. Ask for a
+confirmation or reference number before ending. For orders, also ask for the total and pickup/ready
+time. Do not treat missing phone, email, address, or other unprovided details as a blocker unless the
+business refuses to hold or confirm without them."""
     else:
         authority = """You may NOT book, reserve, order, schedule or agree to anything. You are only gathering
 information. If they offer to book or hold something, politely say {customer} will call back to
@@ -344,5 +358,6 @@ it. When you record the outcome, put each question and the answer you got (or "n
 `answers`, put any price in `quote`, any date/time availability in `availability`, and any
 confirmation number in `reference`. Keep outcome facts compact and concrete, e.g. "Thursday 3:45
 PM", "$175 flat fee", "out of stock until Monday", or "photo of the damage needed".
-Use outcome "info_received" when you got the information, "booked" only if you were allowed to book
-and did, otherwise "unavailable", "declined" or "needs_followup"."""
+Use outcome "info_received" when you got the information, "ordered" when you placed a pickup order,
+"booked" when you made another authorized commitment, otherwise "unavailable", "declined" or
+"needs_followup"."""

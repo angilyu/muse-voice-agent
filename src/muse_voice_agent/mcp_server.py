@@ -37,14 +37,22 @@ logger = logging.getLogger("muse_voice_agent.mcp")
 
 INSTRUCTIONS = """\
 Places real phone calls to businesses on the user's behalf using an AI voice agent.
-- place_call handles any errand you can describe as a brief: availability checks (hotels, salons,
-  clinics), questions to a business (hours, walk-ins, order status, pricing), or simple bookings.
-  book_restaurant_reservation and request_handyman_quote are tuned shortcuts for those two cases.
+- Use place_call for ANY phone errand the user approves: placing takeout/pickup food or drink
+  orders, scheduling/rescheduling/cancelling appointments, checking order or refill status, asking
+  questions, making reservations of any kind, getting quotes, checking availability, store stock,
+  hours, pricing, or other business calls.
+- book_restaurant_reservation and request_handyman_quote are optional tuned shortcuts for those two
+  cases only. For everything else, use place_call rather than refusing because a specialized tool is
+  missing.
 - place_call defaults to authority="info_only" (the agent commits to nothing). Use
-  "may_book_within_limits" only when the user explicitly asked you to book, and put every limit
-  they gave (dates, times, price cap, "no deposit") in `limits`.
-- Only put details the user is comfortable sharing in shareable_details. Never include card numbers,
-  SSNs, passwords, or a full home address.
+  "may_commit_within_limits" when the user explicitly asked it to book/order/schedule/cancel/etc.,
+  and put every limit they gave in `limits` (items, quantities, options, dates/times, price cap,
+  "pay at pickup", "defaults for anything else", "no deposit"). "may_book_within_limits" remains a
+  backward-compatible alias.
+- Pickup orders with pay-at-pickup are allowed when within limits. Never include card numbers, SSNs,
+  passwords, or a full home address; if a business requires card prepayment over the phone, the call
+  returns needs_followup.
+- Only put details the user is comfortable sharing in shareable_details.
 - Every call tool returns a call_id immediately; the call itself takes 1-5 minutes. Poll
   get_call_status(call_id) every ~20 seconds until `done` is true, then report the summary and answers.
 - Always pass customer_name: the full name of the user you're calling for. The agent introduces
@@ -89,6 +97,64 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         view = _public_view(record)
         view["next_step"] = "Poll get_call_status with this call_id until done is true."
         return view
+
+    @mcp.tool(
+        annotations=ToolAnnotations(
+            title="General-purpose phone agent for any business errand",
+            destructiveHint=False,
+            idempotentHint=False,
+            openWorldHint=True,
+        )
+    )
+    async def place_call(
+        business_name: str,
+        phone_number: str,
+        customer_name: str,
+        goal: str,
+        questions: list[str] | None = None,
+        shareable_details: dict[str, str] | None = None,
+        authority: Authority = "info_only",
+        limits: str | None = None,
+        callback_number: str | None = None,
+    ) -> dict[str, Any]:
+        """Phone any business for any errand Muse can brief.
+
+        Use this for placing takeout/pickup food or drink orders, scheduling/rescheduling/cancelling
+        appointments, checking order/refill/repair status, asking questions, making reservations of
+        any kind, getting quotes, checking availability, store stock, hours or pricing. Returns a
+        call_id right away.
+
+        Args:
+            business_name: Name of the business.
+            phone_number: Business phone number, E.164 (e.g. +14155550123).
+            customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
+                The agent introduces itself as their assistant. Ask the user if you don't know it.
+            goal: One or two sentences on what the call should accomplish, including exact order
+                items and options when ordering.
+            questions: Specific questions to get answered (up to 10), answered back in `answers`.
+            shareable_details: Facts the agent may share if relevant, e.g. {"dates": "Oct 10-12",
+                "guests": "2 adults", "order number": "A1234", "pickup name": "Wenjing"}.
+                No card numbers or SSNs.
+            authority: "info_only" (default; commit to nothing), "may_commit_within_limits"
+                (book/order/schedule/cancel/etc. within limits), or the backward-compatible alias
+                "may_book_within_limits".
+            limits: Required for may_commit_within_limits/may_book_within_limits, e.g. "two
+                jasmine green milk teas, 25% sugar, less ice, defaults otherwise, pickup order,
+                pay at pickup, no card over phone" or "Oct 10-12 only, max $250/night, no deposit".
+            callback_number: Number the business may call back (shared only if asked).
+        """
+        return await _start(
+            GeneralCall,
+            business_name=business_name,
+            phone_number=phone_number,
+            customer_name=customer_name,
+            goal=goal,
+            questions=questions or [],
+            shareable_details=shareable_details or {},
+            authority=authority,
+            limits=limits,
+            callback_number=callback_number or settings.default_callback_number or None,
+        )
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -176,57 +242,6 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             location=location,
             preferred_timing=preferred_timing,
             budget=budget,
-            callback_number=callback_number or settings.default_callback_number or None,
-        )
-
-    @mcp.tool(
-        annotations=ToolAnnotations(
-            title="Call a business for any errand",
-            destructiveHint=False,
-            idempotentHint=False,
-            openWorldHint=True,
-        )
-    )
-    async def place_call(
-        business_name: str,
-        phone_number: str,
-        customer_name: str,
-        goal: str,
-        questions: list[str] | None = None,
-        shareable_details: dict[str, str] | None = None,
-        authority: Authority = "info_only",
-        limits: str | None = None,
-        callback_number: str | None = None,
-    ) -> dict[str, Any]:
-        """Phone any business with a brief: check availability, ask questions, or book within limits.
-
-        Examples: hotel room availability and rates, whether a salon takes walk-ins, if an order or
-        repair is ready, a clinic's next opening, store hours or stock. Returns a call_id right away.
-
-        Args:
-            business_name: Name of the business.
-            phone_number: Business phone number, E.164 (e.g. +14155550123).
-            customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
-                The agent introduces itself as their assistant. Ask the user if you don't know it.
-            goal: One or two sentences on what the call should accomplish.
-            questions: Specific questions to get answered (up to 10), answered back in `answers`.
-            shareable_details: Facts the agent may share if relevant, e.g. {"dates": "Oct 10-12",
-                "guests": "2 adults", "order number": "A1234"}. No card numbers or SSNs.
-            authority: "info_only" (default; commit to nothing) or "may_book_within_limits".
-            limits: Required for may_book_within_limits, e.g. "Oct 10-12 only, king bed, max
-                $250/night incl. tax, free cancellation, no deposit".
-            callback_number: Number the business may call back (shared only if asked).
-        """
-        return await _start(
-            GeneralCall,
-            business_name=business_name,
-            phone_number=phone_number,
-            customer_name=customer_name,
-            goal=goal,
-            questions=questions or [],
-            shareable_details=shareable_details or {},
-            authority=authority,
-            limits=limits,
             callback_number=callback_number or settings.default_callback_number or None,
         )
 

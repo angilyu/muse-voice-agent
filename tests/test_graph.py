@@ -165,6 +165,54 @@ async def test_info_only_call_cannot_report_a_booking():
     assert outcomes[0].answers[0].answer == "yes, $210"
 
 
+async def test_info_only_call_cannot_report_an_order():
+    from muse_voice_agent.tasks import GeneralCall
+
+    task = GeneralCall(
+        business_name="HeyTea",
+        phone_number="+12138805023",
+        customer_name="Wenjing Yu",
+        goal="Ask whether jasmine green milk tea is available",
+        questions=["Is it available?"],
+    )
+    outcomes: list[CallOutcome] = []
+    tool_call = {
+        "name": "record_outcome",
+        "args": {
+            "outcome": "ordered",
+            "summary": "Ordered two jasmine green milk teas.",
+            "order_total": "$12.80",
+            "pickup_time": "15 minutes",
+        },
+        "id": "call_order",
+    }
+    model = FakeToolModel(messages=iter([AIMessage(content="Done, thanks, bye!", tool_calls=[tool_call])]))
+    graph = build_call_graph(task, outcomes.append, model=model)
+    await _run(graph, [HumanMessage(content="HeyTea.")])
+    assert outcomes[0].outcome == "needs_followup"
+    assert "not authorized to commit" in outcomes[0].follow_up
+    assert outcomes[0].order_total == "$12.80"
+
+
+def test_general_order_prompt_allows_commitments_and_defaults():
+    from muse_voice_agent.tasks import GeneralCall, build_system_prompt
+
+    task = GeneralCall(
+        business_name="HeyTea",
+        phone_number="+12138805023",
+        customer_name="Wenjing Yu",
+        goal="Order two jasmine green milk teas.",
+        authority="may_commit_within_limits",
+        limits="Two jasmine green milk teas, 25% sugar, less ice, defaults otherwise, pay at pickup.",
+    )
+
+    prompt = build_system_prompt(task)
+    assert "You MAY book, order, reserve, schedule, reschedule, cancel" in prompt
+    assert "default is fine" in prompt
+    assert "Ask for the total and pickup/ready time" in prompt
+    assert "pay-at-pickup" in prompt
+
+
 def test_raw_streamed_tool_markup_is_filtered_across_chunks():
     f = _ToolMarkupFilter()
     chunks = ['<function=record_outcome ', '={"outcome":"booked"} ', "/> ", "Thanks, goodbye!"]

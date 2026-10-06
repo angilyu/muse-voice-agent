@@ -2,8 +2,9 @@
 
 **Give your AI assistant a phone.** MuseVoiceAgent is an [MCP](https://modelcontextprotocol.io) server
 that lets an AI assistant (built for Meta Muse, works with any MCP client) phone real businesses on
-your behalf. It can book a table, get a handyman quote, check hotel availability, or ask whether
-your repair is ready, and it reports back a structured result.
+your behalf. It can place pickup food or drink orders, schedule/reschedule/cancel appointments, book
+a table, get a handyman quote, check hotel availability, or ask whether your repair is ready, and it
+reports back a structured result.
 
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![MCP](https://img.shields.io/badge/protocol-MCP-6f42c1)
@@ -26,7 +27,8 @@ Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus
 ## Why it's interesting
 
 - **One tool, many errands.** `place_call` takes a *brief* (goal, questions, details it may share,
-  and how much authority it has), so you don't build a new flow for every kind of call.
+  and how much authority it has), so you don't build a new flow for every kind of call: orders,
+  appointments, cancellations, reschedules, questions, quotes, reservations and status checks.
   Restaurant and handyman calls get tuned shortcuts.
 - **Results the assistant can use.** Every call ends with a typed `CallOutcome`: `booked`,
   `quote_received`, `info_received`, `voicemail`, and so on. It includes per-question answers,
@@ -114,7 +116,7 @@ starts a simulated call and polls it until it's done.
 
 | Tool | What it does |
 | --- | --- |
-| `place_call` | Phone **any** business with a brief: availability checks, questions, simple bookings |
+| `place_call` | Phone **any** business with a brief: orders, appointments, cancellations, reschedules, questions, bookings, quotes, availability/status checks |
 | `book_restaurant_reservation` | Restaurant shortcut (party size, date, time, flexibility) |
 | `request_handyman_quote` | Contractor shortcut: price and earliest availability. **Never books.** |
 | `get_call_status` | Status, outcome, structured details, optional transcript |
@@ -134,14 +136,31 @@ with "Hi, this is an assistant calling on behalf of {customer_name}". Blank or p
   "goal": "Find out if they have a king room for Oct 10–12 and the nightly rate",
   "questions": ["Is a king room available Oct 10–12?", "What's the nightly rate?"],
   "shareable_details": { "guests": "2 adults" },          // what the agent may say if asked
-  "authority": "info_only",                                // or "may_book_within_limits"
-  "limits": null                                           // required with may_book, e.g. "under $300/night, no prepayment"
+  "authority": "info_only",                                // or "may_commit_within_limits"
+  "limits": null                                           // required with may_commit, e.g. "under $300/night, no prepayment"
 }
 ```
 
 `authority` controls what the agent may commit to. `info_only` (the default) never agrees to
 anything. If the model still claims it booked something, the server downgrades the result to
-`needs_followup`. `may_book_within_limits` lets it book only within the `limits` you wrote.
+`needs_followup`. `may_commit_within_limits` lets it book, order, schedule, reschedule, cancel or
+reserve only within the `limits` you wrote. `may_book_within_limits` is still accepted as a
+backward-compatible alias.
+
+For pickup orders, put the exact items and options in `goal`, `shareable_details`, and especially
+`limits`, for example:
+
+```jsonc
+{
+  "business_name": "HeyTea",
+  "phone_number": "+12138805023",
+  "customer_name": "Wenjing Yu",
+  "goal": "Place a pickup order for two Jasmine green milk teas, 25% sugar, less ice. Use defaults for anything else.",
+  "shareable_details": { "pickup name": "Wenjing Yu" },
+  "authority": "may_commit_within_limits",
+  "limits": "Exactly two Jasmine green milk teas, 25% sugar, less ice, defaults otherwise, pay at pickup only; no card over phone"
+}
+```
 
 ### Result
 
@@ -150,7 +169,7 @@ anything. If the model still claims it booked something, the server downgrades t
   "call_id": "c_8f2…",
   "status": "completed",          // queued → dialing → in_progress → completed | no_answer | failed
   "done": true,
-  "outcome": "info_received",     // booked | quote_received | info_received | unavailable
+  "outcome": "info_received",     // booked | ordered | quote_received | info_received | unavailable
                                   // | declined | needs_followup | voicemail
   "summary": "Hotel Zed has a king room Oct 10–12 at $289/night plus tax.",
   "details": {
@@ -166,8 +185,8 @@ anything. If the model still claims it booked something, the server downgrades t
 }
 ```
 
-Depending on the call type, `details` can also include `confirmed_date`, `confirmed_time`, `party_size`,
-`booked_under`, `quote`, and `availability`.
+Depending on the call type, `details` can also include `confirmed_date`, `confirmed_time`,
+`party_size`, `booked_under`, `order_total`, `pickup_time`, `quote`, and `availability`.
 
 ## Design decisions
 
@@ -245,13 +264,17 @@ Point any MCP client at `https://<your-host>/mcp` (streamable HTTP) with the bea
 
 > Build a custom integration to my phone-calling agent. It's an MCP server over streamable HTTP at
 > `https://<your-host>/mcp` and needs a bearer token (ask me through the secure credential flow).
-> It can call any business to check availability, ask questions, or book within limits I set.
+> It can call any business for any phone errand: ordering pickup food or drinks, scheduling,
+> rescheduling or cancelling appointments, checking status, asking questions, getting quotes, or
+> booking within limits I set.
 > Connect, list the tools, test `list_calls`, and save it as a reusable skill. Always confirm the
 > business, number, and details with me before starting a call, and require my approval for call tools.
 
 Enter `MCP_AUTH_TOKEN` in Muse's secure credential prompt, never in the chat. Then try:
 
 - *"Book a table for 2 at Luigi's (+1…) Friday at 7:30, flexible 6:30–8:30."*
+- *"Call HeyTea (+1…) and order two Jasmine green milk teas, 25% sugar, less ice, defaults otherwise."*
+- *"Reschedule my dentist appointment from Thursday morning to next Tuesday afternoon if there's no fee."*
 - *"Get a quote from Bob's Handyman (+1…) to replace a kitchen faucet in Oakland."*
 - *"Ask Joe's Bike Shop (+1…) if my repair is ready. The ticket number is 48213."*
 

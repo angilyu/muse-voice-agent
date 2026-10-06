@@ -40,7 +40,13 @@ def _data(result) -> dict:
 
 async def test_lists_expected_tools(settings):
     async with Client(build_server(settings)) as client:
-        tools = {t.name for t in (await client.list_tools()).tools}
+        listed = (await client.list_tools()).tools
+        tools = {t.name for t in listed}
+    assert [t.name for t in listed][:3] == [
+        "place_call",
+        "book_restaurant_reservation",
+        "request_handyman_quote",
+    ]
     assert tools == {
         "book_restaurant_reservation",
         "request_handyman_quote",
@@ -131,6 +137,22 @@ async def test_general_call_dry_run_returns_answers(settings):
     ]
 
 
+async def test_place_call_schema_is_general_purpose(settings):
+    async with Client(build_server(settings)) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+    tool = tools["place_call"]
+    description = " ".join((tool.description or "").split()).lower()
+    schema = tool.input_schema
+    authority = schema["properties"]["authority"]
+
+    assert "general-purpose phone agent" in (tool.annotations.title or "").lower()
+    assert "food or drink orders" in description
+    assert "scheduling/rescheduling/cancelling" in description
+    assert "may_commit_within_limits" in authority["enum"]
+    assert "may_book_within_limits" in authority["enum"]
+    assert "book/order/schedule/cancel" in description
+
+
 async def test_general_call_validation(settings):
     base = {
         "business_name": "Spa",
@@ -140,7 +162,17 @@ async def test_general_call_validation(settings):
     }
     async with Client(build_server(settings)) as client:
         no_limits = _data(
-            await client.call_tool("place_call", {**base, "authority": "may_book_within_limits"})
+            await client.call_tool("place_call", {**base, "authority": "may_commit_within_limits"})
+        )
+        alias = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    **base,
+                    "authority": "may_book_within_limits",
+                    "limits": "today after 4 PM, under $100, no deposit",
+                },
+            )
         )
         card = _data(
             await client.call_tool(
@@ -153,6 +185,7 @@ async def test_general_call_validation(settings):
             )
         )
     assert no_limits["error"] == "invalid_request" and "limits" in no_limits["message"]
+    assert alias["error"] is None and alias["kind"] == "general"
     assert card["error"] == "invalid_request" and "card" in card["message"]
     assert tracking["error"] is None and tracking["kind"] == "general"  # long non-card numbers (order/tracking) are allowed
 

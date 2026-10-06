@@ -21,7 +21,7 @@ from muse_voice_agent.graph import CallOutcome
 
 def test_eval_cases_load_and_validate_real_tasks():
     cases = load_all_cases()
-    assert len(cases) >= 68
+    assert len(cases) >= 71
     assert {c.brief.tool for c in cases} == {
         "place_call",
         "book_restaurant_reservation",
