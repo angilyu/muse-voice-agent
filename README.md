@@ -292,89 +292,23 @@ Most errands don't need a shortcut, because `place_call` already covers them.
 
 ## Evals
 
-The top-level `evals/` package is for hill-climbing prompts, models and graph changes.
-It includes 58 Bay Area phone-errand cases across restaurants, home services, travel, auto,
-healthcare, retail, pets, housing, classes and other local services. Each case stores the MCP-style
-brief, a hidden business persona, expected outcomes/facts and edge-case checks.
+The agent is measured by an eval suite of **58 simulated San Francisco Bay Area phone errands**:
+restaurants, home services, healthcare, pets, travel, retail and hard cases such as voicemail, IVR
+menus and rude hang-ups. The suite is built for hill-climbing prompts, models and graph changes.
 
-### Text conversation eval
-
-The text harness runs simulated calls through the same production pieces Retell uses: task
-validation, `build_system_prompt`, the LangGraph graph, `record_outcome`, and per-turn transcript
-conversion from `retell.py`. A simulator LLM speaks as the business; a judge LLM scores the result.
-
-By default every text-eval model runs on **GitHub Copilot** through the
-[Copilot SDK](https://github.com/github/copilot-sdk) (a dev-only dependency), so hill-climbing
-spends Copilot premium requests instead of OpenAI API credits. Production still uses OpenAI.
-
-| Role | Default | Why |
-| --- | --- | --- |
-| Agent under test | `copilot:gpt-5.4@low` | Won a 16-case bake-off against gpt-5.4-mini, gpt-5-mini, claude-haiku-4.5 and claude-sonnet-5.5; also available on the OpenAI API, so prod can adopt it |
-| Business simulator | `copilot:claude-haiku-4.5` | Cheap, fast and good at staying in character |
-| Judge | `copilot:claude-sonnet-5.5` | A different model family from the agent, to reduce self-preference |
+- **Text eval:** an LLM plays the business and the real production graph makes the call. The result
+  is scored by deterministic safety and outcome checks, TTS-friendliness checks and a six-dimension
+  LLM judge. By default it runs on GitHub Copilot models, so iterating costs no OpenAI credits.
+- **Voice eval:** scores real Retell calls for latency, barge-ins, dead air and pacing, with an
+  optional audio judge.
 
 ```bash
-export COPILOT_GITHUB_TOKEN=<github token with Copilot access>   # or rely on a signed-in Copilot CLI
-
-uv run --offline python -m evals.text --cases all --concurrency 6 \
-  --out evals/results/text-my-run.json
-
-# Latency mode: run the agent on the production OpenAI model (uses OPENAI_API_KEY);
-# the simulator and judge stay on Copilot.
-uv run --offline python -m evals.text --cases tag:smoke --latency
-
-uv run --offline python -m evals.text --agent-model copilot:claude-sonnet-5.5 --cases tag:smoke
-uv run --offline python -m evals.text compare evals/results/text-a.json evals/results/text-b.json
+uv run --offline python -m evals.text --cases tag:smoke
 ```
 
-Model names are `copilot:<model>[@<reasoning-effort>]` for Copilot or any LangChain
-`provider:model` string (for example `openai:gpt-4.1-mini`). The Copilot adapter
-(`evals/copilot_llm.py`) is a LangChain chat model, so it drives the real LangGraph graph with tool
-calls. It keeps one Copilot session per conversation and sends only the new turns, and it retries
-transient failures on a fresh session. Copilot latency is not production latency: run
-JSON records `agent_latency_representative`, which is `true` only for `--latency` or non-Copilot
-agent runs.
-
-Scoring combines deterministic checks (allowed outcome, required facts, AI disclosure, no
-unauthorized booking/deposit/address/card sharing, turn count, no markdown/emoji in spoken text),
-LLM-judge 1–5 rubric scores (success, factuality, safety, efficiency, naturalness, twist handling),
-and speakability proxies (sentence length, one question at a time, no URLs/parentheticals/raw phone
-numbers). Results include aggregate pass rates, per-tag breakdowns, latencies, token counts,
-OpenAI cost estimates and `copilot_premium_requests`. `evals/results/` is git-ignored.
-
-### Voice quality eval
-
-The voice scorer analyzes existing Retell calls without placing new calls:
-
-```bash
-uv run --offline python -m evals.voice score --latest 3 \
-  --agent-id agent_9d63522dcd7094db78634855a6 \
-  --out evals/results/voice-latest.json
-
-uv run --offline python -m evals.voice score --retell-call-id <retell_call_id>
-uv run --offline python -m evals.voice compare evals/results/voice-a.json evals/results/voice-b.json
-```
-
-It fetches `get-call`/`list-calls` via the existing Retell client and computes response-latency
-p50/p90/max, time to first agent utterance, overlaps/barge-ins, dead-air gaps, talk ratio, words per
-minute, turn count, call duration, disconnection reason and whether the agent ended cleanly. Add
-`--audio-judge` to download the recording in memory and send it to an audio-capable OpenAI model for
-naturalness, pronunciation, pacing, interruption handling, perceived latency and ASR-recovery
-scores. Do not commit raw transcripts or recordings from real calls.
-
-### Optional live voice eval setup
-
-`evals.voice live` is intentionally double-gated and should be used only with numbers/agents you
-already own. Set up a second Retell phone number with a persona agent whose prompt is built from an
-eval case's hidden business persona, then have this agent call that number and score the resulting
-Retell call. This costs Retell/Twilio per-minute charges on both sides and may require a second
-phone number; the harness does **not** buy numbers or create/modify Retell agents.
-
-```bash
-EVALS_ALLOW_LIVE_CALLS=1 uv run --offline python -m evals.voice live \
-  --cases tag:smoke --persona-phone-number +1YOUR_PERSONA_NUMBER \
-  --allow-live-calls I_UNDERSTAND_THIS_PLACES_REAL_CALLS
-```
+The current baseline is a **62% pass rate** with a **4.24 / 5** average score. See
+**[evals/README.md](evals/README.md)** for the case catalog, scoring, model choices, results and
+the hill-climbing workflow.
 
 ## Roadmap
 
