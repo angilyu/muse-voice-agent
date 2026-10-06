@@ -113,12 +113,50 @@ class ScriptedBusiness:
 
 
 def _norm(text: str) -> str:
-    return re.sub(r"[^a-z0-9]+", " ", text.lower()).strip()
+    text = text.lower()
+    text = re.sub(r"\b(\d+)(st|nd|rd|th)\b", r"\1", text)
+    numbers = {
+        "zero": "0",
+        "one": "1",
+        "two": "2",
+        "three": "3",
+        "four": "4",
+        "five": "5",
+        "six": "6",
+        "seven": "7",
+        "eight": "8",
+        "nine": "9",
+        "ten": "10",
+        "eleven": "11",
+        "twelve": "12",
+    }
+    for word, digit in numbers.items():
+        text = re.sub(rf"\b{word}\b", digit, text)
+    replacements = {
+        r"\b(?:no fee|no charge|nothing to pay|complimentary)\b": "free",
+        r"\b(?:bring|brings|bringing|brought|include|includes|included|including) all (?:the )?supplies\b": "brings supplies",
+        r"\bsupplies (?:are )?included\b": "brings supplies",
+        r"\b(?:specific|street|full|firm|building) address\b": "exact address",
+        r"\baddress (?:is )?(?:needed|required)\b": "exact address needed",
+    }
+    for pattern, repl in replacements.items():
+        text = re.sub(pattern, repl, text)
+    tokens = re.sub(r"[^a-z0-9:]+", " ", text).split()
+    stopwords = {"a", "an", "the", "at", "on", "this", "next", "in", "of", "to", "for", "by", "with"}
+    return " ".join(t for t in tokens if t not in stopwords)
 
 
 def _contains(haystack: str, needles: list[str]) -> bool:
     h = _norm(haystack)
-    return any(_norm(n) in h for n in needles)
+    h_tokens = set(h.split())
+    for needle in needles:
+        n = _norm(needle)
+        if n in h:
+            return True
+        n_tokens = n.split()
+        if 1 < len(n_tokens) <= 4 and all(tok in h_tokens for tok in n_tokens):
+            return True
+    return False
 
 
 def _outcome_text(outcome: CallOutcome | None) -> str:

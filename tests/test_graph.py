@@ -9,7 +9,7 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGenerationChunk
 
-from muse_voice_agent.graph import CallOutcome, build_call_graph
+from muse_voice_agent.graph import CallOutcome, _ToolMarkupFilter, build_call_graph
 from muse_voice_agent.tasks import RestaurantReservation
 
 
@@ -163,6 +163,17 @@ async def test_info_only_call_cannot_report_a_booking():
     assert outcomes[0].outcome == "needs_followup"
     assert "not authorized" in outcomes[0].follow_up
     assert outcomes[0].answers[0].answer == "yes, $210"
+
+
+def test_raw_streamed_tool_markup_is_filtered_across_chunks():
+    f = _ToolMarkupFilter()
+    chunks = ['<function=record_outcome ', '={"outcome":"booked"} ', "/> ", "Thanks, goodbye!"]
+
+    spoken = "".join(f.feed(chunk) for chunk in chunks) + f.flush()
+
+    assert "<function=" not in spoken
+    assert "record_outcome" not in spoken
+    assert spoken.strip() == "Thanks, goodbye!"
 
 
 class SlowRecordingModel(FakeToolModel):
