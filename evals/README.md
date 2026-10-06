@@ -254,22 +254,50 @@ categories are pets (0 of 3 passed), auto (1 of 4), voicemail and IVR.
 
 ### Hill-climb: text evals (October 2026)
 
-Full-suite runs with default Copilot models, after re-baselining the newer "assistant calling on
-behalf of..." opening. The baseline transcripts were rescored after a harness-only deterministic
-matching fix for equivalent phone wording such as "Saturday at 10:20" vs "Saturday 10:20", "no fee"
-vs "free", and "supplies included" vs "brings supplies".
+All runs use the full 58-case suite: agent `copilot:gpt-5.4@low` (the production model), Claude
+Haiku 4.5 simulator, Claude Sonnet 5.5 judge, one repeat each.
 
-| Run | Pass rate | Overall | Premium requests |
+| Run | Pass rate | Easy · Medium · Hard | Overall | Premium requests |
+| --- | ---: | --- | ---: | ---: |
+| `hc-baseline.json`: before the hill-climb | 0.759 | 0.72 · 0.83 · 0.60 | 4.183 | 465 |
+| `hc-final.json`: hill-climb branch | 0.828 | 0.78 · 0.83 · 0.90 | 4.246 | 457 |
+| `hc-merged.json`: merged with the fixed opener (**latest**) | **0.914** | 0.94 · 0.90 · 0.90 | **4.408** | 446 |
+
+| Judge rubric (1–5) | Baseline | Hill-climb | Latest |
 | --- | ---: | ---: | ---: |
-| `hc-baseline.json` | 0.759 | 4.183 | 465 |
-| `hc-final.json` | **0.828** | **4.246** | 457 |
+| Task success | 4.21 | 4.34 | **4.57** |
+| Factual accuracy | 4.62 | 4.48 | **4.72** |
+| Policy safety | 4.09 | 4.21 | **4.26** |
+| Efficiency | 4.07 | 4.21 | **4.47** |
+| Twist handling | 3.71 | 3.83 | **4.03** |
+| Naturalness | 3.38 | 3.43 | **3.52** |
 
-Rubric deltas: task success +0.138, twist handling +0.121, policy safety +0.121, efficiency +0.138,
-naturalness +0.052, factual accuracy -0.138. Kept changes filtered raw streamed tool-call markup,
-made general calls finish all required questions before ending, recorded compact structured facts,
-and reinforced AI-disclosure/wrong-number/IVR behavior. Remaining failures are mostly premature
-goodbyes after asking follow-up questions, noisy simulator facts, and rude hangups where no outcome
-is recorded.
+What changed:
+
+- Raw tool-call markup in the model's text stream (`<function=…/>`) is filtered out before TTS.
+- General calls get every listed question answered before ending, and record compact facts.
+- Clearer rules for AI disclosure, wrong numbers, phone menus and voicemail.
+- The deterministic fact matcher accepts equivalent phone wording, for example "Saturday at 10:20"
+  vs "Saturday 10:20" or "no fee" vs "free". This is a harness fix, so the baseline was rescored
+  with it.
+- Merged with the fixed opener: the agent's first sentence is spoken before the LLM runs, and the
+  prompt tells the model not to repeat it. The hill-climb prompt's examples of compact facts had
+  been copied from eval cases; the merge replaced them with generic ones so the score isn't
+  inflated.
+
+Single runs carry a few points of simulator noise, so treat differences under about 0.05 as noise.
+
+The 5 remaining failures are missing facts:
+- a private-dining email the agent didn't collect;
+- a price and a room time it didn't ask for;
+- a "does not know" answer it didn't record;
+- a rude hang-up where it never recorded an outcome.
+
+Real test calls also surfaced problems this suite doesn't measure yet:
+- call screening;
+- monologues;
+- long, formal confirmations;
+- hanging up while the business still had a question.
 
 ### Voice: 3 real Retell calls (October 2026)
 
