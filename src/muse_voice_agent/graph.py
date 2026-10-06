@@ -8,6 +8,7 @@ reports the call result back to whoever owns the call (the LiveKit agent worker)
 
 from __future__ import annotations
 
+import re
 from typing import Annotated, Any, Callable, Literal, TypedDict
 
 from langchain_core.language_models import BaseChatModel
@@ -20,6 +21,9 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
 from .tasks import AnyTask, GeneralCall, build_system_prompt
+
+_TOOL_MARKER = "<function="
+_TOOL_MARKUP = re.compile(r"<function=.*?/>", re.S)
 
 Outcome = Literal[
     "booked",
@@ -69,6 +73,44 @@ def _text(chunk: AIMessageChunk) -> str:
     )
 
 
+class _ToolMarkupFilter:
+    """Drop raw streamed tool-call markup before it reaches TTS."""
+
+    def __init__(self) -> None:
+        self._buffer = ""
+
+    def feed(self, text: str) -> str:
+        self._buffer += text
+        out: list[str] = []
+        while self._buffer:
+            start = self._buffer.find(_TOOL_MARKER)
+            if start < 0:
+                keep = self._partial_marker_len(self._buffer)
+                emit, self._buffer = self._buffer[: len(self._buffer) - keep], self._buffer[len(self._buffer) - keep :]
+                out.append(emit)
+                break
+            out.append(self._buffer[:start])
+            end = self._buffer.find("/>", start)
+            if end < 0:
+                self._buffer = self._buffer[start:]
+                break
+            self._buffer = self._buffer[end + 2 :]
+        return "".join(out)
+
+    def flush(self) -> str:
+        text = "" if self._buffer.startswith(_TOOL_MARKER) else self._buffer
+        self._buffer = ""
+        return _TOOL_MARKUP.sub("", text)
+
+    @staticmethod
+    def _partial_marker_len(text: str) -> int:
+        max_len = min(len(text), len(_TOOL_MARKER) - 1)
+        for n in range(max_len, 0, -1):
+            if _TOOL_MARKER.startswith(text[-n:]):
+                return n
+        return 0
+
+
 def build_call_graph(
     task: AnyTask,
     on_outcome: Callable[[CallOutcome], None],
@@ -114,11 +156,15 @@ def build_call_graph(
         writer = get_stream_writer()
         messages = [SystemMessage(content=system_prompt), *state["messages"]]
         full: AIMessageChunk | None = None
+        tool_filter = _ToolMarkupFilter()
         async for chunk in llm_with_tools.astream(messages):
-            text = _text(chunk)
+            text = tool_filter.feed(_text(chunk))
             if text:
                 writer(text)
             full = chunk if full is None else full + chunk
+        text = tool_filter.flush()
+        if text:
+            writer(text)
         if full is None:
             return {"messages": []}
         return {

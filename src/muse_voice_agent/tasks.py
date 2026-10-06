@@ -190,11 +190,11 @@ How to behave on the phone:
   customer's name{callback_clause}.
 - Never agree to deposits, cancellation fees, or prepayment. If one is required, get the details and
   record the outcome as needs_followup instead of confirming.
-- If you reach voicemail or an automated system you can't get through, call record_outcome with
-  outcome "voicemail" and then say a short goodbye.
+- If you reach voicemail or an automated system you can't get through, record outcome "voicemail"
+  or "needs_followup"; if you speak aloud, still identify yourself as {customer_name}'s assistant.
 - As soon as you have the answer (success, refusal, or a blocker), call the record_outcome tool
-  exactly once with everything you learned, then say a short, polite goodbye. Do not keep talking
-  after the goodbye.
+  exactly once with everything you learned. Do not include a goodbye in that same tool-call response;
+  after the tool returns, say one short, polite goodbye and stop talking.
 """
 
 
