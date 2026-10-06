@@ -8,8 +8,9 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import HumanMessage, SystemMessage
+
+from .copilot_llm import make_chat_model
 
 TEXT_JUDGE_PROMPT_VERSION = "text-judge-v1-2026-10-05"
 AUDIO_JUDGE_PROMPT_VERSION = "voice-audio-judge-v1-2026-10-05"
@@ -71,11 +72,15 @@ def normalize_usage(message: Any) -> dict[str, Any]:
     usage = getattr(message, "usage_metadata", None) or getattr(message, "response_metadata", {}).get("token_usage") or {}
     if not usage:
         return {}
-    return {
+    out = {
         "input_tokens": usage.get("input_tokens") or usage.get("prompt_tokens") or 0,
         "output_tokens": usage.get("output_tokens") or usage.get("completion_tokens") or 0,
         "total_tokens": usage.get("total_tokens") or usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
     }
+    premium = (getattr(message, "response_metadata", None) or {}).get("premium_requests")
+    if isinstance(premium, (int, float)):
+        out["premium_requests"] = premium
+    return out
 
 
 @dataclass
@@ -94,24 +99,34 @@ async def judge_text_case(
     deterministic: dict[str, Any],
     model_name: str,
 ) -> JudgeResult:
-    model = init_chat_model(model_name, temperature=0)
+    model = make_chat_model(model_name, temperature=0, json_mode=True)
     payload = {
         "case": case_public,
         "transcript": transcript,
         "recorded_outcome": outcome,
         "deterministic_checks": deterministic,
     }
+    messages = [
+        SystemMessage(content=TEXT_JUDGE_SYSTEM),
+        HumanMessage(content=json.dumps(payload, ensure_ascii=False)),
+    ]
     start = time.perf_counter()
-    msg = await model.ainvoke(
-        [
-            SystemMessage(content=TEXT_JUDGE_SYSTEM),
-            HumanMessage(content=json.dumps(payload, ensure_ascii=False)),
-        ]
-    )
+    usage: dict[str, Any] = {}
+    cost = 0.0
+    for attempt in range(3):
+        msg = await model.ainvoke(messages)
+        u = normalize_usage(msg)
+        for k, v in u.items():
+            usage[k] = usage.get(k, 0) + v
+        cost += usage_cost(model_name, u)
+        try:
+            data = extract_json(str(msg.content))
+            break
+        except json.JSONDecodeError:
+            if attempt == 2:
+                raise
     latency = time.perf_counter() - start
-    data = extract_json(str(msg.content))
-    usage = normalize_usage(msg)
-    return JudgeResult(data, latency, usage, usage_cost(model_name, usage))
+    return JudgeResult(data, latency, usage, cost)
 
 
 async def judge_audio_recording(

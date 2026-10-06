@@ -11,18 +11,26 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from muse_voice_agent.graph import CallOutcome, build_call_graph
 from muse_voice_agent.retell import transcript_to_messages
 
+from . import copilot_llm
 from .cases.schema import EvalCase, select_cases
+from .copilot_llm import is_copilot, make_chat_model
 from .judge import extract_json, judge_text_case, normalize_usage, usage_cost
 from .report import aggregate_results, compare_runs, load_json, utc_run_name, write_json
 
 SIMULATOR_PROMPT_VERSION = "business-simulator-v1-2026-10-05"
+
+# Evals default to GitHub Copilot models so the OpenAI key is only spent on production calls.
+# `--latency` swaps the agent to the production model, since Copilot round-trips aren't prod-like.
+DEFAULT_AGENT_MODEL = "copilot:gpt-5.4@low"
+DEFAULT_SIMULATOR_MODEL = "copilot:claude-haiku-4.5"
+DEFAULT_JUDGE_MODEL = "copilot:claude-sonnet-5.5"
+PROD_AGENT_MODEL = "openai:gpt-4.1-mini"
 
 SIMULATOR_SYSTEM = f"""You are simulating the business side of a phone call for a private eval.
 Prompt version: {SIMULATOR_PROMPT_VERSION}.
@@ -54,7 +62,7 @@ class LLMBusinessSimulator:
     model_name: str
 
     def __post_init__(self) -> None:
-        self.model = init_chat_model(self.model_name, temperature=0)
+        self.model = make_chat_model(self.model_name, temperature=0)
         self.usage: list[dict[str, Any]] = []
         self.latencies: list[float] = []
 
@@ -221,21 +229,26 @@ async def run_case(
     *,
     repeat_index: int = 0,
     seed: int | None = None,
-    agent_model_name: str = "openai:gpt-4.1-mini",
-    simulator_model_name: str = "openai:gpt-4.1-mini",
-    judge_model_name: str = "openai:gpt-4.1",
+    agent_model_name: str = DEFAULT_AGENT_MODEL,
+    simulator_model_name: str = DEFAULT_SIMULATOR_MODEL,
+    judge_model_name: str = DEFAULT_JUDGE_MODEL,
     agent_model: BaseChatModel | None = None,
     simulator: BusinessSimulator | None = None,
     judge: bool = True,
 ) -> dict[str, Any]:
     task = case.brief.task()
     outcomes: list[CallOutcome] = []
-    agent = agent_model or init_chat_model(agent_model_name, temperature=0.3)
+    agent = agent_model or make_chat_model(agent_model_name, temperature=0.3)
     graph = build_call_graph(task, outcomes.append, model=agent)
     sim = simulator or LLMBusinessSimulator(simulator_model_name)
     transcript: list[dict[str, str]] = []
     latencies = {"agent": [], "simulator": [], "judge": []}
-    usage = {"simulator": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0}, "judge": {}, "estimated_cost_usd": 0.0}
+    usage = {
+        "simulator": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
+        "judge": {},
+        "estimated_cost_usd": 0.0,
+        "copilot_premium_requests": 0.0,
+    }
 
     for turn in range(case.expectations.max_turns):
         s0 = time.perf_counter()
@@ -265,23 +278,36 @@ async def run_case(
 
     judge_result: dict[str, Any] | None = None
     if judge:
-        jr = await judge_text_case(
-            case_public=public_case(case),
-            transcript=[{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in transcript],
-            outcome=outcome.model_dump(exclude_none=True) if outcome else None,
-            deterministic=deterministic,
-            model_name=judge_model_name,
-        )
-        judge_result = jr.data
-        latencies["judge"].append(round(jr.latency_seconds, 3))
-        usage["judge"] = jr.usage
-        usage["estimated_cost_usd"] += jr.estimated_cost_usd
+        try:
+            jr = await judge_text_case(
+                case_public=public_case(case),
+                transcript=[{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in transcript],
+                outcome=outcome.model_dump(exclude_none=True) if outcome else None,
+                deterministic=deterministic,
+                model_name=judge_model_name,
+            )
+        except Exception as e:  # keep the conversation result even if grading fails
+            judge_result = {"error": f"{type(e).__name__}: {e}"}
+        else:
+            judge_result = jr.data
+            latencies["judge"].append(round(jr.latency_seconds, 3))
+            usage["judge"] = jr.usage
+            usage["estimated_cost_usd"] += jr.estimated_cost_usd
 
     if isinstance(sim, LLMBusinessSimulator):
         for u in sim.usage:
             for k in ("input_tokens", "output_tokens", "total_tokens"):
                 usage["simulator"][k] += int(u.get(k) or 0)
+            usage["copilot_premium_requests"] += float(u.get("premium_requests") or 0)
         usage["estimated_cost_usd"] += sum(usage_cost(simulator_model_name, u) for u in sim.usage)
+    agent_log = getattr(agent, "usage_log", None)
+    if agent_log:
+        usage["agent"] = {
+            k: sum(u.get(k) or 0 for u in agent_log) for k in ("input_tokens", "output_tokens")
+        }
+        usage["copilot_premium_requests"] += sum(float(u.get("premium_requests") or 0) for u in agent_log)
+    usage["copilot_premium_requests"] += float((usage["judge"] or {}).get("premium_requests") or 0)
+    usage["copilot_premium_requests"] = round(usage["copilot_premium_requests"], 2)
 
     rubric_scores = []
     if judge_result:
@@ -317,22 +343,38 @@ async def run_suite(args: argparse.Namespace) -> dict[str, Any]:
 
     async def one(case: EvalCase, repeat: int) -> dict[str, Any]:
         async with sem:
-            return await run_case(
-                case,
-                repeat_index=repeat,
-                seed=args.seed,
-                agent_model_name=args.agent_model,
-                simulator_model_name=args.simulator_model,
-                judge_model_name=args.judge_model,
-                judge=not args.no_judge,
-            )
+            try:
+                return await run_case(
+                    case,
+                    repeat_index=repeat,
+                    seed=args.seed,
+                    agent_model_name=args.agent_model,
+                    simulator_model_name=args.simulator_model,
+                    judge_model_name=args.judge_model,
+                    judge=not args.no_judge,
+                )
+            except Exception as e:  # one broken case shouldn't sink the whole run
+                return {
+                    "case_id": case.id,
+                    "title": case.title,
+                    "vertical": case.vertical,
+                    "difficulty": case.difficulty,
+                    "tags": case.tags,
+                    "repeat_index": repeat,
+                    "error": f"{type(e).__name__}: {e}",
+                }
 
-    results = await asyncio.gather(*(one(c, r) for c, r in jobs))
+    try:
+        results = await asyncio.gather(*(one(c, r) for c, r in jobs))
+    finally:
+        await copilot_llm.aclose()
     run = {
         "run_id": args.run_id or uuid.uuid4().hex[:10],
         "kind": "text",
         "prompt_versions": {"simulator": SIMULATOR_PROMPT_VERSION, "judge": "text-judge-v1-2026-10-05"},
         "models": {"agent": args.agent_model, "simulator": args.simulator_model, "judge": None if args.no_judge else args.judge_model},
+        # Copilot adds SDK/session overhead, so agent latency is only prod-representative off Copilot.
+        "agent_latency_representative": not is_copilot(args.agent_model),
         "selection": {"cases": args.cases, "repeats": args.repeats, "seed": args.seed, "limit": args.limit},
         "aggregate": aggregate_results(results),
         "results": results,
@@ -354,9 +396,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cases", default="all", help="all, comma ids, tag:<tag>, vertical:<name>, difficulty:<level>")
     parser.add_argument("--repeats", type=int, default=1)
     parser.add_argument("--concurrency", type=int, default=2)
-    parser.add_argument("--agent-model", default=os.getenv("LLM_MODEL", "openai:gpt-4.1-mini"))
-    parser.add_argument("--simulator-model", default="openai:gpt-4.1-mini")
-    parser.add_argument("--judge-model", default="openai:gpt-4.1")
+    parser.add_argument(
+        "--agent-model",
+        help=f"Model for the agent under test (default {DEFAULT_AGENT_MODEL}; with --latency, $LLM_MODEL or {PROD_AGENT_MODEL})",
+    )
+    parser.add_argument(
+        "--latency",
+        action="store_true",
+        help="Run the agent on the production model (OpenAI key) so agent latency is prod-representative",
+    )
+    parser.add_argument("--simulator-model", default=DEFAULT_SIMULATOR_MODEL)
+    parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
     parser.add_argument("--no-judge", action="store_true")
     parser.add_argument("--seed", type=int)
     parser.add_argument("--limit", type=int)
@@ -368,6 +418,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> None:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if not getattr(args, "agent_model", None) and args.command != "compare":
+        args.agent_model = (os.getenv("LLM_MODEL") or PROD_AGENT_MODEL) if args.latency else DEFAULT_AGENT_MODEL
     if args.command == "compare":
         diff = compare_runs(load_json(args.base), load_json(args.candidate))
         if args.out:

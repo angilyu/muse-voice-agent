@@ -303,24 +303,44 @@ The text harness runs simulated calls through the same production pieces Retell 
 validation, `build_system_prompt`, the LangGraph graph, `record_outcome`, and per-turn transcript
 conversion from `retell.py`. A simulator LLM speaks as the business; a judge LLM scores the result.
 
+By default every text-eval model runs on **GitHub Copilot** through the
+[Copilot SDK](https://github.com/github/copilot-sdk) (a dev-only dependency), so hill-climbing
+spends Copilot premium requests instead of OpenAI API credits. Production still uses OpenAI.
+
+| Role | Default | Why |
+| --- | --- | --- |
+| Agent under test | `copilot:gpt-5.4@low` | Won a 16-case bake-off against gpt-5.4-mini, gpt-5-mini, claude-haiku-4.5 and claude-sonnet-5.5; also available on the OpenAI API, so prod can adopt it |
+| Business simulator | `copilot:claude-haiku-4.5` | Cheap, fast and good at staying in character |
+| Judge | `copilot:claude-sonnet-5.5` | A different model family from the agent, to reduce self-preference |
+
 ```bash
-uv run --offline python -m evals.text \
-  --cases all --repeats 1 --concurrency 2 \
-  --agent-model openai:gpt-4.1-mini \
-  --simulator-model openai:gpt-4.1-mini \
-  --judge-model openai:gpt-4.1 \
+export COPILOT_GITHUB_TOKEN=<github token with Copilot access>   # or rely on a signed-in Copilot CLI
+
+uv run --offline python -m evals.text --cases all --concurrency 6 \
   --out evals/results/text-my-run.json
 
-uv run --offline python -m evals.text --cases tag:smoke --repeats 1 --concurrency 1
+# Latency mode: run the agent on the production OpenAI model (uses OPENAI_API_KEY);
+# the simulator and judge stay on Copilot.
+uv run --offline python -m evals.text --cases tag:smoke --latency
+
+uv run --offline python -m evals.text --agent-model copilot:claude-sonnet-5.5 --cases tag:smoke
 uv run --offline python -m evals.text compare evals/results/text-a.json evals/results/text-b.json
 ```
+
+Model names are `copilot:<model>[@<reasoning-effort>]` for Copilot or any LangChain
+`provider:model` string (for example `openai:gpt-4.1-mini`). The Copilot adapter
+(`evals/copilot_llm.py`) is a LangChain chat model, so it drives the real LangGraph graph with tool
+calls. It keeps one Copilot session per conversation and sends only the new turns, and it retries
+transient failures on a fresh session. Copilot latency is not production latency: run
+JSON records `agent_latency_representative`, which is `true` only for `--latency` or non-Copilot
+agent runs.
 
 Scoring combines deterministic checks (allowed outcome, required facts, AI disclosure, no
 unauthorized booking/deposit/address/card sharing, turn count, no markdown/emoji in spoken text),
 LLM-judge 1–5 rubric scores (success, factuality, safety, efficiency, naturalness, twist handling),
 and speakability proxies (sentence length, one question at a time, no URLs/parentheticals/raw phone
-numbers). Results include aggregate pass rates, per-tag breakdowns, latencies and token/cost
-estimates when the providers report usage. `evals/results/` is git-ignored.
+numbers). Results include aggregate pass rates, per-tag breakdowns, latencies, token counts,
+OpenAI cost estimates and `copilot_premium_requests`. `evals/results/` is git-ignored.
 
 ### Voice quality eval
 

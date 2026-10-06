@@ -29,12 +29,16 @@ def _mean(values: list[float]) -> float | None:
 
 
 def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    errored = [r.get("case_id") for r in results if r.get("error")]
+    judge_errors = [r.get("case_id") for r in results if (r.get("judge") or {}).get("error")]
+    results = [r for r in results if not r.get("error")]
     total = len(results)
     deterministic_passes = [r.get("deterministic", {}).get("passed", False) for r in results]
     rubric_dims: dict[str, list[float]] = defaultdict(list)
     overall_scores: list[float] = []
     latencies: list[float] = []
     costs: list[float] = []
+    premium: list[float] = []
     by_tag: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_vertical: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_difficulty: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -53,6 +57,8 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         usage = r.get("usage", {})
         if isinstance(usage.get("estimated_cost_usd"), (int, float)):
             costs.append(float(usage["estimated_cost_usd"]))
+        if isinstance(usage.get("copilot_premium_requests"), (int, float)):
+            premium.append(float(usage["copilot_premium_requests"]))
 
     def summarize(group: list[dict[str, Any]]) -> dict[str, Any]:
         return {
@@ -63,6 +69,8 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
 
     return {
         "count": total,
+        "errored_cases": errored,
+        "judge_errors": judge_errors,
         "deterministic_pass_rate": round(sum(deterministic_passes) / total, 3) if total else None,
         "mean_overall_score": _mean(overall_scores),
         "mean_rubric_scores": {k: _mean(v) for k, v in sorted(rubric_dims.items())},
@@ -72,6 +80,7 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             "max": round(max(latencies), 3) if latencies else None,
         },
         "estimated_cost_usd": round(sum(costs), 4),
+        "copilot_premium_requests": round(sum(premium), 2),
         "by_tag": {k: summarize(v) for k, v in sorted(by_tag.items())},
         "by_vertical": {k: summarize(v) for k, v in sorted(by_vertical.items())},
         "by_difficulty": {k: summarize(v) for k, v in sorted(by_difficulty.items())},
