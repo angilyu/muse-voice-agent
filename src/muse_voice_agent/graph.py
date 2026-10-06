@@ -19,7 +19,7 @@ from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field
 
-from .tasks import AnyTask, GeneralCall, build_system_prompt
+from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line
 
 Outcome = Literal[
     "booked",
@@ -110,9 +110,17 @@ def build_call_graph(
     tools = [record_outcome]
     llm_with_tools = model.bind_tools(tools)
 
+    opener = opening_line(task)
+
     async def caller(state: CallState) -> dict[str, list[BaseMessage]]:
         writer = get_stream_writer()
-        messages = [SystemMessage(content=system_prompt), *state["messages"]]
+        messages: list[BaseMessage] = [SystemMessage(content=system_prompt), *state["messages"]]
+        # On our first turn, speak the fixed opener before the LLM runs; its latency then overlaps
+        # with the opener's playback instead of leaving the callee in silence.
+        first_turn = not any(isinstance(m, AIMessage) for m in state["messages"])
+        if first_turn:
+            writer(opener + " ")
+            messages.append(AIMessage(content=opener))
         full: AIMessageChunk | None = None
         async for chunk in llm_with_tools.astream(messages):
             text = _text(chunk)
@@ -120,11 +128,12 @@ def build_call_graph(
                 writer(text)
             full = chunk if full is None else full + chunk
         if full is None:
-            return {"messages": []}
+            return {"messages": [AIMessage(content=opener)] if first_turn else []}
+        content: Any = full.content
+        if first_turn:
+            content = f"{opener} {_text(full).strip()}".strip()
         return {
-            "messages": [
-                AIMessage(content=full.content, tool_calls=full.tool_calls, id=full.id)
-            ]
+            "messages": [AIMessage(content=content, tool_calls=full.tool_calls, id=full.id)]
         }
 
     builder = StateGraph(CallState)

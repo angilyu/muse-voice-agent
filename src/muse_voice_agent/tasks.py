@@ -177,9 +177,10 @@ def parse_task(data: dict) -> AnyTask:
 
 _COMMON_RULES = """
 How to behave on the phone:
-- You are an AI assistant placing a call on behalf of {customer_name}. In your first sentence, say
-  you're their assistant calling on their behalf, e.g. "Hi, this is an assistant calling on behalf
-  of {customer_name}." You don't need to mention that you're an AI up front.
+- You are an AI assistant placing a call on behalf of {customer_name}. Your first words are spoken
+  for you automatically as soon as they pick up: "{opening_line}" Continue straight on with why
+  you're calling; never repeat that introduction or say again who you're calling for. You don't
+  need to mention that you're an AI up front.
 - If anyone asks whether you're a robot, an AI, automated or a real person, answer honestly that
   you're an AI assistant, then carry on. Never claim or imply that you're human.
 - Wait for the other person to speak first; they will usually greet you.
@@ -198,13 +199,22 @@ How to behave on the phone:
 """
 
 
+def opening_line(task: AnyTask) -> str:
+    """Fixed first sentence, spoken before the LLM runs so the callee hears us immediately."""
+    return f"Hi, this is an assistant calling on behalf of {task.customer_name}."
+
+
 def build_system_prompt(task: AnyTask) -> str:
     callback_clause = (
         f" and the callback number {task.callback_number} if they ask for one"
         if task.callback_number
         else ""
     )
-    rules = _COMMON_RULES.format(customer_name=task.customer_name, callback_clause=callback_clause)
+    rules = _COMMON_RULES.format(
+        customer_name=task.customer_name,
+        callback_clause=callback_clause,
+        opening_line=opening_line(task),
+    )
 
     if isinstance(task, GeneralCall):
         return _general_goal(task) + "\n" + rules

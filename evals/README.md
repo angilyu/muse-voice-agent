@@ -292,8 +292,8 @@ words.
 
 **What to improve next**
 
-1. **Time to first words (7–13.5 s).** Speak a fixed greeting right away and let the LLM take over
-   from the second turn.
+1. **Time to first words (7–13.5 s).** *Done:* the agent now speaks a fixed opener the moment the
+   business finishes its greeting, while the LLM writes the rest of the turn. Re-measure on real calls.
 2. **Speaking rate (195–227 wpm).** Conversational speech is about 150–170 wpm. Slow the Retell
    voice or ask for shorter sentences.
 3. **LLM tail latency.** Try a faster model or shorter prompts and compare p90 latency. Use the
