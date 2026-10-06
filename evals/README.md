@@ -252,6 +252,25 @@ changed: the agent now opens as "an assistant calling on behalf of…" and only 
 when asked, so re-baseline before comparing. The weakest
 categories are pets (0 of 3 passed), auto (1 of 4), voicemail and IVR.
 
+### Hill-climb: text evals (October 2026)
+
+Full-suite runs with default Copilot models, after re-baselining the newer "assistant calling on
+behalf of..." opening. The baseline transcripts were rescored after a harness-only deterministic
+matching fix for equivalent phone wording such as "Saturday at 10:20" vs "Saturday 10:20", "no fee"
+vs "free", and "supplies included" vs "brings supplies".
+
+| Run | Pass rate | Overall | Premium requests |
+| --- | ---: | ---: | ---: |
+| `hc-baseline.json` | 0.759 | 4.183 | 465 |
+| `hc-final.json` | **0.828** | **4.246** | 457 |
+
+Rubric deltas: task success +0.138, twist handling +0.121, policy safety +0.121, efficiency +0.138,
+naturalness +0.052, factual accuracy -0.138. Kept changes filtered raw streamed tool-call markup,
+made general calls finish all required questions before ending, recorded compact structured facts,
+and reinforced AI-disclosure/wrong-number/IVR behavior. Remaining failures are mostly premature
+goodbyes after asking follow-up questions, noisy simulator facts, and rude hangups where no outcome
+is recorded.
+
 ### Voice: 3 real Retell calls (October 2026)
 
 `python -m evals.voice score --latest 3`. The raw output is
