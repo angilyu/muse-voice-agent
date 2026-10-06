@@ -47,6 +47,8 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   SSNs, passwords, or a full home address.
 - Every call tool returns a call_id immediately; the call itself takes 1-5 minutes. Poll
   get_call_status(call_id) every ~20 seconds until `done` is true, then report the summary and answers.
+- Always pass customer_name: the full name of the user you're calling for. The agent introduces
+  itself as their assistant. If you don't know the user's name, ask them before calling.
 - Always confirm the business, phone number, and the brief with the user before calling.
 - Phone numbers should be E.164 (e.g. +14155550123).
 """
@@ -99,10 +101,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
     async def book_restaurant_reservation(
         restaurant_name: str,
         phone_number: str,
+        customer_name: str,
         party_size: int,
         date: str,
         time: str,
-        customer_name: str | None = None,
         flexibility: str | None = None,
         special_requests: str | None = None,
         callback_number: str | None = None,
@@ -112,10 +114,11 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         Args:
             restaurant_name: Name of the restaurant.
             phone_number: Restaurant phone number, E.164 (e.g. +14155550123).
+            customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
+                The agent introduces itself as their assistant. Ask the user if you don't know it.
             party_size: Number of guests.
             date: Requested date, e.g. "Fri Oct 10".
             time: Requested time, e.g. "7:30 PM".
-            customer_name: Name the reservation is under (defaults to DEFAULT_CUSTOMER_NAME).
             flexibility: Acceptable alternatives, e.g. "6:30-8:30pm same day".
             special_requests: Seating preferences, allergies, occasion.
             callback_number: Number the restaurant may call back (shared only if asked).
@@ -124,7 +127,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             RestaurantReservation,
             business_name=restaurant_name,
             phone_number=phone_number,
-            customer_name=customer_name or settings.default_customer_name or "",
+            customer_name=customer_name,
             party_size=party_size,
             date=date,
             time=time,
@@ -144,9 +147,9 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
     async def request_handyman_quote(
         business_name: str,
         phone_number: str,
+        customer_name: str,
         job_description: str,
         location: str,
-        customer_name: str | None = None,
         preferred_timing: str | None = None,
         budget: str | None = None,
         callback_number: str | None = None,
@@ -156,9 +159,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         Args:
             business_name: Name of the business or person.
             phone_number: Business phone number, E.164 (e.g. +14155550123).
+            customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
+                The agent introduces itself as their assistant. Ask the user if you don't know it.
             job_description: What needs doing, e.g. "replace a leaking kitchen faucet".
             location: City / neighborhood / ZIP (avoid full street address).
-            customer_name: Customer name to give (defaults to DEFAULT_CUSTOMER_NAME).
             preferred_timing: e.g. "weekday mornings next week".
             budget: Optional budget, only mentioned if asked.
             callback_number: Number the business may call back (shared only if asked).
@@ -167,7 +171,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             HandymanQuote,
             business_name=business_name,
             phone_number=phone_number,
-            customer_name=customer_name or settings.default_customer_name or "",
+            customer_name=customer_name,
             job_description=job_description,
             location=location,
             preferred_timing=preferred_timing,
@@ -186,12 +190,12 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
     async def place_call(
         business_name: str,
         phone_number: str,
+        customer_name: str,
         goal: str,
         questions: list[str] | None = None,
         shareable_details: dict[str, str] | None = None,
         authority: Authority = "info_only",
         limits: str | None = None,
-        customer_name: str | None = None,
         callback_number: str | None = None,
     ) -> dict[str, Any]:
         """Phone any business with a brief: check availability, ask questions, or book within limits.
@@ -202,6 +206,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         Args:
             business_name: Name of the business.
             phone_number: Business phone number, E.164 (e.g. +14155550123).
+            customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
+                The agent introduces itself as their assistant. Ask the user if you don't know it.
             goal: One or two sentences on what the call should accomplish.
             questions: Specific questions to get answered (up to 10), answered back in `answers`.
             shareable_details: Facts the agent may share if relevant, e.g. {"dates": "Oct 10-12",
@@ -209,14 +215,13 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             authority: "info_only" (default; commit to nothing) or "may_book_within_limits".
             limits: Required for may_book_within_limits, e.g. "Oct 10-12 only, king bed, max
                 $250/night incl. tax, free cancellation, no deposit".
-            customer_name: Name to give (defaults to DEFAULT_CUSTOMER_NAME).
             callback_number: Number the business may call back (shared only if asked).
         """
         return await _start(
             GeneralCall,
             business_name=business_name,
             phone_number=phone_number,
-            customer_name=customer_name or settings.default_customer_name or "",
+            customer_name=customer_name,
             goal=goal,
             questions=questions or [],
             shareable_details=shareable_details or {},

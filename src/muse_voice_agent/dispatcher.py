@@ -119,7 +119,7 @@ async def _simulate_call(
     store.append_transcript(
         call_id,
         "assistant",
-        f"Hi, this is an AI assistant calling on behalf of {task.customer_name}. [simulated]",
+        f"Hi, this is an assistant calling on behalf of {task.customer_name}. [simulated]",
     )
     await asyncio.sleep(delay / 2)
 

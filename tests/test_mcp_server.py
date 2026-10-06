@@ -20,7 +20,6 @@ def settings(tmp_path) -> Settings:
         call_db_path=tmp_path / "calls.db",
         allowed_dial_prefixes=["+1"],
         max_concurrent_calls=3,
-        default_customer_name="Angi",
     )
 
 
@@ -59,6 +58,7 @@ async def test_restaurant_booking_dry_run_end_to_end(settings):
                 {
                     "restaurant_name": "Luigi's",
                     "phone_number": "(415) 555-0123",
+                    "customer_name": "Angi",
                     "party_size": 4,
                     "date": "Friday",
                     "time": "7pm",
@@ -93,6 +93,7 @@ async def test_handyman_quote_dry_run(settings):
                 {
                     "business_name": "Bob's Fixit",
                     "phone_number": "+14155550199",
+                    "customer_name": "Angi",
                     "job_description": "replace a leaking kitchen faucet",
                     "location": "94110",
                 },
@@ -113,6 +114,7 @@ async def test_general_call_dry_run_returns_answers(settings):
                 {
                     "business_name": "Hotel Zed",
                     "phone_number": "+14155550100",
+                    "customer_name": "Angi",
                     "goal": "Check king room availability for Oct 10-12",
                     "questions": ["Is a king room available?", "Nightly rate incl. tax?"],
                     "shareable_details": {"dates": "Oct 10-12", "guests": "2 adults"},
@@ -130,7 +132,12 @@ async def test_general_call_dry_run_returns_answers(settings):
 
 
 async def test_general_call_validation(settings):
-    base = {"business_name": "Spa", "phone_number": "+14155550100", "goal": "Book a massage"}
+    base = {
+        "business_name": "Spa",
+        "phone_number": "+14155550100",
+        "customer_name": "Angi",
+        "goal": "Book a massage",
+    }
     async with Client(build_server(settings)) as client:
         no_limits = _data(
             await client.call_tool("place_call", {**base, "authority": "may_book_within_limits"})
@@ -158,6 +165,7 @@ async def test_rejects_disallowed_country_and_bad_numbers(settings):
                 {
                     "restaurant_name": "Le Bistro",
                     "phone_number": "+33142685300",
+                    "customer_name": "Angi",
                     "party_size": 2,
                     "date": "Friday",
                     "time": "8pm",
@@ -170,6 +178,7 @@ async def test_rejects_disallowed_country_and_bad_numbers(settings):
                 {
                     "restaurant_name": "X",
                     "phone_number": "12",
+                    "customer_name": "Angi",
                     "party_size": 2,
                     "date": "Friday",
                     "time": "8pm",
@@ -192,6 +201,7 @@ async def test_live_mode_requires_livekit_config(settings):
                 {
                     "business_name": "Bob's",
                     "phone_number": "+14155550199",
+                    "customer_name": "Angi",
                     "job_description": "fix a door",
                     "location": "94110",
                 },
@@ -209,3 +219,19 @@ async def test_http_app_requires_bearer_token(settings):
         assert (await http.post("/mcp", json={})).status_code == 401
         wrong = await http.post("/mcp", json={}, headers={"Authorization": "Bearer nope"})
         assert wrong.status_code == 401
+
+
+async def test_customer_name_is_required(settings):
+    async with Client(build_server(settings)) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        for name in ("book_restaurant_reservation", "request_handyman_quote", "place_call"):
+            assert "customer_name" in tools[name].input_schema["required"], name
+
+        base = {"business_name": "Spa", "phone_number": "+14155550100", "goal": "Ask hours"}
+        missing = await client.call_tool("place_call", base)
+        assert missing.is_error
+        for bad in ("   ", "the user", "Unknown"):
+            result = _data(await client.call_tool("place_call", {**base, "customer_name": bad}))
+            assert result["error"] == "invalid_request" and "ask the user" in result["message"]
+        ok = _data(await client.call_tool("place_call", {**base, "customer_name": "  Wenjing   Yu "}))
+    assert ok["error"] is None

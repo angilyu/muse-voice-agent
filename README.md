@@ -15,7 +15,7 @@ your repair is ready, and it reports back a structured result.
 ```text
 You    → Muse:  "Call Hotel Zed and ask if they have a king room Oct 10–12 and the rate. Don't book."
 Muse   → place_call(business_name="Hotel Zed", goal=..., questions=[...], authority="info_only")
-Agent  ☎  "Hi, this is an AI assistant calling on behalf of Alex. Do you have a king room…"
+Agent  ☎  "Hi, this is an assistant calling on behalf of Alex. Do you have a king room…"
 Hotel  ☎  "We do, $289 a night plus tax."
 Agent  → { "outcome": "info_received",
            "answers": [{ "question": "King room Oct 10–12?", "answer": "Yes" },
@@ -113,12 +113,17 @@ starts a simulated call and polls it until it's done.
 | `get_call_status` | Status, outcome, structured details, optional transcript |
 | `list_calls` | Most recent calls |
 
+All three call tools **require `customer_name`**, the person the call is made for. The agent opens
+with "Hi, this is an assistant calling on behalf of {customer_name}". Blank or placeholder names
+("user", "unknown", …) are rejected with `invalid_request` so the client asks the user first.
+
 ### `place_call`: the general-purpose call
 
 ```jsonc
 {
   "business_name": "Hotel Zed",
   "phone_number": "+15105550123",
+  "customer_name": "Wenjing Yu",                           // required: who the call is for
   "goal": "Find out if they have a king room for Oct 10–12 and the nightly rate",
   "questions": ["Is a king room available Oct 10–12?", "What's the nightly rate?"],
   "shareable_details": { "guests": "2 adults" },          // what the agent may say if asked
@@ -164,7 +169,7 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
 | **Retell for audio, LangGraph for the conversation** (custom-LLM mode) | Retell handles the telephony problems (barge-in, voicemail detection, turn-taking) while prompts, tools and model choice stay in code. Retell doesn't bill for the LLM in this mode. |
 | **Start the call and poll, instead of one long blocking tool call** | Calls take 1–5 minutes, and most MCP clients time out long before that. |
 | **One brief-driven tool plus a few tuned shortcuts** | New kinds of errands need no code. Common ones keep prompts and validation tuned for them. |
-| **Hard rules in code, not only in the prompt** | AI disclosure, dial prefixes, call caps, rejecting sensitive data, and downgrading unauthorized bookings all hold even if the model misbehaves. |
+| **Hard rules in code, not only in the prompt** | Dial prefixes, call caps, rejecting sensitive data, and downgrading unauthorized bookings all hold even if the model misbehaves. |
 | **A pluggable voice backend** | `VOICE_BACKEND=livekit` runs the same graph on LiveKit Agents (`agent.py`) instead of Retell. |
 | **A self-contained server** | One process, SQLite, and no queue or worker fleet, so it runs on a free host. |
 
@@ -175,7 +180,8 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
   unguessable path secret (`RETELL_WS_SECRET`), and it only attaches to calls this server started.
 - **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3) and
   `MAX_CALL_SECONDS` (default 300).
-- **Honest.** The first sentence of every call says it's an AI assistant calling for a named person.
+- **Honest.** The first sentence of every call says it's an assistant calling for a named person.
+  If asked, it always says it's an AI, and it never claims to be human.
 - **Discreet.** It never shares payment details or addresses, and never agrees to deposits or fees.
   Those cases come back as `needs_followup` for a human to handle.
 - **No sensitive input.** Briefs containing Luhn-valid card numbers or SSNs are rejected before
@@ -256,7 +262,8 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `ALLOWED_DIAL_PREFIXES` | `+1` | Comma-separated E.164 prefixes the agent may dial |
 | `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `300` / `3` | Limits on call length and simultaneous calls |
 | `RETELL_VOICE_ID` | `cartesia-Cleo` | Retell voice |
-| `DEFAULT_CUSTOMER_NAME` / `DEFAULT_CALLBACK_NUMBER` | — | Used when the client doesn't pass them |
+| `DEFAULT_CALLBACK_NUMBER` | — | Used when the client doesn't pass one |
+| `DEFAULT_CUSTOMER_NAME` | — | LiveKit console agent only. MCP call tools require the client to pass `customer_name` |
 | `KEEPALIVE_SECONDS` | `0` | When greater than 0, the server pings its own `/healthz` at this interval |
 
 ## Project layout

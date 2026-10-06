@@ -25,13 +25,33 @@ def normalize_phone(raw: str) -> str:
     return digits
 
 
+_PLACEHOLDER_NAMES = {
+    "user", "the user", "customer", "the customer", "client", "me", "myself", "name", "my name",
+    "unknown", "n/a", "na", "none", "null", "anonymous", "someone", "somebody", "tbd",
+}
+
+
 class _BaseTask(BaseModel):
     business_name: str = Field(min_length=1, max_length=120)
     phone_number: str = Field(description="Business phone number, E.164 preferred")
-    customer_name: str = Field(min_length=1, max_length=80, description="Name to book under")
+    customer_name: str = Field(
+        min_length=1, max_length=80, description="Full name of the person the call is made for"
+    )
     callback_number: str | None = Field(
         default=None, description="Number the business can call back. Shared only if asked."
     )
+
+    @field_validator("customer_name", mode="before")
+    @classmethod
+    def _customer_name(cls, v: object) -> object:
+        if isinstance(v, str):
+            v = " ".join(v.split())
+            if not v or v.lower() in _PLACEHOLDER_NAMES:
+                raise ValueError(
+                    "customer_name must be the real name of the user you're calling for; "
+                    "ask the user for their name"
+                )
+        return v
 
     @field_validator("phone_number")
     @classmethod
@@ -157,8 +177,11 @@ def parse_task(data: dict) -> AnyTask:
 
 _COMMON_RULES = """
 How to behave on the phone:
-- You are an AI assistant placing a call on behalf of {customer_name}. Say so in your first sentence,
-  e.g. "Hi, this is an AI assistant calling on behalf of {customer_name}."
+- You are an AI assistant placing a call on behalf of {customer_name}. In your first sentence, say
+  you're their assistant calling on their behalf, e.g. "Hi, this is an assistant calling on behalf
+  of {customer_name}." You don't need to mention that you're an AI up front.
+- If anyone asks whether you're a robot, an AI, automated or a real person, answer honestly that
+  you're an AI assistant, then carry on. Never claim or imply that you're human.
 - Wait for the other person to speak first; they will usually greet you.
 - Speak naturally and briefly: one or two short sentences per turn, no lists, no markdown, no emojis.
 - Never invent details about {customer_name}. If asked something you don't know, say you'll have
