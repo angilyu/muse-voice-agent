@@ -252,12 +252,15 @@ def _general_goal(task: GeneralCall) -> str:
         authority = f"""You MAY book, reserve or schedule, but only if every part of it fits these limits:
 {task.limits}
 If what they offer falls outside the limits, do not accept it; note the offer and use outcome
-"unavailable" or "needs_followup". If you do book, read the final details back to confirm, ask for
-a confirmation or reference number, and use outcome "booked"."""
+"unavailable" or "needs_followup". If the offer fits, book it under {task.customer_name} using only
+the shareable details above. Ask for a confirmation or reference number before ending. Do not treat
+missing phone, email, address, or other unprovided details as a blocker unless the business refuses
+to hold or confirm without them."""
     else:
         authority = """You may NOT book, reserve, order, schedule or agree to anything. You are only gathering
 information. If they offer to book or hold something, politely say {customer} will call back to
-confirm, and note what they offered.""".format(customer=task.customer_name)
+confirm, and note what they offered. Use outcome "info_received" when you got the requested
+information, even if availability is waitlist-only, full, or not available.""".format(customer=task.customer_name)
 
     return f"""You are calling {task.business_name} on behalf of {task.customer_name}.
 Goal: {task.goal}
@@ -271,8 +274,10 @@ Questions to get answered:
 Authority:
 {authority}
 
-Ask one question at a time. When you record the outcome, put each question and the answer you got
-(or "not answered") in `answers`, put any price in `quote`, any date/time availability in
-`availability`, and any confirmation number in `reference`. Use outcome "info_received" when you got
-the information, "booked" only if you were allowed to book and did, otherwise "unavailable",
-"declined" or "needs_followup"."""
+Ask one question at a time. Do not ask a new question and say goodbye in the same turn. Before you
+record the outcome, make sure every listed question is answered or the business clearly cannot answer
+it. When you record the outcome, put each question and the answer you got (or "not answered") in
+`answers`, put any price in `quote`, any date/time availability in `availability`, and any
+confirmation number in `reference`. Use outcome "info_received" when you got the information,
+"booked" only if you were allowed to book and did, otherwise "unavailable", "declined" or
+"needs_followup"."""
