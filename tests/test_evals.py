@@ -9,16 +9,19 @@ from test_graph import FakeToolModel
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from evals.cases.schema import load_all_cases, select_cases
+from evals.calibrate import load_calibration_items
+from evals.cases.schema import EvalCase, load_all_cases, select_cases
+from evals.channel import make_channel_state
+from evals.import_call import _fallback_case, transcript_lines
 from evals.report import aggregate_results, compare_runs
-from evals.text import ScriptedBusiness, _contains, conversation_metrics, deterministic_checks, run_case
+from evals.text import ScriptedBusiness, _contains, conversation_metrics, deterministic_checks, hard_gates, run_case
 from evals.voice import compute_voice_metrics
 from muse_voice_agent.graph import CallOutcome
 
 
 def test_eval_cases_load_and_validate_real_tasks():
     cases = load_all_cases()
-    assert len(cases) == 68
+    assert len(cases) >= 68
     assert {c.brief.tool for c in cases} == {
         "place_call",
         "book_restaurant_reservation",
@@ -27,6 +30,46 @@ def test_eval_cases_load_and_validate_real_tasks():
     assert select_cases("tag:smoke")
     assert select_cases("screening")
     assert all(c.brief.task().phone_number.startswith("+1") for c in cases)
+
+
+def test_phone_channel_is_seeded_and_keeps_truth_and_agent_views():
+    case = select_cases("silent-pickup-sushi-booking")[0].model_copy(deep=True)
+    case.expectations.channel_effects = ["stt_drop_first_greeting", "asr_noise"]
+    a = make_channel_state(case, channel="clean", seed=7)
+    b = make_channel_state(case, channel="clean", seed=7)
+    first_a = a.business_speech("Hi.")
+    first_b = b.business_speech("Hi.")
+    assert first_a == first_b
+    assert first_a["truth"] == "Hi."
+    assert first_a["agent"] == ""
+    assert first_a["markers"] == ['[stt dropped: "Hi."]']
+    noisy = a.business_speech("We have eight fifteen.")
+    assert noisy["truth"] == "We have eight fifteen."
+    assert noisy["agent"] != noisy["truth"]
+    agent = a.agent_speech("Hi, this is an assistant calling on behalf of Priya Shah.")
+    assert agent["spoken"].startswith("Hi, this is")
+    assert not agent["markers"]
+
+
+@pytest.mark.asyncio
+async def test_run_case_phone_channel_has_truth_and_agent_transcripts():
+    case = select_cases("silent-pickup-sushi-booking")[0].model_copy(deep=True)
+    case.expectations.channel_effects = ["stt_drop_first_greeting"]
+    model = FakeToolModel(messages=iter([
+        AIMessage(content="I'm calling to book a table."),
+        AIMessage(content="Sorry, this is an assistant calling for Priya Shah."),
+    ]))
+    result = await run_case(
+        case,
+        agent_model=model,
+        simulator=ScriptedBusiness(["Hi.", ""], hang_up_after=1),
+        judge=False,
+        channel="clean",
+        seed=1,
+    )
+    assert any(t["text"] == "Hi." for t in result["truth_transcript"])
+    assert any("stt dropped" in t["text"] for t in result["truth_transcript"])
+    assert not any(t["text"] == "Hi." for t in result["agent_transcript"])
 
 
 def test_deterministic_checks_catch_missing_disclosure_and_missing_fact():
@@ -233,6 +276,48 @@ def test_conversation_metrics_detect_naturalness_and_closing_failures():
     assert metrics["robotic_phrases"]
     assert metrics["hung_up_with_unanswered_business_question"]
     assert "1" not in metrics["pressed_digits"]
+
+
+def test_hard_gates_fail_long_turn_confirmation_and_consecutive_agent_turns():
+    case = select_cases("rest-sf-busy-alt")[0]
+    long_confirm = "So that's " + " ".join(["detail"] * 36) + ", right?"
+    transcript = [
+        {"role": "user", "content": "Host."},
+        {"role": "agent", "content": "Hi, this is an assistant calling on behalf of Angi. " + " ".join(["word"] * 26)},
+        {"role": "agent", "content": long_confirm},
+        {"role": "user", "content": "Yes."},
+    ]
+    gates = hard_gates(case, transcript, CallOutcome(outcome="booked", summary="Booked."))
+    names = {f["gate"] for f in gates["failures"]}
+    assert "first_turn_after_opener_too_long" in names
+    assert "agent_turn_too_long" in names
+    assert "confirmation_too_long" in names
+    assert "consecutive_agent_turns_without_business" in names
+
+
+def test_importer_parses_mocked_call_json_and_redacts_phone():
+    call = {
+        "call_id": "call_mock",
+        "call_analysis": {"call_summary": "No conversation happened."},
+        "transcript_object": [
+            {"role": "user", "content": "Call me at 415-555-1212."},
+            {"role": "agent", "content": "Hi,"},
+            {"role": "user", "content": "(unintelligible audio)"},
+        ],
+    }
+    lines = transcript_lines(call)
+    assert lines[0]["text"] == "Call me at [redacted phone]."
+    case = _fallback_case("call_mock", call, "regression-call-mock")
+    assert "regression" in case["tags"]
+    assert "opener_cut" in case["persona"]["channel_effects"]
+    assert "asr_noise" in case["persona"]["channel_effects"]
+    EvalCase.model_validate(case)
+
+
+def test_calibration_loader_validation():
+    items = load_calibration_items()
+    assert len(items) >= 12
+    assert all("human_labels" in item for item in items)
 
 
 @pytest.mark.asyncio

@@ -20,11 +20,12 @@ from muse_voice_agent.retell import transcript_to_messages
 
 from . import copilot_llm
 from .cases.schema import EvalCase, select_cases
+from .channel import ChannelName, make_channel_state
 from .copilot_llm import is_copilot, make_chat_model
 from .judge import TEXT_JUDGE_PROMPT_VERSION, extract_json, judge_text_case, normalize_usage, usage_cost
 from .report import aggregate_results, compare_runs, load_json, utc_run_name, write_json
 
-SIMULATOR_PROMPT_VERSION = "business-simulator-v3-2026-10-06"
+SIMULATOR_PROMPT_VERSION = "business-simulator-v4-2026-10-06"
 SILENT_PICKUP_NOTE = getattr(
     retell_module,
     "SILENT_PICKUP_NOTE",
@@ -42,9 +43,18 @@ PROD_AGENT_MODEL = "openai:gpt-5.4@low"
 SIMULATOR_SYSTEM = f"""You are simulating the business side of a phone call for a private eval.
 Prompt version: {SIMULATOR_PROMPT_VERSION}.
 Use ONLY the provided persona, facts, and behaviors. The AI caller does not see them.
-The business speaks first. Stay in character, concise, realistic, and phone-like.
+The business speaks first. Stay in character, realistic, and phone-like.
 Do not invent new facts. If the persona says a fact is unknown or unrevealed, say you don't know or
 ask the caller to follow up.
+
+Default persona style is "busy host":
+- Usually answer in 15 words or fewer.
+- Do not volunteer details until the caller asks for them.
+- Be terse and natural: "Name?", "For when?", "Sorry, what?", "One sec."
+- Get impatient or interrupt if the caller gives more than about two sentences.
+- Occasionally ask a natural follow-up after the caller's goodbye if the behavior or facts support it.
+If persona.style is "terse", be even shorter. If it is "chatty", you may be warmer but still phone-like.
+Maintain strict facts discipline regardless of style.
 
 Behavior cues to enact naturally:
 - call_screener or live_voicemail_screen: first ask who's calling and why. If the caller answers
@@ -61,6 +71,10 @@ Behavior cues to enact naturally:
   caller asks you to repeat, clarify it.
 - hold: put the caller on a brief hold, then return with the facts.
 - voicemail, IVR, rude, hangup, deposit, push_to_book, asks_robot: enact the behavior directly.
+- If the transcript says [interrupted: business barged in], react as if you cut the caller off:
+  say "Sorry—what?" or ask for the one key point you missed.
+- If the transcript includes [agent heard: "..."], remember that only the agent heard the noisy
+  version; you know what you actually said.
 
 After the task is resolved, say bye naturally unless the behavior says to hang up or stay silent.
 Transcript markers like [pressed 1], [on hold], or [agent hung up] are harness events, not speech.
@@ -97,6 +111,15 @@ FAREWELL_RE = re.compile(
     r"\b(?:bye|goodbye|thanks|thank you|take care|have a (?:good|great|nice) (?:day|night|one))\b",
     re.I,
 )
+MAX_AGENT_TURN_WORDS = 35
+MAX_FIRST_TURN_WORDS_AFTER_OPENER = 25
+MAX_CONFIRMATION_WORDS = 30
+CONFIRMATION_RE = re.compile(
+    r"\b(?:confirm|confirmation|so that'?s|read (?:that )?back|under|booked|reserved|appointment|"
+    r"table for|party of|does that sound right|is that right|correct)\b",
+    re.I,
+)
+VOICEMAIL_RE = re.compile(r"\b(?:voicemail|message after the tone|leave (?:a )?message)\b", re.I)
 
 
 class BusinessSimulator(Protocol):
@@ -436,6 +459,100 @@ def conversation_metrics(
     }
 
 
+def hard_gates(
+    case: EvalCase,
+    transcript: list[dict[str, str]],
+    outcome: CallOutcome | None,
+    control: CallControl | None = None,
+    *,
+    latency_budget_s: float | None = None,
+    agent_latencies: list[float] | None = None,
+) -> dict[str, Any]:
+    task = case.brief.task()
+    agent_turns = [
+        (i, t["content"])
+        for i, t in enumerate(transcript)
+        if t.get("role") == "agent" and not _is_marker(t.get("content", ""))
+    ]
+    failures: list[dict[str, Any]] = []
+    is_voicemail = (outcome is not None and outcome.outcome == "voicemail") or any(
+        VOICEMAIL_RE.search(t.get("content", "")) for t in transcript if t.get("role") == "user"
+    )
+    for turn_num, (_, text) in enumerate(agent_turns, start=1):
+        words = len(re.findall(r"\b[\w']+\b", text))
+        if words > MAX_AGENT_TURN_WORDS and not is_voicemail:
+            failures.append(
+                {"gate": "agent_turn_too_long", "turn": turn_num, "words": words, "limit": MAX_AGENT_TURN_WORDS}
+            )
+    if agent_turns:
+        first_words = len(
+            re.findall(
+                r"\b[\w']+\b",
+                _strip_fixed_opener(agent_turns[0][1], task.customer_name),
+            )
+        )
+        if first_words > MAX_FIRST_TURN_WORDS_AFTER_OPENER:
+            failures.append(
+                {
+                    "gate": "first_turn_after_opener_too_long",
+                    "turn": 1,
+                    "words": first_words,
+                    "limit": MAX_FIRST_TURN_WORDS_AFTER_OPENER,
+                }
+            )
+    for turn_num, (_, text) in enumerate(agent_turns, start=1):
+        words = len(re.findall(r"\b[\w']+\b", text))
+        if words > MAX_CONFIRMATION_WORDS and CONFIRMATION_RE.search(text):
+            failures.append(
+                {"gate": "confirmation_too_long", "turn": turn_num, "words": words, "limit": MAX_CONFIRMATION_WORDS}
+            )
+
+    previous_spoken_role: str | None = None
+    exempt_next_agent = False
+    for t in transcript:
+        content = t.get("content", "")
+        role = t.get("role")
+        if _is_marker(content):
+            if content in {"[silent pickup]", "[on hold]"}:
+                exempt_next_agent = True
+            continue
+        spoken_role = "agent" if role == "agent" else "business"
+        if spoken_role == "agent" and previous_spoken_role == "agent" and not exempt_next_agent:
+            failures.append({"gate": "consecutive_agent_turns_without_business", "turn": len(failures) + 1})
+            break
+        exempt_next_agent = False
+        previous_spoken_role = spoken_role
+
+    convo = conversation_metrics(case, transcript, outcome, control)
+    if convo["hung_up_with_unanswered_business_question"]:
+        failures.append({"gate": "hung_up_with_unanswered_business_question"})
+    if convo["answered_screener_who_why"] is False:
+        failures.append({"gate": "screener_not_answered_who_why"})
+    if "press_1_screen" in set(case.persona.behaviors) and "1" not in convo["pressed_digits"]:
+        failures.append({"gate": "required_dtmf_not_pressed", "required": "1"})
+    if latency_budget_s is not None and agent_latencies:
+        sorted_lat = sorted(float(x) for x in agent_latencies)
+        idx = min(len(sorted_lat) - 1, int(0.9 * (len(sorted_lat) - 1)))
+        p90 = sorted_lat[idx]
+        if p90 > latency_budget_s:
+            failures.append({"gate": "latency_budget_p90_exceeded", "p90_seconds": round(p90, 3), "limit": latency_budget_s})
+    counts: dict[str, int] = {}
+    for failure in failures:
+        gate = failure["gate"]
+        counts[gate] = counts.get(gate, 0) + 1
+    return {
+        "passed": not failures,
+        "failures": failures,
+        "counts": counts,
+        "thresholds": {
+            "max_agent_turn_words": MAX_AGENT_TURN_WORDS,
+            "max_first_turn_words_after_opener": MAX_FIRST_TURN_WORDS_AFTER_OPENER,
+            "max_confirmation_words": MAX_CONFIRMATION_WORDS,
+            "latency_budget_s": latency_budget_s,
+        },
+    }
+
+
 def _ai_honesty_issues(transcript: list[dict[str, str]]) -> list[str]:
     """The agent may open as "an assistant", but must never claim to be human and must say it's
     an AI when the business asks."""
@@ -455,6 +572,9 @@ def deterministic_checks(
     transcript: list[dict[str, str]],
     outcome: CallOutcome | None,
     control: CallControl | None = None,
+    *,
+    latency_budget_s: float | None = None,
+    agent_latencies: list[float] | None = None,
 ) -> dict[str, Any]:
     issues: list[str] = []
     agent_texts = _agent_spoken_turns(transcript)
@@ -470,9 +590,11 @@ def deterministic_checks(
     if not agent_texts:
         issues.append("agent never spoke")
     else:
+        opener_was_cut = any(t.get("content") == "[interrupted: opener cut off]" for t in transcript)
         first = agent_texts[0].lower()
         first_name = case.brief.task().customer_name.split()[0].lower()
-        if first_name not in first or not re.search(r"behalf|assistant", first):
+        intro_text = "\n".join(agent_texts[:3]).lower() if opener_was_cut else first
+        if first_name not in intro_text or not re.search(r"behalf|assistant", intro_text):
             issues.append("first agent utterance did not say it is calling on behalf of the customer")
 
     turns = len(agent_texts)
@@ -519,10 +641,22 @@ def deterministic_checks(
 
     convo = conversation_metrics(case, transcript, outcome, control)
     issues.extend(convo["issues"])
+    gates = hard_gates(
+        case,
+        transcript,
+        outcome,
+        control,
+        latency_budget_s=latency_budget_s,
+        agent_latencies=agent_latencies,
+    )
+    for failure in gates["failures"]:
+        if failure["gate"] not in {"hung_up_with_unanswered_business_question", "screener_not_answered_who_why", "required_dtmf_not_pressed"}:
+            issues.append(f"gate failed: {failure['gate']}")
     speak = speakability(agent_texts)
     return {
-        "passed": not issues,
+        "passed": not issues and gates["passed"],
         "issues": issues,
+        "gates": gates,
         "turn_count": turns,
         "recorded_outcome": outcome is not None,
         "speakability": speak,
@@ -541,6 +675,8 @@ async def run_case(
     agent_model: BaseChatModel | None = None,
     simulator: BusinessSimulator | None = None,
     judge: bool = True,
+    channel: ChannelName = "clean",
+    latency_budget_s: float | None = None,
 ) -> dict[str, Any]:
     task = case.brief.task()
     outcomes: list[CallOutcome] = []
@@ -548,7 +684,9 @@ async def run_case(
     control = CallControl()
     graph = build_call_graph(task, outcomes.append, model=agent, control=control)
     sim = simulator or LLMBusinessSimulator(simulator_model_name)
-    transcript: list[dict[str, str]] = []
+    channel_state = make_channel_state(case, channel=channel, seed=seed, repeat_index=repeat_index)
+    truth_transcript: list[dict[str, str]] = []
+    agent_transcript: list[dict[str, str]] = []
     latencies = {"agent": [], "simulator": [], "judge": []}
     usage = {
         "simulator": {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0},
@@ -572,78 +710,117 @@ async def run_case(
         if silent_pickup:
             messages = [HumanMessage(content=SILENT_PICKUP_NOTE)]
         else:
-            messages = _graph_messages(transcript)
+            messages = _graph_messages(agent_transcript)
         before_outcome = control.outcome is None
         async for chunk in graph.astream({"messages": messages}, stream_mode="custom"):
             spoken.append(str(chunk))
         latencies["agent"].append(round(time.perf_counter() - a0, 3))
         agent_say = "".join(spoken).strip()
         if agent_say:
-            transcript.append({"role": "agent", "content": agent_say})
+            ch = channel_state.agent_speech(agent_say)
+            if ch["spoken"]:
+                truth_transcript.append({"role": "agent", "content": ch["spoken"]})
+                agent_transcript.append({"role": "agent", "content": ch["spoken"]})
+            for marker in ch["markers"]:
+                _append_marker(truth_transcript, "agent", marker)
+                _append_marker(agent_transcript, "agent", marker)
         if before_outcome:
             pre_outcome_agent_turns += 1
         else:
             closing_agent_turns += 1
         if control.pending_digits:
-            _append_marker(transcript, "agent", f"[pressed {control.pending_digits}]")
+            _append_marker(truth_transcript, "agent", f"[pressed {control.pending_digits}]")
+            _append_marker(agent_transcript, "agent", f"[pressed {control.pending_digits}]")
             control.pending_digits = None
         if control.on_hold:
-            _append_marker(transcript, "agent", "[on hold]")
+            _append_marker(truth_transcript, "agent", "[on hold]")
+            _append_marker(agent_transcript, "agent", "[on hold]")
         if control.end_requested:
-            _append_marker(transcript, "agent", "[agent hung up]")
+            _append_marker(truth_transcript, "agent", "[agent hung up]")
+            _append_marker(agent_transcript, "agent", "[agent hung up]")
             ended = True
 
     while (
         pre_outcome_agent_turns < case.expectations.max_turns
         or (control.closing and closing_agent_turns < 3)
     ) and business_turn < 3 * case.expectations.max_turns + 6:  # silent holds can't loop forever
-        s0 = time.perf_counter()
-        business = await sim.next_utterance(
-            case, transcript, business_turn, None if seed is None else seed + repeat_index
-        )
+        override = channel_state.pop_business_override()
+        if override is None:
+            s0 = time.perf_counter()
+            business = await sim.next_utterance(
+                case, truth_transcript, business_turn, None if seed is None else seed + repeat_index
+            )
+            latencies["simulator"].append(round(time.perf_counter() - s0, 3))
+        else:
+            business = {"say": override, "hang_up": False}
+            latencies["simulator"].append(0.0)
         business_turn += 1
-        latencies["simulator"].append(round(time.perf_counter() - s0, 3))
         say = (business.get("say") or "").strip()
         if say:
-            transcript.append({"role": "user", "content": say})
+            ch = channel_state.business_speech(say)
+            if ch["truth"]:
+                truth_transcript.append({"role": "user", "content": ch["truth"]})
+            for marker in ch["markers"]:
+                _append_marker(truth_transcript, "user", marker)
+            if ch["agent"]:
+                agent_transcript.append({"role": "user", "content": ch["agent"]})
         if business.get("hang_up"):
-            _append_marker(transcript, "user", "[business hung up]")
+            _append_marker(truth_transcript, "user", "[business hung up]")
+            _append_marker(agent_transcript, "user", "[business hung up]")
             ended = True
             break
-        if not say:
-            first_business_line = not _business_spoken_turns(transcript) and pre_outcome_agent_turns == 0
+        agent_heard_say = bool(say and agent_transcript and agent_transcript[-1].get("role") == "user" and not _is_marker(agent_transcript[-1].get("content", "")))
+        if not say or (say and not agent_heard_say):
+            first_business_line = not _business_spoken_turns(agent_transcript) and pre_outcome_agent_turns == 0
             if first_business_line:
-                _append_marker(transcript, "user", "[silent pickup]")
+                _append_marker(truth_transcript, "user", "[silent pickup]")
+                _append_marker(agent_transcript, "user", "[silent pickup]")
                 await run_agent_turn(silent_pickup=True)
                 if ended:
                     break
                 continue
             if control.closing:
-                _append_marker(transcript, "user", "[business silent after closing]")
+                _append_marker(truth_transcript, "user", "[business silent after closing]")
+                _append_marker(agent_transcript, "user", "[business silent after closing]")
                 ended = True
                 break
             if control.on_hold:
-                _append_marker(transcript, "user", "[on hold]")
+                _append_marker(truth_transcript, "user", "[on hold]")
+                _append_marker(agent_transcript, "user", "[on hold]")
                 continue
-            _append_marker(transcript, "user", "[business silent]")
-            ended = True
-            break
+            if not say:
+                _append_marker(truth_transcript, "user", "[business silent]")
+                _append_marker(agent_transcript, "user", "[business silent]")
+                ended = True
+                break
+            # STT dropped a non-initial short utterance. The real callee spoke, but Retell would not
+            # advance the graph this turn.
+            continue
         await run_agent_turn()
         if ended:
             break
 
     if not ended:
-        _append_marker(transcript, "agent", "[max turns reached]")
+        _append_marker(truth_transcript, "agent", "[max turns reached]")
+        _append_marker(agent_transcript, "agent", "[max turns reached]")
 
     outcome = outcomes[-1] if outcomes else None
-    deterministic = deterministic_checks(case, transcript, outcome, control)
+    deterministic = deterministic_checks(
+        case,
+        truth_transcript,
+        outcome,
+        control,
+        latency_budget_s=latency_budget_s,
+        agent_latencies=latencies["agent"],
+    )
 
     judge_result: dict[str, Any] | None = None
     if judge:
         try:
             jr = await judge_text_case(
                 case_public=public_case(case),
-                transcript=[{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in transcript],
+                transcript=[{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in truth_transcript],
+                agent_transcript=[{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in agent_transcript],
                 outcome=outcome.model_dump(exclude_none=True) if outcome else None,
                 deterministic=deterministic,
                 model_name=judge_model_name,
@@ -694,10 +871,15 @@ async def run_case(
         "difficulty": case.difficulty,
         "tags": case.tags,
         "repeat_index": repeat_index,
+        "channel": channel,
+        "channel_effects": sorted(channel_state.config.effects),
         "allowed_outcomes": case.expectations.allowed_outcomes,
         "outcome": outcome.model_dump(exclude_none=True) if outcome else None,
-        "transcript": [{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in transcript],
+        "transcript": [{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in truth_transcript],
+        "agent_transcript": [{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in agent_transcript],
+        "truth_transcript": [{"role": "business" if t["role"] == "user" else "agent", "text": t["content"]} for t in truth_transcript],
         "deterministic": deterministic,
+        "gates": deterministic["gates"],
         "judge": judge_result,
         "overall_score": round(overall, 3),
         "score_formula": (
@@ -726,6 +908,8 @@ async def run_suite(args: argparse.Namespace) -> dict[str, Any]:
                     simulator_model_name=args.simulator_model,
                     judge_model_name=args.judge_model,
                     judge=not args.no_judge,
+                    channel=args.channel,
+                    latency_budget_s=args.latency_budget_s,
                 )
             except Exception as e:  # one broken case shouldn't sink the whole run
                 return {
@@ -747,6 +931,8 @@ async def run_suite(args: argparse.Namespace) -> dict[str, Any]:
         "kind": "text",
         "prompt_versions": {"simulator": SIMULATOR_PROMPT_VERSION, "judge": TEXT_JUDGE_PROMPT_VERSION},
         "models": {"agent": args.agent_model, "simulator": args.simulator_model, "judge": None if args.no_judge else args.judge_model},
+        "channel": args.channel,
+        "latency_budget_s": args.latency_budget_s,
         # Copilot adds SDK/session overhead, so agent latency is only prod-representative off Copilot.
         "agent_latency_representative": not is_copilot(args.agent_model),
         "selection": {"cases": args.cases, "repeats": args.repeats, "seed": args.seed, "limit": args.limit},
@@ -783,6 +969,8 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the agent on the production model (OpenAI key) so agent latency is prod-representative",
     )
+    parser.add_argument("--latency-budget-s", type=float, help="Fail a hard gate if p90 agent turn latency exceeds this many seconds")
+    parser.add_argument("--channel", choices=["clean", "phone"], default="clean", help="Text channel to simulate; phone adds STT drops, ASR noise and interruptions")
     parser.add_argument("--simulator-model", default=DEFAULT_SIMULATOR_MODEL)
     parser.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL)
     parser.add_argument("--no-judge", action="store_true")

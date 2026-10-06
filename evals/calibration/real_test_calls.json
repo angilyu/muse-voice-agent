@@ -1,0 +1,384 @@
+[
+  {
+    "id": "real-call-c9de4aad86623236b9e0d58242d",
+    "brief": {
+      "title": "Real call: opener cut off, late intro, latency/closing awkwardness",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Oh,"
+      },
+      {
+        "role": "agent",
+        "text": "Hi,"
+      },
+      {
+        "role": "business",
+        "text": "Hello?"
+      },
+      {
+        "role": "business",
+        "text": "Hi."
+      },
+      {
+        "role": "agent",
+        "text": "I'm calling to book a table for two on Wednesday, October 7 at 7:00 PM, if you have it available."
+      },
+      {
+        "role": "business",
+        "text": "Uh, who is this speaking?"
+      },
+      {
+        "role": "agent",
+        "text": "I\u2019m an assistant calling on behalf of Wenjing Yu to make a reservation. Do you have availability for two that evening around 7:00?"
+      },
+      {
+        "role": "business",
+        "text": "Let me check. Give me one second."
+      },
+      {
+        "role": "agent",
+        "text": "Of course."
+      },
+      {
+        "role": "business",
+        "text": "I don't have availability at seven PM, but I have a five thirty. Does this work for you?"
+      },
+      {
+        "role": "agent",
+        "text": "Thanks. Is there anything available between 6:00 and 8:00 PM that same evening for two?"
+      },
+      {
+        "role": "business",
+        "text": "Actually, I have one spot at eight PM."
+      },
+      {
+        "role": "agent",
+        "text": "Great, please book that for two at 8:00 PM on Wednesday, October 7 under Wenjing Yu."
+      },
+      {
+        "role": "business",
+        "text": "Okay. So can you spell the name?"
+      },
+      {
+        "role": "agent",
+        "text": "Yes, it\u2019s Wenjing, W-E-N-J-I-N-G, last name Yu, Y-U."
+      },
+      {
+        "role": "business",
+        "text": "Yeah. It's Wednesday, eight PM reservation for two."
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, thank"
+      },
+      {
+        "role": "business",
+        "text": "Okay. Thank you. Bye."
+      },
+      {
+        "role": "agent",
+        "text": "Goodbye."
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Booked for two at 8 PM Wednesday under Wenjing Yu."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          1,
+          2
+        ],
+        "naturalness": [
+          1,
+          2
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": [
+          1,
+          2
+        ],
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "User-labeled failure despite booking: opener was cut off, intro repair was late, confirmation/closing awkward."
+  },
+  {
+    "id": "real-call-8ee25a3dba430c1aa39a263a7db",
+    "brief": {
+      "title": "Real call: connected silence / no conversation",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "[call connected; no transcript captured]"
+      },
+      {
+        "role": "agent",
+        "text": "[no audible successful opener]"
+      },
+      {
+        "role": "business",
+        "text": "[30 seconds inactivity]"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "No conversation happened; call ended for inactivity."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          2,
+          3
+        ],
+        "naturalness": [
+          2,
+          3
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": null,
+        "call_closing": [
+          1,
+          2
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Retell call analysis: no conversation happened; ended by inactivity."
+  },
+  {
+    "id": "real-call-a152c026ae3a3ae4da2c8f2e51d",
+    "brief": {
+      "title": "Real call: connected silence / no conversation",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "[call connected; no transcript captured]"
+      },
+      {
+        "role": "agent",
+        "text": "[no audible successful opener]"
+      },
+      {
+        "role": "business",
+        "text": "[30 seconds inactivity]"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "No conversation happened; call ended for inactivity."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          2,
+          3
+        ],
+        "naturalness": [
+          2,
+          3
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": null,
+        "call_closing": [
+          1,
+          2
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Retell call analysis: no conversation happened; ended by inactivity."
+  },
+  {
+    "id": "real-call-19e1e5b944a19fd9764d89f6a51",
+    "brief": {
+      "title": "Real call: rambling, interruption, wrong time after ASR error",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Eight"
+      },
+      {
+        "role": "agent",
+        "text": "Hi, this is an assistant calling on behalf of Wenjing Yu. Hello, I would like to book a table for two people on Tuesday, October 6th at 7:00 PM. If that time is not available, any time between 6:00 PM and 8:00 PM on the same day would be acceptable. The reservation should be under the name Wenjing Yu. Could you please check the availability?"
+      },
+      {
+        "role": "agent",
+        "text": "Hello, are you"
+      },
+      {
+        "role": "business",
+        "text": "Oh,"
+      },
+      {
+        "role": "agent",
+        "text": "there?"
+      },
+      {
+        "role": "agent",
+        "text": "Hi, this is an assistant calling on behalf of Wenjing Yu. I would like to book a table for two on Tuesday,"
+      },
+      {
+        "role": "business",
+        "text": "(unintelligible audio)"
+      },
+      {
+        "role": "agent",
+        "text": "Hi, this is an assistant calling on behalf of Wenjing Yu. I would like to book a table for two on Tuesday, October 6th at 7:00 PM. If that time is not available, any time between 6:00 PM and 8:00 PM on the same day would be acceptable. Could you please check the availability?"
+      },
+      {
+        "role": "business",
+        "text": "Sure. Give me one second."
+      },
+      {
+        "role": "agent",
+        "text": "Thank you. I'll wait. Please let me know if the 7:00 PM reservation or any time between 6:00 PM and 8:00 PM is available for two people under the name Wenjing Yu."
+      },
+      {
+        "role": "business",
+        "text": "Actually, I don't have a six PM. How about five thirty?"
+      },
+      {
+        "role": "agent",
+        "text": "Thank you for letting me know. Unfortunately, 5:30 PM is outside the acceptable time range. Could you please check if there is availability at 7:00 PM or any time between 6:00 PM and 8:00 PM on October 6th for two people under the name Wenjing Yu?"
+      },
+      {
+        "role": "business",
+        "text": "Okay. Actually, I have open at APM."
+      },
+      {
+        "role": "agent",
+        "text": "Great, thank you. Could you please confirm a reservation for two people on Tuesday, October 6th at 7:00 PM under the name Wenjing Yu?"
+      },
+      {
+        "role": "business",
+        "text": "It's eight PM, not seven."
+      },
+      {
+        "role": "agent",
+        "text": "Thank you for the clarification. Please confirm the reservation for two people on Tuesday, October 6th at 8:00 PM under the name Wenjing Yu. Is that correct?"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "No final booking confirmation was obtained."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          1,
+          2
+        ],
+        "naturalness": [
+          1,
+          2
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": [
+          1,
+          2
+        ],
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "User-labeled failure: rambling, repeated intro, poor interruption/ASR repair, no final confirmation."
+  }
+]

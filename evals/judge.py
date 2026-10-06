@@ -12,15 +12,18 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from .copilot_llm import make_chat_model
 
-TEXT_JUDGE_PROMPT_VERSION = "text-judge-v3.1-2026-10-06"
+TEXT_JUDGE_PROMPT_VERSION = "text-judge-v4-2026-10-06"
 AUDIO_JUDGE_PROMPT_VERSION = "voice-audio-judge-v1-2026-10-05"
 
 TEXT_JUDGE_SYSTEM = f"""You are a strict evaluator for MuseVoiceAgent simulated phone calls.
 Prompt version: {TEXT_JUDGE_PROMPT_VERSION}.
-Evaluate the transcript and recorded outcome like a calibrated QA lead for a real phone-calling
-assistant. Score each applicable dimension from 1 to 5 and include short evidence quotes from the
-transcript or outcome. Use null when a dimension is genuinely not applicable (for example,
+Evaluate the truth transcript, what the agent heard (if supplied), and recorded outcome like a
+calibrated QA lead for a real phone-calling assistant. Score each applicable dimension from 1 to 5
+and include short evidence quotes from the transcript or outcome. Use null when a dimension is genuinely not applicable (for example,
 screening_and_ivr_handling when there was no screener, IVR, menu, silent pickup, transfer or hold).
+When channel markers show STT drops, ASR noise, barge-in, or a cut-off opener, judge whether the
+agent repaired appropriately from what it heard. Do not reward verbosity; concise repair is better
+than exhaustive read-backs. Any deterministic hard gate failure should make overall pass false.
 
 Brief notes: phone_number in the brief is the business's number being dialed, not something the
 agent may share. Only callback_number (if present) may be given to the business; declining to give
@@ -34,13 +37,15 @@ Dimension-specific anchors:
   reasonable blocker with missing details; 5 achieved the goal within authority/limits.
 - outcome_accuracy: 1 hallucinated or contradicted business facts; 3 mostly right but imprecise or
   missing important caveats; 5 recorded only what the business actually said, with key facts.
-- turn_economy: 1 long info dumps, multiple questions, alternatives volunteered too early; 3 usable
-  but wordy/repetitive; 5 brief phone turns, one question at a time, no premature volunteering.
-- naturalness: 1 scripted/robotic/formal or repetitive; 3 understandable but stiff; 5 sounds like a
+- turn_economy: 1 long info dumps, multiple questions, alternatives volunteered too early, or keeps
+  talking after a likely interruption; 3 usable but wordy/repetitive; 5 brief phone turns, one
+  question at a time, no premature volunteering.
+- naturalness: 1 scripted/robotic/formal, repetitive, or confirmation reads like a form; 3 understandable but stiff; 5 sounds like a
   real friendly caller with contractions and casual phrasing.
-- listening_and_repair: 1 ignores answers/questions or guesses garbled speech; 3 responds to most
-  content but misses a repair; 5 directly answers questions, asks repeats for garble, adapts.
-- confirmation_quality: 1 no needed confirmation or robotic read-back; 3 confirms but too long or
+- listening_and_repair: 1 ignores answers/questions, hangs up on a question, or guesses garbled speech;
+  3 responds to most content but misses a repair; 5 directly answers questions, asks repeats for
+  garble/cut-offs, adapts.
+- confirmation_quality: 1 no needed confirmation or robotic/overlong read-back; 3 confirms but too long or
   slightly awkward; 5 brief natural read-back of key details only, waits for yes. Null if no booking,
   appointment, or commitment needed confirmation.
 - call_closing: 1 hangs up on a question or before the business is done; 3 says goodbye but drags or
@@ -122,6 +127,7 @@ async def judge_text_case(
     *,
     case_public: dict[str, Any],
     transcript: list[dict[str, str]],
+    agent_transcript: list[dict[str, str]] | None = None,
     outcome: dict[str, Any] | None,
     deterministic: dict[str, Any],
     model_name: str,
@@ -130,6 +136,7 @@ async def judge_text_case(
     payload = {
         "case": case_public,
         "transcript": transcript,
+        "agent_heard_transcript": agent_transcript,
         "recorded_outcome": outcome,
         "deterministic_checks": deterministic,
     }

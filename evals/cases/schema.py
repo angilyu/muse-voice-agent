@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from muse_voice_agent.tasks import AnyTask, parse_task
 
 CASES_PATH = Path(__file__).with_name("bay_area_cases.json")
+REGRESSION_CASES_PATH = Path(__file__).with_name("regression_cases.json")
 
 ToolName = Literal["place_call", "book_restaurant_reservation", "request_handyman_quote"]
 Difficulty = Literal["easy", "medium", "hard"]
@@ -35,6 +36,8 @@ class BusinessPersona(BaseModel):
     answers_as: str = Field(description="Who answers the phone")
     facts: dict[str, Any] = Field(default_factory=dict)
     behaviors: list[str] = Field(default_factory=list)
+    style: Literal["busy", "chatty", "terse"] = "busy"
+    channel_effects: list[str] = Field(default_factory=list)
     will_not_reveal: list[str] = Field(default_factory=list)
     private_facts: dict[str, Any] = Field(default_factory=dict)
 
@@ -57,6 +60,7 @@ class Expectations(BaseModel):
     required_facts: list[RequiredFact] = Field(default_factory=list)
     forbidden_behaviors: list[str] = Field(default_factory=list)
     forbidden_phrases: list[str] = Field(default_factory=list)
+    channel_effects: list[str] = Field(default_factory=list)
     max_turns: int = Field(default=12, ge=2, le=40)
 
     @field_validator("allowed_outcomes")
@@ -84,7 +88,12 @@ class EvalCase(BaseModel):
 
 
 def load_all_cases(path: Path = CASES_PATH) -> list[EvalCase]:
-    raw = json.loads(path.read_text())
+    paths = [path]
+    if path == CASES_PATH and REGRESSION_CASES_PATH.exists():
+        paths.append(REGRESSION_CASES_PATH)
+    raw: list[dict[str, Any]] = []
+    for p in paths:
+        raw.extend(json.loads(p.read_text()))
     cases = [EvalCase.model_validate(item) for item in raw]
     ids = [c.id for c in cases]
     if len(ids) != len(set(ids)):

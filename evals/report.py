@@ -49,6 +49,8 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
     never_ended_calls = 0
     hung_up_on_question = 0
     hung_up_before_bye = 0
+    gate_counts: dict[str, int] = defaultdict(int)
+    gate_failed_cases: dict[str, int] = defaultdict(int)
     by_tag: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_vertical: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_difficulty: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -85,6 +87,10 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             never_ended_calls += 1 if convo.get("never_ended_call") else 0
             hung_up_on_question += 1 if convo.get("hung_up_with_unanswered_business_question") else 0
             hung_up_before_bye += 1 if convo.get("hung_up_before_business_bye") else 0
+        case_gate_counts = ((r.get("gates") or r.get("deterministic", {}).get("gates") or {}).get("counts") or {})
+        for gate, count in case_gate_counts.items():
+            gate_counts[gate] += int(count)
+            gate_failed_cases[gate] += 1
 
     def summarize(group: list[dict[str, Any]]) -> dict[str, Any]:
         return {
@@ -118,6 +124,13 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
             "never_ended_calls": never_ended_calls,
             "hung_up_with_unanswered_business_question": hung_up_on_question,
             "hung_up_before_business_bye": hung_up_before_bye,
+        },
+        "gates": {
+            "failure_counts": dict(sorted(gate_counts.items())),
+            "failed_cases": dict(sorted(gate_failed_cases.items())),
+            "cases_with_failures": sum(
+                1 for r in results if ((r.get("gates") or r.get("deterministic", {}).get("gates") or {}).get("failures") or [])
+            ),
         },
         "by_tag": {k: summarize(v) for k, v in sorted(by_tag.items())},
         "by_vertical": {k: summarize(v) for k, v in sorted(by_vertical.items())},

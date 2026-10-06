@@ -1,0 +1,981 @@
+[
+  {
+    "id": "screening-bad-google",
+    "brief": {
+      "title": "Fails Google/iPhone call screening",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "This call is being screened. Say your name and why you're calling."
+      },
+      {
+        "role": "agent",
+        "text": "Hi, can I speak with reservations?"
+      },
+      {
+        "role": "business",
+        "text": "Sorry, who is this and what is it about?"
+      },
+      {
+        "role": "agent",
+        "text": "I just need to book a table."
+      },
+      {
+        "role": "business",
+        "text": "No thanks."
+      },
+      {
+        "role": "business",
+        "text": "[business hung up]"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "Call failed or needs follow-up."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          2,
+          3
+        ],
+        "naturalness": [
+          2,
+          3
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": null,
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": [
+          1,
+          2
+        ],
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Fails Google/iPhone call screening"
+  },
+  {
+    "id": "screening-good-google",
+    "brief": {
+      "title": "Handles Google/iPhone call screening",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "This call is being screened. Say your name and why you're calling."
+      },
+      {
+        "role": "agent",
+        "text": "I'm an assistant calling for Wenjing Yu to book a dinner reservation."
+      },
+      {
+        "role": "business",
+        "text": "Connecting."
+      },
+      {
+        "role": "business",
+        "text": "Restaurant, how can I help?"
+      },
+      {
+        "role": "agent",
+        "text": "I'd like to book two for Friday at 7."
+      },
+      {
+        "role": "business",
+        "text": "Sure, booked under Wenjing."
+      },
+      {
+        "role": "agent",
+        "text": "So that's two Friday at 7 under Wenjing, right?"
+      },
+      {
+        "role": "business",
+        "text": "Yes."
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, thanks. Bye!"
+      },
+      {
+        "role": "business",
+        "text": "Bye."
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Reservation booked."
+    },
+    "human_labels": {
+      "pass": true,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          4,
+          5
+        ],
+        "naturalness": [
+          4,
+          5
+        ],
+        "listening_and_repair": [
+          4,
+          5
+        ],
+        "confirmation_quality": [
+          4,
+          5
+        ],
+        "call_closing": [
+          4,
+          5
+        ],
+        "screening_and_ivr_handling": [
+          4,
+          5
+        ],
+        "policy_safety": [
+          4,
+          5
+        ]
+      }
+    },
+    "notes": "Handles Google/iPhone call screening"
+  },
+  {
+    "id": "verbosity-bad-preamble",
+    "brief": {
+      "title": "Talks too much before hearing back",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Host."
+      },
+      {
+        "role": "agent",
+        "text": "Hi, this is an assistant calling on behalf of Wenjing Yu. I would like to make a reservation for two people this Friday at seven PM, but if that is not available then any time from six thirty to eight thirty would be acceptable, and counter seating is fine, and the name should be Wenjing Yu."
+      },
+      {
+        "role": "business",
+        "text": "Sorry\u2014what?"
+      },
+      {
+        "role": "agent",
+        "text": "Do you have anything?"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "Call failed or needs follow-up."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          2,
+          3
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          1,
+          2
+        ],
+        "naturalness": [
+          1,
+          2
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": null,
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Talks too much before hearing back"
+  },
+  {
+    "id": "verbosity-good-preamble",
+    "brief": {
+      "title": "Short first turn",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Host."
+      },
+      {
+        "role": "agent",
+        "text": "Hi, this is an assistant calling on behalf of Wenjing Yu. I'd like to book two for Friday at 7."
+      },
+      {
+        "role": "business",
+        "text": "We have 8 PM."
+      },
+      {
+        "role": "agent",
+        "text": "Eight works. Can you put it under Wenjing?"
+      },
+      {
+        "role": "business",
+        "text": "Done."
+      },
+      {
+        "role": "agent",
+        "text": "So that's two Friday at 8 under Wenjing, right?"
+      },
+      {
+        "role": "business",
+        "text": "Yes."
+      },
+      {
+        "role": "agent",
+        "text": "Great, thanks. Bye!"
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Booked for two Friday at 8 PM under Wenjing."
+    },
+    "human_labels": {
+      "pass": true,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          4,
+          5
+        ],
+        "naturalness": [
+          4,
+          5
+        ],
+        "listening_and_repair": [
+          4,
+          5
+        ],
+        "confirmation_quality": [
+          4,
+          5
+        ],
+        "call_closing": [
+          4,
+          5
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          4,
+          5
+        ]
+      }
+    },
+    "notes": "Short first turn"
+  },
+  {
+    "id": "confirmation-bad-robotic",
+    "brief": {
+      "title": "Overlong robotic read-back",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "I can do Sunday at 7 for four."
+      },
+      {
+        "role": "agent",
+        "text": "Could you please confirm the following details: reservation for four guests, Sunday evening at precisely 7:00 PM, under the name Lee Nguyen, with no special requests, and confirmation code MN700, is every one of those details accurate?"
+      },
+      {
+        "role": "business",
+        "text": "Yes."
+      },
+      {
+        "role": "agent",
+        "text": "Thank you for your assistance. Goodbye."
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "Call failed or needs follow-up."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          2,
+          3
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          1,
+          2
+        ],
+        "naturalness": [
+          1,
+          2
+        ],
+        "listening_and_repair": [
+          2,
+          3
+        ],
+        "confirmation_quality": [
+          1,
+          2
+        ],
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Overlong robotic read-back"
+  },
+  {
+    "id": "confirmation-good-brief",
+    "brief": {
+      "title": "Brief natural read-back",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "I can do Sunday at 7 for four. Code MN700."
+      },
+      {
+        "role": "agent",
+        "text": "So that's four Sunday at 7 under Lee, code MN700, right?"
+      },
+      {
+        "role": "business",
+        "text": "Yes."
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, thanks. Bye!"
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Reservation booked."
+    },
+    "human_labels": {
+      "pass": true,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          4,
+          5
+        ],
+        "naturalness": [
+          4,
+          5
+        ],
+        "listening_and_repair": [
+          4,
+          5
+        ],
+        "confirmation_quality": [
+          4,
+          5
+        ],
+        "call_closing": [
+          4,
+          5
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          4,
+          5
+        ]
+      }
+    },
+    "notes": "Brief natural read-back"
+  },
+  {
+    "id": "closing-bad-hangup-on-spelling",
+    "brief": {
+      "title": "Hangs up on post-goodbye spelling question",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Booked for Sunday at 7."
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, thanks so much. Bye!"
+      },
+      {
+        "role": "business",
+        "text": "Sorry, how do you spell the last name?"
+      },
+      {
+        "role": "agent",
+        "text": "[agent hung up]"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "Call failed or needs follow-up."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          2,
+          3
+        ],
+        "naturalness": [
+          2,
+          3
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": [
+          2,
+          3
+        ],
+        "call_closing": [
+          1,
+          2
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Hangs up on post-goodbye spelling question"
+  },
+  {
+    "id": "closing-good-spells-after-goodbye",
+    "brief": {
+      "title": "Answers post-goodbye spelling question",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Booked for Sunday at 7."
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, thanks so much. Bye!"
+      },
+      {
+        "role": "business",
+        "text": "Sorry, how do you spell the last name?"
+      },
+      {
+        "role": "agent",
+        "text": "Nguyen is N, G, U, Y, E, N."
+      },
+      {
+        "role": "business",
+        "text": "Great, thanks, bye."
+      },
+      {
+        "role": "agent",
+        "text": "Bye!"
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Reservation booked."
+    },
+    "human_labels": {
+      "pass": true,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          4,
+          5
+        ],
+        "naturalness": [
+          4,
+          5
+        ],
+        "listening_and_repair": [
+          4,
+          5
+        ],
+        "confirmation_quality": [
+          4,
+          5
+        ],
+        "call_closing": [
+          4,
+          5
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          4,
+          5
+        ]
+      }
+    },
+    "notes": "Answers post-goodbye spelling question"
+  },
+  {
+    "id": "opener-cut-bad-no-reintro",
+    "brief": {
+      "title": "Opener cut off and no re-introduction",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Hi."
+      },
+      {
+        "role": "agent",
+        "text": "Hi,"
+      },
+      {
+        "role": "agent",
+        "text": "[interrupted: opener cut off]"
+      },
+      {
+        "role": "business",
+        "text": "Hello?"
+      },
+      {
+        "role": "agent",
+        "text": "I'm calling to book two for Wednesday at 7."
+      },
+      {
+        "role": "business",
+        "text": "Who is this?"
+      },
+      {
+        "role": "agent",
+        "text": "Can you check availability?"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "Call failed or needs follow-up."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          2,
+          3
+        ],
+        "turn_economy": [
+          2,
+          3
+        ],
+        "naturalness": [
+          1,
+          2
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": null,
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": [
+          2,
+          3
+        ],
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "Opener cut off and no re-introduction"
+  },
+  {
+    "id": "opener-cut-good-reintro",
+    "brief": {
+      "title": "Opener cut off and repaired",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "Hi."
+      },
+      {
+        "role": "agent",
+        "text": "Hi,"
+      },
+      {
+        "role": "agent",
+        "text": "[interrupted: opener cut off]"
+      },
+      {
+        "role": "business",
+        "text": "Hello?"
+      },
+      {
+        "role": "agent",
+        "text": "Sorry, this is an assistant calling for Wenjing Yu. I'd like to book two for Wednesday at 7."
+      },
+      {
+        "role": "business",
+        "text": "Sure, 8 PM works."
+      },
+      {
+        "role": "agent",
+        "text": "Great, can you put it under Wenjing?"
+      },
+      {
+        "role": "business",
+        "text": "Done."
+      },
+      {
+        "role": "agent",
+        "text": "So that's two Wednesday at 8 under Wenjing, right?"
+      },
+      {
+        "role": "business",
+        "text": "Yes."
+      },
+      {
+        "role": "agent",
+        "text": "Thanks, bye!"
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Booked for two Wednesday at 8 PM under Wenjing."
+    },
+    "human_labels": {
+      "pass": true,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          4,
+          5
+        ],
+        "naturalness": [
+          4,
+          5
+        ],
+        "listening_and_repair": [
+          4,
+          5
+        ],
+        "confirmation_quality": [
+          4,
+          5
+        ],
+        "call_closing": [
+          4,
+          5
+        ],
+        "screening_and_ivr_handling": [
+          4,
+          5
+        ],
+        "policy_safety": [
+          4,
+          5
+        ]
+      }
+    },
+    "notes": "Opener cut off and repaired"
+  },
+  {
+    "id": "asr-number-bad-guesses",
+    "brief": {
+      "title": "ASR number error guessed instead of clarified",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "We have eight fifteen."
+      },
+      {
+        "role": "business",
+        "text": "[agent heard: \"eighty fifteen\"]"
+      },
+      {
+        "role": "agent",
+        "text": "Great, I'll book 8:50 then."
+      },
+      {
+        "role": "business",
+        "text": "No, eight fifteen."
+      },
+      {
+        "role": "agent",
+        "text": "Perfect, booked for 8:50. Bye!"
+      }
+    ],
+    "outcome": {
+      "outcome": "needs_followup",
+      "summary": "Call failed or needs follow-up."
+    },
+    "human_labels": {
+      "pass": false,
+      "dims": {
+        "task_completion": [
+          1,
+          2
+        ],
+        "outcome_accuracy": [
+          1,
+          2
+        ],
+        "turn_economy": [
+          2,
+          3
+        ],
+        "naturalness": [
+          2,
+          3
+        ],
+        "listening_and_repair": [
+          1,
+          2
+        ],
+        "confirmation_quality": [
+          2,
+          3
+        ],
+        "call_closing": [
+          2,
+          3
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          2,
+          3
+        ]
+      }
+    },
+    "notes": "ASR number error guessed instead of clarified"
+  },
+  {
+    "id": "asr-number-good-clarifies",
+    "brief": {
+      "title": "ASR number error clarified",
+      "vertical": "restaurant",
+      "difficulty": "medium",
+      "tags": [
+        "calibration"
+      ]
+    },
+    "transcript": [
+      {
+        "role": "business",
+        "text": "We have eight fifteen."
+      },
+      {
+        "role": "business",
+        "text": "[agent heard: \"eighty fifteen\"]"
+      },
+      {
+        "role": "agent",
+        "text": "Sorry, was that 8:15?"
+      },
+      {
+        "role": "business",
+        "text": "Yes, 8:15."
+      },
+      {
+        "role": "agent",
+        "text": "Great, please book that under Wenjing."
+      },
+      {
+        "role": "business",
+        "text": "Done."
+      },
+      {
+        "role": "agent",
+        "text": "Thanks, bye!"
+      }
+    ],
+    "outcome": {
+      "outcome": "booked",
+      "summary": "Reservation booked."
+    },
+    "human_labels": {
+      "pass": true,
+      "dims": {
+        "task_completion": [
+          4,
+          5
+        ],
+        "outcome_accuracy": [
+          4,
+          5
+        ],
+        "turn_economy": [
+          4,
+          5
+        ],
+        "naturalness": [
+          4,
+          5
+        ],
+        "listening_and_repair": [
+          4,
+          5
+        ],
+        "confirmation_quality": [
+          4,
+          5
+        ],
+        "call_closing": [
+          4,
+          5
+        ],
+        "screening_and_ivr_handling": null,
+        "policy_safety": [
+          4,
+          5
+        ]
+      }
+    },
+    "notes": "ASR number error clarified"
+  }
+]

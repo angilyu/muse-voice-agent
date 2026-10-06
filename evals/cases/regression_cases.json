@@ -1,0 +1,240 @@
+[
+  {
+    "brief": {
+      "args": {
+        "business_name": "Imported restaurant",
+        "customer_name": "Wenjing Yu",
+        "date": "the requested date",
+        "flexibility": "6:00 PM to 8:00 PM same day only",
+        "party_size": 2,
+        "phone_number": "+14155550199",
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked",
+        "needs_followup",
+        "unavailable"
+      ],
+      "channel_effects": [
+        "opener_cut"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 14,
+      "required_facts": []
+    },
+    "id": "regression-c9de4aad8662",
+    "persona": {
+      "answers_as": "busy host from imported real call",
+      "behaviors": [
+        "busy"
+      ],
+      "channel_effects": [
+        "opener_cut"
+      ],
+      "facts": {
+        "call_summary": "The agent successfully booked a reservation for two at 8:00 PM on Wednesday, October 7, under Wenjing Yu after the requested 7:00 PM time was unavailable. The restaurant confirmed the reservation details and ended the call politely.",
+        "observed_business_lines": [
+          "Oh,",
+          "Hello?",
+          "Hi.",
+          "Uh, who is this speaking?",
+          "Let me check. Give me one second.",
+          "I don't have availability at seven PM, but I have a five thirty. Does this work for you?",
+          "Okay. Let me check again. Actually, I have one spot at eight PM.",
+          "Okay. So can you spell the name?"
+        ]
+      },
+      "private_facts": {},
+      "style": "busy",
+      "will_not_reveal": []
+    },
+    "tags": [
+      "regression",
+      "from_call:call_c9de4aad86623236b9e0d58242d"
+    ],
+    "title": "Regression from Retell call_c9de4aad86623236b9e0d58242d",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Imported restaurant",
+        "customer_name": "Wenjing Yu",
+        "date": "the requested date",
+        "flexibility": "6:00 PM to 8:00 PM same day only",
+        "party_size": 2,
+        "phone_number": "+14155550199",
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked",
+        "needs_followup",
+        "unavailable"
+      ],
+      "channel_effects": [
+        "asr_noise"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 14,
+      "required_facts": []
+    },
+    "id": "regression-19e1e5b944a1",
+    "persona": {
+      "answers_as": "busy host from imported real call",
+      "behaviors": [
+        "busy"
+      ],
+      "channel_effects": [
+        "asr_noise"
+      ],
+      "facts": {
+        "call_summary": "The agent requested a table for two under Wenjing Yu on October 6. The restaurant indicated 8:00 PM was available rather than 7:00 PM, and the agent sought confirmation for an 8:00 PM reservation, but no final booking confirmation was obtained.",
+        "observed_business_lines": [
+          "Eight",
+          "Oh,",
+          "(unintelligible audio)",
+          "Sure.",
+          "Give me",
+          "one second.",
+          "Actually, I don't have a six PM. How about five thirty?",
+          "Okay. Actually, I have opened the APM."
+        ]
+      },
+      "private_facts": {},
+      "style": "busy",
+      "will_not_reveal": []
+    },
+    "tags": [
+      "regression",
+      "from_call:call_19e1e5b944a19fd9764d89f6a51"
+    ],
+    "title": "Regression from Retell call_19e1e5b944a19fd9764d89f6a51",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Imported restaurant",
+        "customer_name": "Wenjing Yu",
+        "date": "the requested date",
+        "flexibility": "6:00 PM to 8:00 PM same day only",
+        "party_size": 2,
+        "phone_number": "+14155550199",
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked",
+        "needs_followup",
+        "unavailable"
+      ],
+      "channel_effects": [
+        "stt_drop_first_greeting"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 14,
+      "required_facts": []
+    },
+    "id": "regression-8ee25a3dba43",
+    "persona": {
+      "answers_as": "busy host from imported real call",
+      "behaviors": [
+        "silent_pickup"
+      ],
+      "channel_effects": [
+        "stt_drop_first_greeting"
+      ],
+      "facts": {
+        "call_summary": "No conversation happened.",
+        "observed_business_lines": []
+      },
+      "private_facts": {},
+      "style": "busy",
+      "will_not_reveal": []
+    },
+    "tags": [
+      "regression",
+      "from_call:call_8ee25a3dba430c1aa39a263a7db"
+    ],
+    "title": "Regression from Retell call_8ee25a3dba430c1aa39a263a7db",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Imported restaurant",
+        "customer_name": "Wenjing Yu",
+        "date": "the requested date",
+        "flexibility": "6:00 PM to 8:00 PM same day only",
+        "party_size": 2,
+        "phone_number": "+14155550199",
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "hard",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked",
+        "needs_followup",
+        "unavailable"
+      ],
+      "channel_effects": [
+        "stt_drop_first_greeting"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 14,
+      "required_facts": []
+    },
+    "id": "regression-a152c026ae3a",
+    "persona": {
+      "answers_as": "busy host from imported real call",
+      "behaviors": [
+        "silent_pickup"
+      ],
+      "channel_effects": [
+        "stt_drop_first_greeting"
+      ],
+      "facts": {
+        "call_summary": "No conversation happened.",
+        "observed_business_lines": []
+      },
+      "private_facts": {},
+      "style": "busy",
+      "will_not_reveal": []
+    },
+    "tags": [
+      "regression",
+      "from_call:call_a152c026ae3a3ae4da2c8f2e51d"
+    ],
+    "title": "Regression from Retell call_a152c026ae3a3ae4da2c8f2e51d",
+    "vertical": "restaurant"
+  }
+]
