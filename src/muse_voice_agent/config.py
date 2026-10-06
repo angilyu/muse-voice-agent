@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from dotenv import load_dotenv
 
@@ -33,6 +34,50 @@ def _list(name: str, default: str) -> list[str]:
 
 
 @dataclass(frozen=True)
+class LLMModelSpec:
+    model: str
+    reasoning_effort: str | None = None
+
+
+def parse_llm_model_spec(raw: str) -> LLMModelSpec:
+    """Parse ``provider:model[@reasoning_effort]`` for production model settings."""
+    value = (raw or "").strip()
+    if not value:
+        raise ValueError("LLM model must not be empty")
+    model, sep, effort = value.rpartition("@")
+    if not sep:
+        return LLMModelSpec(model=value)
+    model = model.strip()
+    effort = effort.strip()
+    if not model or not effort:
+        raise ValueError(f"Invalid LLM model spec {raw!r}; expected provider:model[@effort]")
+    return LLMModelSpec(model=model, reasoning_effort=effort)
+
+
+def llm_model_init_args(
+    raw: str,
+    *,
+    temperature: float | None = 0.3,
+) -> tuple[str, dict[str, Any]]:
+    """Return the model name and ``init_chat_model`` kwargs for a production model spec.
+
+    Reasoning-effort specs intentionally omit temperature because OpenAI reasoning models reject
+    non-default temperature.
+    """
+    spec = parse_llm_model_spec(raw)
+    kwargs: dict[str, Any] = {}
+    if spec.reasoning_effort:
+        kwargs["reasoning_effort"] = spec.reasoning_effort
+        if spec.model.startswith("openai:"):
+            # OpenAI Chat Completions currently rejects reasoning_effort together with tools for
+            # gpt-5.4. LangChain's Responses API path supports streaming + tool calling.
+            kwargs["use_responses_api"] = True
+    elif temperature is not None:
+        kwargs["temperature"] = temperature
+    return spec.model, kwargs
+
+
+@dataclass(frozen=True)
 class Settings:
     # Which voice/telephony stack places live calls: "retell" or "livekit"
     voice_backend: str = field(default_factory=lambda: _str("VOICE_BACKEND", "retell").lower())
@@ -54,7 +99,7 @@ class Settings:
     agent_name: str = field(default_factory=lambda: _str("AGENT_NAME", "muse-voice-agent"))
 
     # Models
-    llm_model: str = field(default_factory=lambda: _str("LLM_MODEL", "openai:gpt-4.1-mini"))
+    llm_model: str = field(default_factory=lambda: _str("LLM_MODEL", "openai:gpt-5.4@low"))
     stt_model: str = field(default_factory=lambda: _str("STT_MODEL", "assemblyai/universal-3-5-pro"))
     tts_model: str = field(default_factory=lambda: _str("TTS_MODEL", "fishaudio/s2.1-pro"))
     tts_voice: str = field(

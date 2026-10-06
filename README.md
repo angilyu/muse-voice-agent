@@ -59,7 +59,7 @@ flowchart LR
    asks Retell to dial, and **immediately returns a `call_id`**. Phone calls take minutes, and
    MCP tools shouldn't block that long.
 2. Retell connects the call and streams the transcript to the server's websocket. On every turn,
-   the LangGraph graph (default `gpt-4.1-mini`) reads the conversation and a system prompt built from
+   the LangGraph graph (default `gpt-5.4` with low reasoning effort) reads the conversation and a system prompt built from
    the brief, then streams back what to say next.
 3. When the agent has what it needs, it calls the `record_outcome` tool, says goodbye and hangs up.
    A background monitor also tracks Retell's call state, so calls that end without an outcome
@@ -256,7 +256,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | --- | --- | --- |
 | `DRY_RUN` | `true` | Simulate calls; no keys or phone line needed |
 | `VOICE_BACKEND` | `retell` | `retell` or `livekit` |
-| `LLM_MODEL` | `openai:gpt-4.1-mini` | Any LangChain `provider:model` |
+| `LLM_MODEL` | `openai:gpt-5.4@low` | Any LangChain `provider:model`, with optional `@reasoning_effort` |
 | `MCP_AUTH_TOKEN` | — | Bearer token clients must send |
 | `MCP_HOST` / `MCP_PORT` | `127.0.0.1` / `8765` | Bind address (the Docker image uses `0.0.0.0:10000`) |
 | `PUBLIC_BASE_URL` | — | Public https URL; the Retell websocket is synced to it |

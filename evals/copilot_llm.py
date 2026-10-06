@@ -186,13 +186,12 @@ def make_chat_model(name: str, *, temperature: float | None = None, json_mode: b
     if name.startswith(PREFIX):
         return ChatCopilot.from_name(name)
     from langchain.chat_models import init_chat_model
+    from muse_voice_agent.config import llm_model_init_args
 
-    kwargs: dict[str, Any] = {}
-    if temperature is not None:
-        kwargs["temperature"] = temperature
-    if json_mode and name.startswith("openai:"):
+    model_name, kwargs = llm_model_init_args(name, temperature=temperature)
+    if json_mode and model_name.startswith("openai:"):
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
-    return init_chat_model(name, **kwargs)
+    return init_chat_model(model_name, **kwargs)
 
 
 def is_copilot(name: str | None) -> bool:
