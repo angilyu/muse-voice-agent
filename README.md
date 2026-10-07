@@ -71,7 +71,9 @@ flowchart LR
    reply. It then stays on the line so it can answer follow-ups (e.g. "how do you spell that?")
    and hangs up (`end_call`) once the business says bye or goes quiet for a few seconds.
    A background monitor also tracks Retell's call state, so calls that end without an outcome
-   (no answer, voicemail, hang-up) still get a final result.
+   (no answer, voicemail, hang-up) still get a final result. If the business spoke but hung up
+   before the agent recorded the result, for example right after "you're all set", the monitor
+   reads the result from the transcript. Its `follow_up` says it was read from the transcript.
 4. The assistant polls `get_call_status(call_id)` until `done` is true, then tells you the result.
 
 ```mermaid
@@ -307,6 +309,7 @@ src/muse_voice_agent/
   graph.py        LangGraph conversation graph, CallControl, and the call tools (record_outcome, end_call, press_digits, wait_on_hold)
   dispatcher.py   Starts calls (Retell, LiveKit, or simulated) and enforces limits
   retell.py       Retell REST client, custom-LLM websocket, call monitor
+  outcome_fallback.py  Reads the result from the transcript when a call ends before record_outcome
   agent.py        Optional LiveKit Agents worker (VOICE_BACKEND=livekit)
   store.py        SQLite call log (status, outcome, transcript)
   keepalive.py    Self-ping for hosts that sleep when idle

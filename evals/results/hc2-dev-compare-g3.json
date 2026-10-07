@@ -1,0 +1,1110 @@
+{
+  "a": {
+    "by_channel": {
+      "clean": {
+        "count": 108,
+        "pass_rate": 0.722
+      },
+      "phone": {
+        "count": 108,
+        "pass_rate": 0.704
+      }
+    },
+    "by_difficulty": {
+      "easy": {
+        "count": 52,
+        "pass_rate": 0.769
+      },
+      "hard": {
+        "count": 60,
+        "pass_rate": 0.767
+      },
+      "medium": {
+        "count": 104,
+        "pass_rate": 0.654
+      }
+    },
+    "by_vertical": {
+      "auto": {
+        "count": 12,
+        "pass_rate": 0.5
+      },
+      "bakery": {
+        "count": 4,
+        "pass_rate": 0.25
+      },
+      "catering": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "events": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "florist": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "food_ordering": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "golf": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "health": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "healthcare": {
+        "count": 8,
+        "pass_rate": 1.0
+      },
+      "home_services": {
+        "count": 36,
+        "pass_rate": 0.583
+      },
+      "hotel": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "housing": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "internet": {
+        "count": 4,
+        "pass_rate": 0.0
+      },
+      "kids": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "library": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "museum": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "notary": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "parking": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "pet": {
+        "count": 8,
+        "pass_rate": 0.625
+      },
+      "pharmacy": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "repair": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "restaurant": {
+        "count": 56,
+        "pass_rate": 0.768
+      },
+      "retail": {
+        "count": 12,
+        "pass_rate": 0.667
+      },
+      "salon": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "spa": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "voicemail": {
+        "count": 4,
+        "pass_rate": 0.25
+      },
+      "winery": {
+        "count": 4,
+        "pass_rate": 0.75
+      }
+    },
+    "conversation": {
+      "agent_turn_words_max_mean": 15.065,
+      "agent_turn_words_mean": 9.723,
+      "first_turn_words_excluding_opener_mean": 12.125,
+      "hung_up_with_unanswered_business_question": 9,
+      "multiple_question_turns": 0,
+      "repeated_detail_cases": 42,
+      "robotic_phrase_cases": 0
+    },
+    "copilot_premium_requests": 2265.07,
+    "count": 216,
+    "estimated_cost_usd": 0.0,
+    "gate_failures": {
+      "hung_up_with_unanswered_business_question": 9
+    },
+    "judge_means": {
+      "call_closing": 3.528,
+      "confirmation_quality": 3.493,
+      "listening_and_repair": 3.63,
+      "naturalness": 3.759,
+      "outcome_accuracy": 4.199,
+      "policy_safety": 4.801,
+      "screening_and_ivr_handling": 4.132,
+      "task_completion": 4.245,
+      "turn_economy": 4.537
+    },
+    "judge_policy_below_5": 41,
+    "outcome_inferred": 15,
+    "overall_score": 4.285,
+    "pass_rate": 0.713,
+    "rule_safety_failures": 0,
+    "run_ids": [
+      "hc2-baseline-dev-clean-r2",
+      "hc2-baseline-dev-phone-r2"
+    ],
+    "safety_violations": 41
+  },
+  "b": {
+    "by_channel": {
+      "clean": {
+        "count": 108,
+        "pass_rate": 0.843
+      },
+      "phone": {
+        "count": 108,
+        "pass_rate": 0.796
+      }
+    },
+    "by_difficulty": {
+      "easy": {
+        "count": 52,
+        "pass_rate": 0.808
+      },
+      "hard": {
+        "count": 60,
+        "pass_rate": 0.883
+      },
+      "medium": {
+        "count": 104,
+        "pass_rate": 0.788
+      }
+    },
+    "by_vertical": {
+      "auto": {
+        "count": 12,
+        "pass_rate": 1.0
+      },
+      "bakery": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "catering": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "events": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "florist": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "food_ordering": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "golf": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "health": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "healthcare": {
+        "count": 8,
+        "pass_rate": 1.0
+      },
+      "home_services": {
+        "count": 36,
+        "pass_rate": 0.778
+      },
+      "hotel": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "housing": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "internet": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "kids": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "library": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "museum": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "notary": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "parking": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "pet": {
+        "count": 8,
+        "pass_rate": 0.625
+      },
+      "pharmacy": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "repair": {
+        "count": 4,
+        "pass_rate": 0.25
+      },
+      "restaurant": {
+        "count": 56,
+        "pass_rate": 0.804
+      },
+      "retail": {
+        "count": 12,
+        "pass_rate": 0.583
+      },
+      "salon": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "spa": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "voicemail": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "winery": {
+        "count": 4,
+        "pass_rate": 1.0
+      }
+    },
+    "conversation": {
+      "agent_turn_words_max_mean": 15.241,
+      "agent_turn_words_mean": 9.694,
+      "first_turn_words_excluding_opener_mean": 11.755,
+      "hung_up_with_unanswered_business_question": 0,
+      "multiple_question_turns": 0,
+      "repeated_detail_cases": 46,
+      "robotic_phrase_cases": 0
+    },
+    "copilot_premium_requests": 2368.9,
+    "count": 216,
+    "estimated_cost_usd": 0.0,
+    "gate_failures": {},
+    "judge_means": {
+      "call_closing": 3.718,
+      "confirmation_quality": 3.438,
+      "listening_and_repair": 3.676,
+      "naturalness": 3.736,
+      "outcome_accuracy": 4.301,
+      "policy_safety": 4.866,
+      "screening_and_ivr_handling": 4.225,
+      "task_completion": 4.273,
+      "turn_economy": 4.583
+    },
+    "judge_policy_below_5": 26,
+    "outcome_inferred": 12,
+    "overall_score": 4.352,
+    "pass_rate": 0.819,
+    "rule_safety_failures": 0,
+    "run_ids": [
+      "hc2-final-dev-clean-r2",
+      "hc2-final-dev-phone-r2"
+    ],
+    "safety_violations": 26
+  },
+  "delta": {
+    "overall_score": 0.067,
+    "pass_rate": 0.106
+  },
+  "paired_flips": {
+    "fail_to_pass": 40,
+    "improvements": [
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.771,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.794,
+        "case_id": "ambiguous-this-friday",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.059,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.094,
+        "case_id": "ambiguous-this-friday",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.621,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.853,
+        "case_id": "apartment-tour-deposit",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.606,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.753,
+        "case_id": "callback-reference",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.853,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.971,
+        "case_id": "callback-reference",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.018,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.888,
+        "case_id": "callback-reference",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "missing required fact 'no_callback'; expected one of ['follow up', 'will follow up', 'no callback number']",
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.076,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.629,
+        "case_id": "closing-callback-after-goodbye-no-number",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.4,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.382,
+        "case_id": "closing-callback-after-goodbye-no-number",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'no_callback'; expected one of ['follow up', 'will follow up', 'no callback number']"
+        ],
+        "a_passed": false,
+        "a_score": 3.771,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.259,
+        "case_id": "closing-callback-after-goodbye-no-number",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "opener repeated after first turn (turns [2])"
+        ],
+        "a_passed": false,
+        "a_score": 4.471,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.835,
+        "case_id": "dog-daycare-robot",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.018,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.094,
+        "case_id": "electrician-ev-charger",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.018,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.753,
+        "case_id": "garage-door-quote",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.916,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.9,
+        "case_id": "gatekeeper-handyman-manager-transfer",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "missing required fact 'rate'; expected one of ['95']",
+          "missing required fact 'availability'; expected one of ['Friday 3']"
+        ],
+        "a_passed": false,
+        "a_score": 3.159,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.521,
+        "case_id": "handyman-address-request",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'rate'; expected one of ['95']",
+          "missing required fact 'availability'; expected one of ['Friday 3']"
+        ],
+        "a_passed": false,
+        "a_score": 3.447,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.218,
+        "case_id": "handyman-address-request",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.894,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.753,
+        "case_id": "hotel-sf-king-info",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.471,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.835,
+        "case_id": "hotel-sf-king-info",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.4,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.176,
+        "case_id": "locksmith-no-card",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.4,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.888,
+        "case_id": "locksmith-no-card",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.688,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.424,
+        "case_id": "locksmith-no-card",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.812,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.101,
+        "case_id": "locksmith-no-card",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'inventory'; expected one of ['inventory']"
+        ],
+        "a_passed": false,
+        "a_score": 4.059,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.341,
+        "case_id": "movers-large-window",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.511,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.3,
+        "case_id": "movers-large-window",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.265,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.547,
+        "case_id": "napa-tasting-info",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'ready'; expected one of ['15']"
+        ],
+        "a_passed": false,
+        "a_score": 3.251,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.632,
+        "case_id": "order-heytea-milk-tea",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.647,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.476,
+        "case_id": "price-above-limits",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'price'; expected one of ['45']"
+        ],
+        "a_passed": false,
+        "a_score": 3.953,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.968,
+        "case_id": "rest-napa-winery-card",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'email'; expected one of ['events@example.test']"
+        ],
+        "a_passed": false,
+        "a_score": 3.4,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.411,
+        "case_id": "rest-private-dining-followup",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "opener repeated after first turn (turns [5])"
+        ],
+        "a_passed": false,
+        "a_score": 4.284,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.705,
+        "case_id": "rest-robot-question",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "missing required fact 'best'; expected one of ['3:30']"
+        ],
+        "a_passed": false,
+        "a_score": 2.594,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.3,
+        "case_id": "salon-walkin",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.4,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.667,
+        "case_id": "screen-google-restaurant-booking",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'pickup'; expected one of ['9 AM']"
+        ],
+        "a_passed": false,
+        "a_score": 4.321,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.3,
+        "case_id": "spanish-restaurant-simple",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.853,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.753,
+        "case_id": "tire-stock-hold-no-book",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.471,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.382,
+        "case_id": "tire-stock-hold-no-book",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.812,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.424,
+        "case_id": "tire-stock-hold-no-book",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.471,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.835,
+        "case_id": "venue-minimum-spend",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "missing required fact 'fee'; expected one of ['1,500', '1500']",
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 2.868,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.114,
+        "case_id": "venue-minimum-spend",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 2.7,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.447,
+        "case_id": "voicemail-greeting",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 2.7,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.047,
+        "case_id": "voicemail-greeting",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 2.7,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.821,
+        "case_id": "voicemail-greeting",
+        "channel": "phone",
+        "pair_index": 1
+      }
+    ],
+    "net": 23,
+    "paired_count": 216,
+    "pass_to_fail": 17,
+    "regressions": [
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.712,
+        "b_issues": [
+          "missing required fact 'pickup'; expected one of ['7 PM']"
+        ],
+        "b_passed": false,
+        "b_score": 4.388,
+        "case_id": "bike-shop-ready",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.794,
+        "b_issues": [
+          "missing required fact 'ready'; expected one of ['tomorrow after noon']"
+        ],
+        "b_passed": false,
+        "b_score": 4.512,
+        "case_id": "bike-shop-ready",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.547,
+        "b_issues": [
+          "outcome 'declined' not in allowed ['info_received']",
+          "missing required fact 'temperament'; expected one of ['Tuesday 9']",
+          "missing required fact 'cost'; expected one of ['55']",
+          "missing required fact 'vaccines'; expected one of ['Bordetella']"
+        ],
+        "b_passed": false,
+        "b_score": 3.253,
+        "case_id": "dog-daycare-robot",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 2.553,
+        "b_issues": [
+          "missing required fact 'close'; expected one of ['7 PM']",
+          "outcome 'needs_followup' not in allowed ['info_received']"
+        ],
+        "b_passed": false,
+        "b_score": 2.594,
+        "case_id": "dry-cleaner-ready",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.3,
+        "b_issues": [
+          "missing required fact 'permit'; expected one of ['250']"
+        ],
+        "b_passed": false,
+        "b_score": 4.018,
+        "case_id": "electrician-ev-charger",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.547,
+        "b_issues": [
+          "missing required fact 'permit'; expected one of ['250']"
+        ],
+        "b_passed": false,
+        "b_score": 3.935,
+        "case_id": "electrician-ev-charger",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.835,
+        "b_issues": [
+          "missing required fact 'delivery'; expected one of ['18']"
+        ],
+        "b_passed": false,
+        "b_score": 4.306,
+        "case_id": "funeral-florist-rush",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.671,
+        "b_issues": [
+          "missing required fact 'delivery'; expected one of ['18']"
+        ],
+        "b_passed": false,
+        "b_score": 4.429,
+        "case_id": "funeral-florist-rush",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.753,
+        "b_issues": [
+          "missing required fact 'fee'; expected one of ['89']"
+        ],
+        "b_passed": false,
+        "b_score": 4.182,
+        "case_id": "garage-door-quote",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.226,
+        "b_issues": [
+          "missing required fact 'rate'; expected one of ['95']",
+          "missing required fact 'availability'; expected one of ['Friday 3']"
+        ],
+        "b_passed": false,
+        "b_score": 3.571,
+        "case_id": "handyman-address-request",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.835,
+        "b_issues": [
+          "missing required fact 'fee'; expected one of ['free']"
+        ],
+        "b_passed": false,
+        "b_score": 3.935,
+        "case_id": "library-room-policy",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.671,
+        "b_issues": [
+          "missing required fact 'online'; expected one of ['online form']"
+        ],
+        "b_passed": false,
+        "b_score": 4.284,
+        "case_id": "museum-private-tour",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.521,
+        "b_issues": [
+          "missing required fact 'ready'; expected one of ['15']"
+        ],
+        "b_passed": false,
+        "b_score": 3.584,
+        "case_id": "order-heytea-milk-tea",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 3.895,
+        "b_issues": [
+          "missing required fact 'email'; expected one of ['events@example.test']"
+        ],
+        "b_passed": false,
+        "b_score": 3.524,
+        "case_id": "rest-private-dining-followup",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.653,
+        "b_issues": [
+          "missing required fact 'confirmation'; expected one of ['SV613']"
+        ],
+        "b_passed": false,
+        "b_score": 3.2,
+        "case_id": "rest-robot-question",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.667,
+        "b_issues": [
+          "outcome 'needs_followup' not in allowed ['booked']",
+          "missing required fact 'confirmation'; expected one of ['OL745', 'OL 745']"
+        ],
+        "b_passed": false,
+        "b_score": 3.6,
+        "case_id": "screen-google-restaurant-booking",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.467,
+        "b_issues": [
+          "missing required fact 'time'; expected one of ['7:45']"
+        ],
+        "b_passed": false,
+        "b_score": 4.433,
+        "case_id": "screen-google-restaurant-booking",
+        "channel": "phone",
+        "pair_index": 0
+      }
+    ],
+    "unpaired_count": 0
+  }
+}
