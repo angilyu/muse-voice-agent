@@ -180,13 +180,26 @@ def _status_notes(task: AnyTask, control: CallControl, history: list[BaseMessage
         )
         if not heard:
             notes.append(
-                "Your introduction got cut off, so they don't know who you are. Start this reply by "
-                f'briefly saying who you are, e.g. "Sorry, this is an assistant calling for '
-                f'{task.customer_name}."'
+                "Your introduction got cut off, so they don't know who you are. Start this reply "
+                f'without apologizing, e.g. "I\'m the assistant for {task.customer_name}."'
             )
     if not notes:
         return ""
     return "\n\nCall status right now:\n- " + "\n- ".join(notes)
+
+
+_ANYTHING_ELSE = re.compile(
+    r"\b(?:anything else|something else|is that (?:it|all)|that(?:'s| is) (?:it|all)|all set)\b", re.I
+)
+
+
+def _silent_hangup_fallback(their_last_line: str, *, done: bool) -> str:
+    """What to say when the model tried to hang up without words but the call must stay open."""
+    if done and _ANYTHING_ELSE.search(their_last_line):
+        return "No, that's all. Thanks, bye!"
+    if "?" in their_last_line or not done:
+        return "Sorry, could you say that again?"
+    return "Thanks so much. Bye!"
 
 
 def _hold_hangup_until_they_reply(
@@ -204,10 +217,15 @@ def _hold_hangup_until_they_reply(
         outcomes.add(control.outcome.outcome)
     if "voicemail" in outcomes:
         return msg
-    asked = "?" in their_last_line and not is_farewell(their_last_line)
-    if not recorded and not (asked and _text(msg).strip()):
+    their_turn_is_open = not is_farewell(their_last_line) and bool(their_last_line.strip())
+    asked = "?" in their_last_line and their_turn_is_open
+    should_wait_after_outcome = control.outcome is not None and their_turn_is_open
+    if not recorded and not asked and not should_wait_after_outcome:
         return msg
     kept = [tc for tc in msg.tool_calls if tc["name"] != "end_call"]
+    if not _text(msg).strip():
+        fallback = _silent_hangup_fallback(their_last_line, done=control.outcome is not None or bool(recorded))
+        return AIMessageChunk(content=fallback, tool_calls=kept, id=msg.id)
     return AIMessageChunk(content=msg.content, tool_calls=kept, id=msg.id)
 
 
@@ -216,6 +234,26 @@ def _content_text(m: BaseMessage) -> str:
     if isinstance(c, str):
         return c
     return "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in c or [])
+
+
+UNAUTHORIZED_COMMIT_NOTE = "Agent was not authorized to commit; confirm with the business yourself."
+
+
+def apply_authority(task: AnyTask, outcome: CallOutcome) -> CallOutcome:
+    """An info-only brief never reports a booking or order as done, whoever recorded it."""
+    if not (
+        isinstance(task, GeneralCall)
+        and task.authority == "info_only"
+        and outcome.outcome in {"booked", "ordered"}
+    ):
+        return outcome
+    note = UNAUTHORIZED_COMMIT_NOTE
+    return outcome.model_copy(
+        update={
+            "outcome": "needs_followup",
+            "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
+        }
+    )
 
 
 def build_call_graph(
@@ -239,20 +277,7 @@ def build_call_graph(
     async def record_outcome(**kwargs: Any) -> str:
         """Record the result of this phone call, together with a short goodbye in the same reply.
         Call it again later only if a detail changes. This does not hang up."""
-        outcome = CallOutcome(**kwargs)
-        if (
-            isinstance(task, GeneralCall)
-            and task.authority == "info_only"
-            and outcome.outcome in {"booked", "ordered"}
-        ):
-            # The brief didn't authorize a commitment; never report one as done.
-            note = "Agent was not authorized to commit; confirm with the business yourself."
-            outcome = outcome.model_copy(
-                update={
-                    "outcome": "needs_followup",
-                    "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
-                }
-            )
+        outcome = apply_authority(task, CallOutcome(**kwargs))
         control.outcome = outcome
         on_outcome(outcome)
         return (
@@ -337,7 +362,11 @@ def build_call_graph(
             their_last = next(
                 (_content_text(m) for m in reversed(history) if isinstance(m, HumanMessage)), ""
             )
+            before_hold_text = _text(full).strip()
             full = _hold_hangup_until_they_reply(full, their_last, control)
+            after_hold_text = _text(full).strip()
+            if after_hold_text and not before_hold_text:
+                writer(after_hold_text)
         if (
             full is not None
             and any(tc["name"] == "end_call" for tc in full.tool_calls)

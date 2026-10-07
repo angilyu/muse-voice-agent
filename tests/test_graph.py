@@ -368,3 +368,28 @@ async def test_does_not_hang_up_while_their_question_is_pending():
         control.closing = False  # skip the farewell fast path so the model runs
         await _run(graph, [AIMessage(content="Hi, for Angi."), HumanMessage(content=their_line)])
         assert control.end_requested is should_end, their_line
+
+
+@pytest.mark.asyncio
+async def test_silent_end_call_on_question_gets_spoken_fallback():
+    from muse_voice_agent.graph import CallControl
+
+    control = CallControl(opener_spoken=True)
+    calls = [{"name": "end_call", "args": {}, "id": "e"}]
+    model = FakeToolModel(messages=iter([AIMessage(content="", tool_calls=calls)]))
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+    spoken = await _run(
+        graph,
+        [AIMessage(content="Hi, this is an assistant calling on behalf of Angi."), HumanMessage(content="What's a good callback number?")],
+    )
+    assert "could you say that again" in "".join(spoken)
+    assert control.end_requested is False
+
+
+def test_silent_hangup_fallback_matches_their_last_line():
+    from muse_voice_agent.graph import _silent_hangup_fallback
+
+    assert _silent_hangup_fallback("Anything else I can help with?", done=True) == "No, that's all. Thanks, bye!"
+    assert "say that again" in _silent_hangup_fallback("Can you spell the name?", done=True)
+    assert "say that again" in _silent_hangup_fallback("Okay, what day?", done=False)
+    assert _silent_hangup_fallback("Great, you're booked.", done=True) == "Thanks so much. Bye!"

@@ -11,6 +11,7 @@ from muse_voice_agent.tasks import AnyTask, parse_task
 
 CASES_PATH = Path(__file__).with_name("bay_area_cases.json")
 REGRESSION_CASES_PATH = Path(__file__).with_name("regression_cases.json")
+SPLITS_PATH = Path(__file__).with_name("splits.json")
 
 ToolName = Literal["place_call", "book_restaurant_reservation", "request_handyman_quote"]
 Difficulty = Literal["easy", "medium", "hard"]
@@ -87,9 +88,9 @@ class EvalCase(BaseModel):
         return self
 
 
-def load_all_cases(path: Path = CASES_PATH) -> list[EvalCase]:
+def load_all_cases(path: Path = CASES_PATH, *, include_regression: bool = True) -> list[EvalCase]:
     paths = [path]
-    if path == CASES_PATH and REGRESSION_CASES_PATH.exists():
+    if include_regression and path == CASES_PATH and REGRESSION_CASES_PATH.exists():
         paths.append(REGRESSION_CASES_PATH)
     raw: list[dict[str, Any]] = []
     for p in paths:
@@ -101,13 +102,24 @@ def load_all_cases(path: Path = CASES_PATH) -> list[EvalCase]:
     return cases
 
 
+def load_splits(path: Path = SPLITS_PATH) -> dict[str, Any]:
+    return json.loads(path.read_text())
+
+
 def select_cases(selector: str, *, seed: int | None = None, limit: int | None = None) -> list[EvalCase]:
     cases = load_all_cases()
+    by_id = {c.id: c for c in cases}
     selected: list[EvalCase] = []
     parts = [p.strip() for p in (selector or "all").split(",") if p.strip()]
     for part in parts or ["all"]:
         if part == "all":
             selected.extend(cases)
+        elif part.startswith("split:"):
+            split_name = part[6:]
+            splits = load_splits()
+            if split_name not in {"dev", "heldout"}:
+                raise ValueError(f"unknown eval split: {split_name}")
+            selected.extend(by_id[cid] for cid in splits[split_name])
         elif part.startswith("tag:"):
             tag = part[4:]
             selected.extend([c for c in cases if tag in c.tags])
