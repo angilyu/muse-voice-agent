@@ -67,8 +67,14 @@ flowchart LR
    after pickup (call screeners often wait), the agent speaks first. It can also press keypad digits
    (`press_digits`) for "press 1 to connect" screens and phone menus, and stay quiet on hold
    (`wait_on_hold`).
-3. When the agent has what it needs, it says a short goodbye and calls `record_outcome` in the same
-   reply. It then stays on the line so it can answer follow-ups (e.g. "how do you spell that?")
+   Telephony reports a screener, voicemail, phone menu and a person all as "answered", so
+   `pickup.py` classifies each business line from its words. The agent answers a screener with who
+   and why in one sentence, stays silent while it "connects", and skips the opener on a phone menu.
+   When the first person finally says "Hello?" after the agent already spoke into silence, to a
+   screener or to a menu, it introduces itself again, since that person never heard it.
+3. When the agent has what it needs, it calls `record_outcome`. The goodbye is the tool's first
+   argument (`say`), and it is streamed to speech while the rest of the arguments are still arriving,
+   so a decision turn needs one model call instead of two. It then stays on the line so it can answer follow-ups (e.g. "how do you spell that?")
    and hangs up (`end_call`) once the business says bye or goes quiet for a few seconds.
    A background monitor also tracks Retell's call state, so calls that end without an outcome
    (no answer, voicemail, hang-up) still get a final result. If the business spoke but hung up
@@ -294,6 +300,8 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `PUBLIC_BASE_URL` | — | Public https URL; the Retell websocket is synced to it |
 | `ALLOWED_DIAL_PREFIXES` | `+1` | Comma-separated E.164 prefixes the agent may dial |
 | `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `300` / `3` | Limits on call length and simultaneous calls |
+| `LLM_SERVICE_TIER` | `priority` | OpenAI service tier. Priority cuts about 0.1 to 0.9 s per turn and costs about 2x per token; `default` opts out |
+| `FILLER_AFTER_MS` | `1500` | Retell: say "Hmm," if the model hasn't started speaking a reply to a person by then; `0` disables |
 | `SILENT_PICKUP_MS` | `3000` | Retell: if nobody speaks this long after pickup (e.g. a call screener), the agent speaks first; `0` disables |
 | `RETELL_VOICE_ID` | `cartesia-Cleo` | Retell voice |
 | `DEFAULT_CALLBACK_NUMBER` | — | Used when the client doesn't pass one |
@@ -306,6 +314,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 src/muse_voice_agent/
   mcp_server.py   MCP tools, bearer auth, /healthz, ASGI app
   tasks.py        Brief models (general, restaurant, handyman), validation, system prompts
+  pickup.py       Classifies business lines: screener, voicemail, phone menu, or a person
   graph.py        LangGraph conversation graph, CallControl, and the call tools (record_outcome, end_call, press_digits, wait_on_hold)
   dispatcher.py   Starts calls (Retell, LiveKit, or simulated) and enforces limits
   retell.py       Retell REST client, custom-LLM websocket, call monitor
@@ -354,7 +363,8 @@ the hill-climbing workflow.
 
 ## Roadmap
 
-- [ ] Lower turn latency (faster model, prompt caching, fewer graph steps per turn)
+- [x] Lower turn latency: one model call per decision turn, cache-friendly prompts, priority tier, filler
+- [ ] Lower latency further with a faster model that keeps quality
 - [ ] Persistent call log (Postgres or a mounted disk) for hosted deployments
 - [ ] Callback handling when a business calls the number back
 - [ ] Multi-language calls

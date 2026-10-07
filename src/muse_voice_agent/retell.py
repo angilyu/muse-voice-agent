@@ -13,9 +13,11 @@ LangGraph graph the LiveKit worker uses.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import json
 import logging
+import re
 import time
 from typing import Any, Callable
 
@@ -28,6 +30,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from .config import Settings
 from .graph import CallControl, CallOutcome, build_call_graph
 from .outcome_fallback import has_business_speech, infer_outcome
+from .pickup import classify_line, is_note
 from .store import FINAL_STATUSES, CallStore
 from .tasks import parse_task
 
@@ -47,6 +50,9 @@ SILENT_PICKUP_NOTE = (
 )
 # Once we've said goodbye, a few seconds of silence means they're done: hang up.
 CLOSING_REMINDER_MS = 4000
+# Said when a reply to a person is slow to start, so the line doesn't go dead while the model thinks.
+FILLER = "Hmm, "
+_LEADING_FILLER = re.compile(r"^\s*(?:hmm+|um+|uh+)\b[,.!]?\s*", re.I)
 
 
 class RetellError(Exception):
@@ -206,11 +212,14 @@ class RetellLLMSession:
         bind_timeout: float = 10.0,
         settings: Settings | None = None,
         silent_pickup_seconds: float | None = None,
+        filler_seconds: float | None = None,
     ) -> None:
         self.ws = ws
         self.settings = settings
         # Speak first if nobody says anything this long after pickup (None disables).
         self.silent_pickup_seconds = silent_pickup_seconds
+        # Say FILLER if a reply to a person has no words after this long (None disables).
+        self.filler_seconds = filler_seconds
         self.control = CallControl()
         self._closing_configured = False
         self._heard_response_request = False
@@ -381,6 +390,22 @@ class RetellLLMSession:
             messages.append(HumanMessage(content=REMINDER_NUDGE))
         await self._run_turn(messages, response_id=msg["response_id"])
 
+    def _filler_wait(self, messages: list[BaseMessage]) -> float | None:
+        """Seconds to wait before a filler, or None when this turn shouldn't get one."""
+        if not self.filler_seconds or not self.control.opener_spoken or self.control.closing:
+            return None
+        last = messages[-1] if messages else None
+        if not isinstance(last, HumanMessage) or not isinstance(last.content, str):
+            return None
+        if is_note(last.content) or classify_line(last.content) != "person":
+            return None  # screeners, menus and voicemail don't need to hear us think
+        return self.filler_seconds
+
+    async def _graph_chunks(self, messages: list[BaseMessage]):
+        async for chunk in self.graph.astream({"messages": messages}, stream_mode="custom"):
+            if chunk:
+                yield chunk
+
     async def _run_turn(
         self,
         messages: list[BaseMessage],
@@ -393,16 +418,35 @@ class RetellLLMSession:
             base: dict[str, Any] = {"response_type": "response", "response_id": response_id}
         else:
             base = {"response_type": "agent_interrupt", "interrupt_id": interrupt_id}
-        # The fixed opener is the first chunk of our first turn; don't let a "Hello?" cut it off.
-        protect_opener = not self.control.opener_spoken
+        filler_wait = self._filler_wait(messages)
+        chunks = self._graph_chunks(messages).__aiter__()
+        pending: asyncio.Future | None = asyncio.ensure_future(chunks.__anext__())
+        filler_sent = False
         try:
-            async for chunk in self.graph.astream({"messages": messages}, stream_mode="custom"):
-                if chunk:
-                    event = {**base, "content": chunk, "content_complete": False}
-                    if protect_opener:
-                        event["no_interruption_allowed"] = True
-                        protect_opener = False
-                    await self._send(event)
+            if filler_wait is not None:
+                done, _ = await asyncio.wait({pending}, timeout=filler_wait)
+                if not done and not self.control.on_hold:
+                    filler_sent = True
+                    await self._send({**base, "content": FILLER, "content_complete": False})
+            first = True
+            while pending is not None:
+                try:
+                    chunk = await pending
+                except StopAsyncIteration:
+                    pending = None
+                    break
+                pending = asyncio.ensure_future(chunks.__anext__())
+                if filler_sent and first:
+                    chunk = _LEADING_FILLER.sub("", chunk)  # no "Hmm, hmm, ..."
+                first = False
+                if not chunk:
+                    continue
+                event = {**base, "content": chunk, "content_complete": False}
+                if self.control.opener_text and chunk.strip() == self.control.opener_text:
+                    # The fixed opener (first turn, or again for someone who just picked up);
+                    # don't let a "Hello?" cut it off.
+                    event["no_interruption_allowed"] = True
+                await self._send(event)
         except asyncio.CancelledError:
             raise
         except Exception:  # noqa: BLE001
@@ -411,6 +455,13 @@ class RetellLLMSession:
                 {**base, "content": "Sorry, could you say that again?", "content_complete": True}
             )
             return
+        finally:
+            if pending is not None and not pending.done():
+                pending.cancel()
+                with contextlib.suppress(BaseException):
+                    await pending
+            with contextlib.suppress(Exception):
+                await chunks.aclose()
         final: dict[str, Any] = {
             **base,
             "content": "",
@@ -474,6 +525,7 @@ class RetellWebsocketRouter:
             self.model_factory(),
             settings=self.settings,
             silent_pickup_seconds=(self.settings.silent_pickup_ms / 1000) or None,
+            filler_seconds=(self.settings.filler_after_ms / 1000) or None,
         ).run()
 
 

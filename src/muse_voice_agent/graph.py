@@ -9,11 +9,18 @@ per-call `CallControl` that the voice backend reads after every turn:
 - end_call / press_digits / wait_on_hold: telephony actions, carried out by the backend.
 
 To save a model round trip, a turn ends right after the tools run whenever the model already spoke in
-the same response (e.g. "Perfect, thanks. Bye!" + record_outcome) or used a telephony tool.
+the same response (e.g. "Perfect, thanks. Bye!" + record_outcome) or used a telephony tool. The model
+often emits record_outcome before any text, so the goodbye is also its first argument (`say`), which
+is spoken while the rest of the arguments are still streaming.
+
+Before the model runs, each business line is classified (see `pickup`), so screeners, phone menus and
+voicemail are handled without waiting on the model where possible, and a person who picks up after
+we've spoken into silence, to a screener or to a menu hears the opener again.
 """
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Literal, TypedDict
@@ -31,8 +38,9 @@ from langgraph.config import get_stream_writer
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
+from .pickup import classify_line, is_greeting, is_note
 from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line
 
 _TOOL_MARKER = "<function="
@@ -76,11 +84,31 @@ class CallOutcome(BaseModel):
     reference: str | None = Field(default=None, description="Confirmation / reference number")
 
 
+SAY_FIELD = "say"
+# Same fields as CallOutcome with the spoken goodbye first, so it streams before the rest.
+RecordOutcomeArgs = create_model(
+    "RecordOutcomeArgs",
+    say=(
+        str,
+        Field(
+            default="",
+            description=(
+                "The short goodbye you say out loud right now, e.g. \"Perfect, thanks so much. Bye!\" "
+                "(answer their last question first if they asked one). Always fill this in."
+            ),
+        ),
+    ),
+    **{name: (f.annotation, f) for name, f in CallOutcome.model_fields.items()},
+)
+
+
 @dataclass
 class CallControl:
     """Per-call state shared between the graph's tools and the voice backend."""
 
     opener_spoken: bool = False
+    # The fixed opener text; the voice backend keeps it from being interrupted.
+    opener_text: str = ""
     outcome: CallOutcome | None = None
     # The outcome is recorded and we've said goodbye; we're waiting for them to wrap up.
     closing: bool = False
@@ -161,7 +189,41 @@ class _ToolMarkupFilter:
         return 0
 
 
-def _status_notes(task: AnyTask, control: CallControl, history: list[BaseMessage]) -> str:
+def _line_notes(task: AnyTask, kind: str | None, *, intro_now: bool, reintro: bool) -> list[str]:
+    """Notes about what's on the line, from the keyword classifier."""
+    name = task.customer_name
+    if reintro:
+        return [
+            "A person just picked up and didn't hear you before (you were talking to silence, a "
+            "screener or a menu). Your opener was just spoken again; now say why you're calling in "
+            "one short sentence, as if for the first time. Don't say \"as I said\"."
+        ]
+    if kind == "screener":
+        return [
+            "This line is an automated call screener, not a person. Answer it in one sentence: who "
+            f"you are (an AI assistant calling for {name}) and why you're calling"
+            + (" (your opener just covered who, so only add why)" if intro_now else "")
+            + ". No apology and no question. Then stop and wait for a person."
+        ]
+    if kind == "voicemail":
+        return [
+            "This is voicemail or an answering machine. Leave one short message: why you're calling "
+            f"for {name}, and that {name} will call back"
+            + (" (your opener just said who you are, so don't introduce yourself again)" if intro_now else "")
+            + ". Then record outcome \"voicemail\" and call end_call in the same reply."
+        ]
+    if kind == "menu":
+        return [
+            "This is an automated phone menu, not a person. Don't introduce yourself or chat. Use "
+            "press_digits for the option that reaches reservations, scheduling, orders or a person "
+            "(or the operator). If it only takes spoken options, say the option in a few words."
+        ]
+    return []
+
+
+def _status_notes(
+    task: AnyTask, control: CallControl, history: list[BaseMessage], *, intro_now: bool = False
+) -> list[str]:
     notes: list[str] = []
     if control.outcome is not None:
         o = control.outcome
@@ -173,7 +235,7 @@ def _status_notes(task: AnyTask, control: CallControl, history: list[BaseMessage
             "again with the corrected details. Once they say bye or there's nothing left, say a quick "
             '"Bye!" and call end_call in the same reply.'
         )
-    elif control.opener_spoken:
+    elif control.opener_spoken and not intro_now:
         first = task.customer_name.split()[0].lower()
         heard = any(
             isinstance(m, AIMessage) and first in _content_text(m).lower() for m in history
@@ -183,9 +245,90 @@ def _status_notes(task: AnyTask, control: CallControl, history: list[BaseMessage
                 "Your introduction got cut off, so they don't know who you are. Start this reply "
                 f'without apologizing, e.g. "I\'m the assistant for {task.customer_name}."'
             )
+    return notes
+
+
+def _notes_message(notes: list[str]) -> SystemMessage | None:
+    # A trailing message, not part of the system prompt, so the prompt prefix stays cacheable.
     if not notes:
+        return None
+    return SystemMessage(content="Call status right now:\n- " + "\n- ".join(notes))
+
+
+_PARTIAL_SAY = re.compile(r'"say"\s*:\s*"((?:[^"\\]|\\.)*)(")?')
+
+
+class _OpenerDropper:
+    """Drops a copy of the opener the model sometimes starts with; it was already spoken."""
+
+    def __init__(self, opener: str) -> None:
+        self.opener = opener.strip().lower()
+        self.buf = ""
+        self.done = False
+
+    def feed(self, text: str) -> str:
+        if self.done:
+            return text
+        self.buf += text
+        head = self.buf.lstrip().lower()
+        if len(head) < len(self.opener) and self.opener.startswith(head):
+            return ""  # might still be the opener
+        self.done = True
+        out, self.buf = self.buf, ""
+        if head.startswith(self.opener):
+            return out.lstrip()[len(self.opener) :].lstrip()
+        return out
+
+    def flush(self) -> str:
+        self.done = True
+        out, self.buf = self.buf, ""
+        return out
+
+
+def _strip_opener(text: str, opener: str) -> str:
+    if text.lower().startswith(opener.strip().lower()):
+        return text[len(opener.strip()) :].lstrip()
+    return text
+
+
+class _SayStreamer:
+    """Pull the `say` argument out of record_outcome's streamed JSON arguments as it arrives."""
+
+    def __init__(self) -> None:
+        self._args: dict[int, list[str]] = {}
+        self._names: dict[int, str] = {}
+        self.spoken = ""
+        self.done = False
+
+    def feed(self, chunk: AIMessageChunk) -> str:
+        """Return newly available `say` text."""
+        for tc in getattr(chunk, "tool_call_chunks", None) or []:
+            idx = tc.get("index") or 0
+            if tc.get("name"):
+                self._names[idx] = tc["name"]
+            if tc.get("args"):
+                self._args.setdefault(idx, []).append(tc["args"])
+        if self.done:
+            return ""
+        for idx, name in self._names.items():
+            if name != "record_outcome":
+                continue
+            m = _PARTIAL_SAY.search("".join(self._args.get(idx, [])))
+            if not m:
+                return ""
+            raw = m.group(1)
+            if m.group(2):
+                self.done = True
+            else:
+                raw = re.sub(r"\\(?:u[0-9a-fA-F]{0,3})?$", "", raw)
+            try:
+                value = json.loads(f'"{raw}"')
+            except ValueError:
+                return ""
+            new = value[len(self.spoken) :] if value.startswith(self.spoken) else ""
+            self.spoken = value if value.startswith(self.spoken) else self.spoken
+            return new
         return ""
-    return "\n\nCall status right now:\n- " + "\n- ".join(notes)
 
 
 _ANYTHING_ELSE = re.compile(
@@ -267,16 +410,20 @@ def build_call_graph(
 
         from .config import get_settings, llm_model_init_args
 
-        model_name, model_kwargs = llm_model_init_args(get_settings().llm_model, temperature=0.3)
+        settings = get_settings()
+        model_name, model_kwargs = llm_model_init_args(
+            settings.llm_model, temperature=0.3, service_tier=settings.llm_service_tier
+        )
         model = init_chat_model(model_name, **model_kwargs)
 
     control = control if control is not None else CallControl()
     system_prompt = build_system_prompt(task)
 
-    @tool("record_outcome", args_schema=CallOutcome)
+    @tool("record_outcome", args_schema=RecordOutcomeArgs)
     async def record_outcome(**kwargs: Any) -> str:
         """Record the result of this phone call, together with a short goodbye in the same reply.
         Call it again later only if a detail changes. This does not hang up."""
+        kwargs.pop(SAY_FIELD, None)
         outcome = apply_authority(task, CallOutcome(**kwargs))
         control.outcome = outcome
         on_outcome(outcome)
@@ -311,6 +458,7 @@ def build_call_graph(
     llm_with_tools = model.bind_tools(tools)
 
     opener = opening_line(task)
+    control.opener_text = opener
 
     async def caller(state: CallState) -> dict[str, list[BaseMessage]]:
         writer = get_stream_writer()
@@ -323,23 +471,59 @@ def build_call_graph(
             control.end_requested = True
             return {"messages": [AIMessage(content="Bye!")]}
 
-        # On our first turn, speak the fixed opener before the LLM runs; its latency then overlaps
-        # with the opener's playback instead of leaving the callee in silence.
-        first_turn = not control.opener_spoken and not any(
-            isinstance(m, AIMessage) for m in history
+        last_line = _content_text(last) if isinstance(last, HumanMessage) else ""
+        kind = classify_line(last_line) if last_line and not is_note(last_line) else None
+        earlier_lines = [
+            _content_text(m)
+            for m in history[:-1]
+            if isinstance(m, HumanMessage) and not is_note(_content_text(m))
+        ]
+        # Someone has heard us only if the line just before this one was a person; a screener
+        # handoff, menu or voicemail in between means whoever speaks now is new to the call.
+        person_before = bool(earlier_lines) and classify_line(earlier_lines[-1]) == "person"
+        spoke_before = any(isinstance(m, AIMessage) and _content_text(m).strip() for m in history)
+
+        if kind == "screener_wait" and not person_before and control.outcome is None:
+            # A screener or forwarding service is connecting us ("please stay on the line"); talking
+            # now would only be heard by the recording, so wait quietly for a person.
+            control.on_hold = True
+            return {"messages": []}
+
+        # Speak the fixed opener before the LLM runs, so its latency overlaps with the opener's
+        # playback instead of leaving the callee in silence: on our first turn (unless it's a phone
+        # menu), and again when a person first greets us after we spoke to silence, a screener or a
+        # menu, since they never heard who we are.
+        reintro = (
+            control.outcome is None
+            and kind == "person"
+            and not person_before
+            and spoke_before
+            and is_greeting(last_line, getattr(task, "business_name", None))
         )
-        notes = "" if first_turn else _status_notes(task, control, history)
-        messages: list[BaseMessage] = [SystemMessage(content=system_prompt + notes), *history]
-        if first_turn:
+        first_turn = not control.opener_spoken and not spoke_before and kind != "menu"
+        intro_now = first_turn or reintro
+        notes = _line_notes(task, kind, intro_now=intro_now, reintro=reintro)
+        notes += _status_notes(task, control, history, intro_now=intro_now)
+        messages: list[BaseMessage] = [SystemMessage(content=system_prompt), *history]
+        if intro_now:
             writer(opener + " ")
             messages.append(AIMessage(content=opener))
-        control.opener_spoken = True
+            control.opener_spoken = True
+        if (note := _notes_message(notes)) is not None:
+            messages.append(note)
         full: AIMessageChunk | None = None
         tool_filter = _ToolMarkupFilter()
+        say_streamer = _SayStreamer()
         held: str | None = ""  # don't speak until there's a word, so "..." alone is never voiced
+        spoke_text = False
+        dropper = _OpenerDropper(opener) if intro_now else None
 
         def speak(text: str) -> None:
             nonlocal held
+            if dropper is not None:
+                text = dropper.feed(text)
+                if not text:
+                    return
             if held is None:
                 writer(text)
             elif re.search(r"\w", held + text):
@@ -350,12 +534,36 @@ def build_call_graph(
 
         async for chunk in llm_with_tools.astream(messages):
             text = tool_filter.feed(_text(chunk))
-            if text:
+            if text and not say_streamer.spoken:
                 speak(text)
+                spoke_text = spoke_text or bool(text.strip())
+            said = say_streamer.feed(chunk)
+            if said and not spoke_text:
+                speak(said)
             full = chunk if full is None else full + chunk
         text = tool_filter.flush()
-        if text:
+        if text and not say_streamer.spoken:
             speak(text)
+            spoke_text = spoke_text or bool(text.strip())
+        if full is not None and not spoke_text:
+            # Providers that don't stream tool arguments: speak the goodbye from the final call.
+            final_say = next(
+                (
+                    str((tc.get("args") or {}).get(SAY_FIELD) or "")
+                    for tc in full.tool_calls
+                    if tc["name"] == "record_outcome"
+                ),
+                "",
+            ).strip()
+            if final_say.startswith(say_streamer.spoken) and final_say != say_streamer.spoken:
+                speak(final_say[len(say_streamer.spoken) :])
+                say_streamer.spoken = final_say
+            if say_streamer.spoken.strip():
+                full = AIMessageChunk(
+                    content=say_streamer.spoken.strip(), tool_calls=full.tool_calls, id=full.id
+                )
+        if dropper is not None and (rest := dropper.flush()):
+            speak(rest)
         if held is not None and full is not None and held.strip():
             full = AIMessageChunk(content="", tool_calls=full.tool_calls, id=full.id)
         if full is not None and full.tool_calls:
@@ -376,10 +584,10 @@ def build_call_graph(
             writer("Bye!")
             full = full + AIMessageChunk(content="Bye!", id=full.id)
         if full is None:
-            return {"messages": [AIMessage(content=opener)] if first_turn else []}
+            return {"messages": [AIMessage(content=opener)] if intro_now else []}
         content: Any = full.content
-        if first_turn:
-            content = f"{opener} {_text(full).strip()}".strip()
+        if intro_now:
+            content = f"{opener} {_strip_opener(_text(full).strip(), opener)}".strip()
         if control.outcome is not None and _text(full).strip() and not full.tool_calls:
             control.closing = True
         return {

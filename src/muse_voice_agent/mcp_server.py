@@ -185,7 +185,9 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             party_size: Number of guests.
             date: Requested date, e.g. "Fri Oct 10".
             time: Requested time, e.g. "7:30 PM".
-            flexibility: Acceptable alternatives, e.g. "6:30-8:30pm same day".
+            flexibility: Acceptable alternatives, e.g. "6:30-8:30pm same day". Ask the user and
+                pass it when they're flexible: without it the agent can't book a nearby time, so
+                if the exact time is taken it only collects the closest times for the user.
             special_requests: Seating preferences, allergies, occasion.
             callback_number: Number the restaurant may call back (shared only if asked).
         """

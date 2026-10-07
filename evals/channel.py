@@ -67,6 +67,8 @@ class ChannelConfig:
 class ChannelState:
     config: ChannelConfig
     repeat_index: int = 0
+    # A voicemail greeting is a recording: it can't barge in or cut off the opener.
+    recording: bool = False
 
     def __post_init__(self) -> None:
         base = 0 if self.config.seed is None else self.config.seed
@@ -110,7 +112,7 @@ class ChannelState:
         """Return the part actually spoken on the phone and markers for interruption effects."""
         spoken = (text or "").strip()
         markers: list[str] = []
-        if not spoken or not self.config.enabled:
+        if not spoken or not self.config.enabled or self.recording:
             if spoken:
                 self.first_agent_seen = True
             return {"spoken": spoken, "markers": markers, "interrupted": False, "kind": None}
@@ -172,4 +174,8 @@ def case_channel_effects(case: Any) -> set[str]:
 
 
 def make_channel_state(case: Any, *, channel: ChannelName = "clean", seed: int | None = None, repeat_index: int = 0) -> ChannelState:
-    return ChannelState(ChannelConfig(name=channel, effects=case_channel_effects(case), seed=seed), repeat_index=repeat_index)
+    return ChannelState(
+        ChannelConfig(name=channel, effects=case_channel_effects(case), seed=seed),
+        repeat_index=repeat_index,
+        recording="voicemail" in getattr(getattr(case, "persona", None), "behaviors", []),
+    )
