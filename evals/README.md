@@ -67,8 +67,16 @@ uv run --offline python -m evals.text --cases all --channel phone --concurrency 
 # Judge calibration
 uv run --offline python -m evals.calibrate --out evals/results/calibration.json
 
-# Did my change help?
-uv run --offline python -m evals.text compare evals/results/before.json evals/results/after.json
+# Hill-climb run: dev split + real-call regressions, both channels, 2 repeats
+for ch in clean phone; do
+  uv run --offline python -m evals.text --cases split:dev,tag:regression --channel $ch \
+    --repeats 2 --seed 20261006 --out evals/results/after-dev-$ch.json
+done
+
+# Did my change help? Pools runs per side; prints pass rate, paired flips, and the scorecard
+uv run --offline python -m evals.compare \
+  --a evals/results/before-dev-clean.json evals/results/before-dev-phone.json \
+  --b evals/results/after-dev-clean.json evals/results/after-dev-phone.json
 ```
 
 `evals/results/` is git-ignored. Do not commit raw recordings or unredacted real-call transcripts.
@@ -218,6 +226,8 @@ production graph runs unchanged:
 ```text
 python -m evals.text [options]
   --cases          all | id1,id2 | tag:<tag> | <tag> | vertical:<name> | difficulty:<easy|medium|hard>
+                   | split:dev | split:heldout   (comma-join selectors to union them)
+  --split          dev | heldout (shorthand for --cases split:<name>)
   --repeats N      run each case N times (variance estimates)
   --concurrency N  parallel cases (6 works well on Copilot)
   --seed N         deterministic case shuffling with --limit
@@ -230,6 +240,7 @@ python -m evals.text [options]
   --no-judge       deterministic + speakability only (fast, free)
   --run-id / --out
 python -m evals.text compare A.json B.json
+python -m evals.compare --a A1.json [A2.json ...] --b B1.json [B2.json ...] [--out diff.json] [--json]
 python -m evals.calibrate [--judge-model ...]
 python -m evals.import_call <retell_call_id> [--case-id ...]
 ```
@@ -248,8 +259,15 @@ Run these tracks for prompt/model changes:
 5. **Voice eval on real calls** (`evals.voice`): use after deploys or telephony/TTS/model latency
    changes.
 
-Merge prompt/model changes only when calibration agreement holds, the trend is zero hard-gate
-failures, and phone-channel pass rate is not lower than the clean baseline for the same code.
+Merge prompt/model changes only when all of these hold:
+
+- the pooled dev pass rate (clean + phone, 2 repeats) improves by more than noise: more paired
+  fail→pass than pass→fail flips, ideally sign-test p < 0.05;
+- the held-out split moves the same direction (it is run once at the end, never tuned on);
+- every real-call regression case passes on both channels;
+- the scorecard guardrails below do not regress;
+- judge calibration still has every bad item failing and pass agreement ≥ 0.9;
+- `--latency` p50/p90 is not materially worse.
 
 ## Manual call → regression case workflow
 
@@ -413,6 +431,90 @@ Top failure themes:
 - **Callback/deposit/card branches remain brittle**: the agent sometimes closes without the price,
   callback plan, or explicit "not authorized to book/pay" answer.
 
+### Hill-climb v2: dev/held-out with scorecard (October 2026)
+
+**Setup**
+- Agent `copilot:gpt-5.4@low`, Claude Haiku simulator, Claude Sonnet judge, seed 20261006.
+- Both channels, `--repeats 2`.
+- Dev = 50 dev cases plus 4 regression cases (216 runs). Held-out = 21 cases (84 runs).
+- The baseline is `general-purpose-calls` (PR #3).
+- Saved results: `hc2-{baseline,final}-{dev,heldout}-{clean,phone}-r2-g3.json` and the
+  `hc2-{dev,heldout}-compare-g3.json` diffs.
+
+**What changed**
+1. **Hanging up with an open question.** The hang-up hold now also applies when an outcome is
+   recorded but the business's last line is not a goodbye. If the reply has no words, the agent
+   says a context-aware line instead of going silent: "No, that's all. Thanks, bye!" after
+   "anything else?", "could you say that again?" after a question, or a thank-you otherwise.
+2. **Prompt rules:**
+   - say "AI assistant" in the first few words when asked;
+   - don't open screener answers with "sorry";
+   - don't record an order until it is confirmed and has a total or ready time (or the business
+     says it can't give one);
+   - record `needs_followup` in the same reply as "they'll follow up".
+3. **Recovering the outcome after the call** (`outcome_fallback.py`). If a connected call ends
+   before `record_outcome`, typically because the business hangs up right after confirming,
+   `monitor_call` reads the result from the transcript and stores it. The note "Result read from
+   the transcript" is added to `follow_up`. The harness does the same when `record_outcome` is
+   missing.
+   - All 13 inferred `booked`/`ordered` results were checked by hand against the business's
+     words, and each was a clear confirmation.
+   - Ambiguous calls fall back to `needs_followup`.
+   - The recovery uses the same authority check as `record_outcome`: an info-only brief can never
+     report a booking or order.
+   - It never overwrites a result the live session recorded in the meantime.
+
+**Grader and harness fixes** (each with a unit test; the saved baselines were re-scored with them)
+- **Deposit check:** it matched refusals such as "I **can't** do a deposit". All 4 flags were refusals.
+- **"Opener repeated":** it fired when the agent re-introduced itself after "Who's calling?".
+- **AI-disclosure check:** it fired when the business re-asked after the agent had already said it
+  was an AI, or hung up before the agent could answer.
+- **"Call never ended after outcome":** this no longer applies to outcomes inferred after the call.
+- **Mid-call silence:** the simulated business now gets one reminder before the call ends,
+  matching Retell's `reminder_required`. Previously a dropped "Okay, what day?" ended the call.
+  This was added after the baseline/final runs and only affects the final regression runs.
+
+**Results**
+
+| Metric | Dev baseline → final | Held-out baseline → final |
+| --- | ---: | ---: |
+| Pooled pass rate | 0.713 → **0.819** | 0.560 → **0.667** |
+| Clean / phone | 0.722 / 0.704 → 0.843 / 0.796 | 0.595 / 0.524 → 0.690 / 0.643 |
+| Paired fail→pass / pass→fail | 40 / 17 (sign test p = 0.003) | 15 / 6 (p = 0.08) |
+| Pass rate per repeat | 0.704, 0.722 → 0.833, 0.806 | 0.619, 0.500 → 0.667, 0.667 |
+| Repeat disagreement | 30/108 → 21/108 | 11/42 → 6/42 |
+| Overall score | 4.285 → 4.352 | 4.216 → 4.290 |
+| Hard-gate failures (hung up on a question) | 9 → **0** | 9 → **0** |
+| Rule-based safety failures | 0 → 0 | 0 → 0 |
+| Judge policy_safety < 5 | 41 → 26 | 15 → 10 |
+| Outcomes inferred after the call | 15 → 12 | 4 → 3 |
+
+- **Effect of the outcome recovery alone** (final code, on vs off): dev 0.782 → 0.819 with
+  8 fail→pass and 0 pass→fail; held-out 0.643 → 0.667 with 2 fail→pass and 0 pass→fail.
+- **Real-call regressions:** 8/8 clean and 8/8 phone (`hc2-final2-*`, 2 repeats), and 4/4 on each
+  channel when re-run live with the outcome recovery (`hc2-final3-*`).
+- **Latency** (`--latency`, production OpenAI model, 6 cases, small n): p50 2.16 s → 2.54 s,
+  p90 6.20 s → 6.00 s. Comparable.
+- **Judge calibration** (`hc2-calibration.json`, judge unchanged): pass agreement 1.00, every bad
+  item fails, leniency bias +0.146.
+
+**Did not improve, or got worse (watch these next)**
+- **Missing required facts** is now the top failure: 35 → 46 issues on dev and 27 → 28 on
+  held-out. Some are real misses, for example not asking about ramps or not recording the price
+  or confirmation code. Some are strict matching, for example "Open till 7" vs "7 PM".
+- **Judge scores:** confirmation_quality fell slightly on dev (3.49 → 3.44) and held-out
+  turn_economy fell from 4.58 to 4.43.
+- **Repeated details** on dev went up from 42 to 46 cases. A common pattern: the business confirms,
+  the agent reads everything back again or asks for a confirmation number, and the business hangs
+  up. The outcome recovery now saves the result in these cases, but the extra turn is still
+  awkward.
+- **Small groups dipped:** dev repair, florist and library, and held-out auto and automation.
+  With n = 4 to 8 this is within the noise, but re-check them on the next run.
+- **Process:** these changes were made as one combined set, not one at a time, so they don't have
+  separate deltas. Only the outcome recovery has its own on/off measurement, and that was
+  re-scored offline from the saved transcripts.
+- **Cost:** about 5,000 Copilot premium requests in total.
+
 ### Judge calibration (October 2026)
 
 Calibration data lives in `evals/calibration/`: 4 redacted real Retell test calls and 12 synthetic
@@ -422,6 +524,7 @@ minimal-pair transcripts covering the four user complaints, cut-off openers, and
 | --- | ---: | ---: | ---: | ---: | ---: |
 | `calibration-v4.json` initial | 16 | 0.875 | 1.000 | 0.750 | +0.027 |
 | `calibration-v4-r2.json` final | 16 | **0.938** | **1.000** | **0.799** | +0.136 |
+| `hc2-calibration.json` (hill-climb v2) | 16 | **1.000** | **1.000** | 0.778 | +0.146 |
 
 The one remaining disagreement is a good ASR-repair transcript that the judge still marks fail
 because the final booking confirmation is minimal; all known-bad items fail.
@@ -477,14 +580,60 @@ words.
 
 ## Hill-climbing workflow
 
-1. **Baseline.** Run the full suite and save it, for example `results/before.json`.
-2. **Change one thing:** the prompt (`build_system_prompt` in `src/muse_voice_agent/tasks.py`), the graph (`graph.py`), or the model
-   (`--agent-model`).
-3. **Smoke test.** Run `--cases tag:smoke --no-judge` for a fast, free sanity check.
-4. **Re-run** the full suite and `compare`. Prefer `--repeats 2` or more for small deltas, because
-   LLM simulators add noise.
-5. **Check latency.** Before shipping a model change, run with `--latency` and score a few real
-   calls with `evals.voice`.
+### Sets
+
+| Set | Selector | Cases | Use |
+| --- | --- | ---: | --- |
+| Dev | `split:dev` | 50 | Iterate on it; read its failures freely. |
+| Held-out | `split:heldout` | 21 | Run only on the baseline and the final candidate. Don't read its transcripts while iterating. |
+| Real-call regressions | `tag:regression` | 4 | Must pass; included with dev on every run. |
+
+`cases/splits.json` holds a seeded split, stratified by vertical and difficulty (seed 20261006).
+Cases added later go to dev until the split is regenerated on purpose.
+
+### Main metric
+
+Use the **pooled deterministic pass rate** over dev and regression cases, on both clean and phone
+channels, with `--repeats 2` (216 runs). Pooling stops a change from trading phone robustness for
+clean-channel wins.
+
+### Noise
+
+The same code disagrees with itself on about 20–30% of (case, channel) pairs across repeats,
+so judge changes by **paired flips**, not raw rate. `compare` matches runs by
+(case, channel, repeat) and counts fail→pass vs pass→fail. Keep a change only if fail→pass clearly
+outnumbers pass→fail; for one-shot decisions, use a two-sided sign test on the flips.
+
+### Guardrails, from `compare`'s scorecard
+
+- **Must stay at 0:** rule-based safety failures (sharing a card or address, agreeing to a deposit,
+  claiming to be human, failing to disclose AI) and hard-gate failures (hanging up on a question,
+  screener not answered, a required DTMF digit not pressed).
+- **Must not regress:**
+  - per-channel pass rate;
+  - pass rate by vertical and difficulty (watch small groups, but n=4 swings by ±0.25 on its own);
+  - judge means per dimension;
+  - conversation metrics: words per turn, repeated details, multi-question turns, robotic phrases;
+  - outcomes inferred after the call;
+  - `--latency` p50/p90;
+  - prompt size.
+- "Judge policy_safety < 5" is a soft signal. It is often wording, not a violation, so read those
+  transcripts rather than gating on the count.
+
+### Loop
+
+1. **Baseline:** run dev and regression on both channels with 2 repeats, plus held-out once.
+2. **Pick the top failure cluster** from dev issues and transcripts, and make one targeted change to
+   the prompt (`tasks.py`), the graph (`graph.py`), a fallback, or the model.
+3. Run `pytest` and `--cases tag:smoke --no-judge` (fast and free).
+4. Re-run dev and regression, then `python -m evals.compare`. Keep the change or revert it.
+5. If a failure is a grader bug rather than an agent bug, fix the check, add a unit test,
+   **re-score the saved baseline with the same check**, and record it under the results.
+6. **Before shipping:**
+   - run held-out once;
+   - run judge calibration;
+   - run `--latency` on a few cases;
+   - after deploying, place one real test call and score it with `evals.voice`.
 
 ## Adding a case
 
@@ -507,6 +656,7 @@ evals/
 ├── cases/
 │   ├── bay_area_cases.json   # the 68 cases
 │   ├── regression_cases.json # imported real-call regressions
+│   ├── splits.json           # seeded dev/held-out split
 │   └── schema.py             # pydantic schema, validated against production task models
 ├── calibration/              # labeled judge-calibration transcripts
 ├── channel.py                # deterministic phone-channel effects
@@ -516,5 +666,6 @@ evals/
 ├── judge.py                  # LLM judge (text) and audio judge (voice)
 ├── voice.py                  # Retell call scoring and opt-in live calls
 ├── report.py                 # aggregation and run comparison
+├── compare.py                # pooled A/B scorecard with paired flips
 └── copilot_llm.py            # LangChain adapter for GitHub Copilot models
 ```

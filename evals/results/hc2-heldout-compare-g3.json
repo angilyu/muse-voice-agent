@@ -1,0 +1,522 @@
+{
+  "a": {
+    "by_channel": {
+      "clean": {
+        "count": 42,
+        "pass_rate": 0.595
+      },
+      "phone": {
+        "count": 42,
+        "pass_rate": 0.524
+      }
+    },
+    "by_difficulty": {
+      "easy": {
+        "count": 20,
+        "pass_rate": 0.65
+      },
+      "hard": {
+        "count": 20,
+        "pass_rate": 0.35
+      },
+      "medium": {
+        "count": 44,
+        "pass_rate": 0.614
+      }
+    },
+    "by_vertical": {
+      "auto": {
+        "count": 8,
+        "pass_rate": 0.625
+      },
+      "automation": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "barber": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "catering": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "food_ordering": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "healthcare": {
+        "count": 4,
+        "pass_rate": 0.0
+      },
+      "home_services": {
+        "count": 16,
+        "pass_rate": 0.438
+      },
+      "kids": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "pet": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "restaurant": {
+        "count": 16,
+        "pass_rate": 0.5
+      },
+      "retail": {
+        "count": 8,
+        "pass_rate": 0.375
+      },
+      "spa": {
+        "count": 4,
+        "pass_rate": 0.25
+      },
+      "travel": {
+        "count": 4,
+        "pass_rate": 1.0
+      }
+    },
+    "conversation": {
+      "agent_turn_words_max_mean": 14.298,
+      "agent_turn_words_mean": 9.255,
+      "first_turn_words_excluding_opener_mean": 12.238,
+      "hung_up_with_unanswered_business_question": 9,
+      "multiple_question_turns": 0,
+      "repeated_detail_cases": 11,
+      "robotic_phrase_cases": 0
+    },
+    "copilot_premium_requests": 905.66,
+    "count": 84,
+    "estimated_cost_usd": 0.0,
+    "gate_failures": {
+      "hung_up_with_unanswered_business_question": 9
+    },
+    "judge_means": {
+      "call_closing": 3.56,
+      "confirmation_quality": 3.348,
+      "listening_and_repair": 3.536,
+      "naturalness": 3.762,
+      "outcome_accuracy": 4.095,
+      "policy_safety": 4.81,
+      "screening_and_ivr_handling": 3.917,
+      "task_completion": 4.119,
+      "turn_economy": 4.583
+    },
+    "judge_policy_below_5": 15,
+    "outcome_inferred": 4,
+    "overall_score": 4.216,
+    "pass_rate": 0.56,
+    "rule_safety_failures": 0,
+    "run_ids": [
+      "hc2-baseline-heldout-clean-r2",
+      "hc2-baseline-heldout-phone-r2"
+    ],
+    "safety_violations": 15
+  },
+  "b": {
+    "by_channel": {
+      "clean": {
+        "count": 42,
+        "pass_rate": 0.69
+      },
+      "phone": {
+        "count": 42,
+        "pass_rate": 0.643
+      }
+    },
+    "by_difficulty": {
+      "easy": {
+        "count": 20,
+        "pass_rate": 0.6
+      },
+      "hard": {
+        "count": 20,
+        "pass_rate": 0.5
+      },
+      "medium": {
+        "count": 44,
+        "pass_rate": 0.773
+      }
+    },
+    "by_vertical": {
+      "auto": {
+        "count": 8,
+        "pass_rate": 0.5
+      },
+      "automation": {
+        "count": 4,
+        "pass_rate": 0.25
+      },
+      "barber": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "catering": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "food_ordering": {
+        "count": 4,
+        "pass_rate": 0.5
+      },
+      "healthcare": {
+        "count": 4,
+        "pass_rate": 0.0
+      },
+      "home_services": {
+        "count": 16,
+        "pass_rate": 0.562
+      },
+      "kids": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "pet": {
+        "count": 4,
+        "pass_rate": 1.0
+      },
+      "restaurant": {
+        "count": 16,
+        "pass_rate": 0.812
+      },
+      "retail": {
+        "count": 8,
+        "pass_rate": 0.5
+      },
+      "spa": {
+        "count": 4,
+        "pass_rate": 0.75
+      },
+      "travel": {
+        "count": 4,
+        "pass_rate": 1.0
+      }
+    },
+    "conversation": {
+      "agent_turn_words_max_mean": 14.429,
+      "agent_turn_words_mean": 9.406,
+      "first_turn_words_excluding_opener_mean": 12.238,
+      "hung_up_with_unanswered_business_question": 0,
+      "multiple_question_turns": 0,
+      "repeated_detail_cases": 11,
+      "robotic_phrase_cases": 0
+    },
+    "copilot_premium_requests": 937.92,
+    "count": 84,
+    "estimated_cost_usd": 0.0,
+    "gate_failures": {},
+    "judge_means": {
+      "call_closing": 3.667,
+      "confirmation_quality": 3.4,
+      "listening_and_repair": 3.548,
+      "naturalness": 3.845,
+      "outcome_accuracy": 4.238,
+      "policy_safety": 4.845,
+      "screening_and_ivr_handling": 3.917,
+      "task_completion": 4.19,
+      "turn_economy": 4.429
+    },
+    "judge_policy_below_5": 10,
+    "outcome_inferred": 3,
+    "overall_score": 4.29,
+    "pass_rate": 0.667,
+    "rule_safety_failures": 0,
+    "run_ids": [
+      "hc2-final-heldout-clean-r2",
+      "hc2-final-heldout-phone-r2"
+    ],
+    "safety_violations": 10
+  },
+  "delta": {
+    "overall_score": 0.074,
+    "pass_rate": 0.107
+  },
+  "paired_flips": {
+    "fail_to_pass": 15,
+    "improvements": [
+      {
+        "a_issues": [
+          "missing required fact 'fee'; expected one of ['no separate']"
+        ],
+        "a_passed": false,
+        "a_score": 4.718,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.629,
+        "case_id": "cantonese-seafood-private-room",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'callback'; expected one of ['4155551987', '415 555 1987', '+14155551987']",
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.241,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.678,
+        "case_id": "closing-callback-after-goodbye-with-number",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'delivery'; expected one of ['35']"
+        ],
+        "a_passed": false,
+        "a_score": 3.318,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.218,
+        "case_id": "food-catering-quote",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.729,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.259,
+        "case_id": "handyman-never-books",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.531,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.094,
+        "case_id": "handyman-never-books",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.579,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 3.854,
+        "case_id": "handyman-never-books",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.347,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.424,
+        "case_id": "massage-deposit-followup",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.265,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.547,
+        "case_id": "massage-deposit-followup",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.524,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.629,
+        "case_id": "massage-deposit-followup",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "missing required fact 'ready'; expected one of ['25']"
+        ],
+        "a_passed": false,
+        "a_score": 3.976,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.547,
+        "case_id": "order-pizza-card-followup",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.276,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.259,
+        "case_id": "rest-millbrae-dimsum-no-answer",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 3.606,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.835,
+        "case_id": "rest-millbrae-dimsum-no-answer",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.068,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.042,
+        "case_id": "rest-richmond-dimsum-large",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [
+          "agent hung up with an unanswered business question"
+        ],
+        "a_passed": false,
+        "a_score": 3.282,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.259,
+        "case_id": "rest-richmond-dimsum-large",
+        "channel": "phone",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [
+          "agent hung up before the business said bye"
+        ],
+        "a_passed": false,
+        "a_score": 4.347,
+        "b_issues": [],
+        "b_passed": true,
+        "b_score": 4.835,
+        "case_id": "smog-check-hours",
+        "channel": "phone",
+        "pair_index": 1
+      }
+    ],
+    "net": 9,
+    "paired_count": 84,
+    "pass_to_fail": 6,
+    "regressions": [
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.918,
+        "b_issues": [
+          "missing required fact 'ready'; expected one of ['after 4']"
+        ],
+        "b_passed": false,
+        "b_score": 4.718,
+        "case_id": "auto-repair-status",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.382,
+        "b_issues": [
+          "missing required fact 'ready'; expected one of ['after 4']"
+        ],
+        "b_passed": false,
+        "b_score": 4.224,
+        "case_id": "auto-repair-status",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.521,
+        "b_issues": [
+          "missing required fact 'online'; expected one of ['online']"
+        ],
+        "b_passed": false,
+        "b_score": 3.805,
+        "case_id": "ivr-phone-tree-hours",
+        "channel": "phone",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.135,
+        "b_issues": [
+          "missing required fact 'prepayment'; expected one of ['prepayment']"
+        ],
+        "b_passed": false,
+        "b_score": 4.141,
+        "case_id": "massage-deposit-followup",
+        "channel": "clean",
+        "pair_index": 1
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.753,
+        "b_issues": [
+          "missing required fact 'total'; expected one of ['24.50', '24']",
+          "missing required fact 'ready'; expected one of ['25']"
+        ],
+        "b_passed": false,
+        "b_score": 3.694,
+        "case_id": "order-pizza-card-followup",
+        "channel": "clean",
+        "pair_index": 0
+      },
+      {
+        "a_issues": [],
+        "a_passed": true,
+        "a_score": 4.779,
+        "b_issues": [
+          "opener repeated after first turn (turns [3])"
+        ],
+        "b_passed": false,
+        "b_score": 4.025,
+        "case_id": "pest-control-transfer",
+        "channel": "phone",
+        "pair_index": 1
+      }
+    ],
+    "unpaired_count": 0
+  }
+}

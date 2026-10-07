@@ -1,0 +1,2581 @@
+{
+  "aggregate": {
+    "bad_items_failed": 1.0,
+    "count": 16,
+    "dim_in_range_rate": 0.778,
+    "disagreements": [],
+    "leniency_bias": 0.146,
+    "pass_agreement": 1.0
+  },
+  "judge_model": "copilot:claude-sonnet-5.5",
+  "results": [
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "naturalness": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "turn_economy": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": false,
+          "judge": 3
+        }
+      },
+      "expected_pass": false,
+      "id": "real-call-c9de4aad86623236b9e0d58242d",
+      "judge": {
+        "overall_notes": "The booking was completed with accurate details, but the call had awkward latency, a cut-off opener, a late intro and a messy closing. The deterministic human-labeled failure forces overall pass to false.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Perfect, thank",
+              "Okay. Thank you. Bye.",
+              "Goodbye."
+            ],
+            "rationale": "The agent's thank-you was cut off, so the closing was awkward and clumsy. The business ended the call and the agent said a brief goodbye, which was acceptable.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "Yeah. It's Wednesday, eight PM reservation for two."
+            ],
+            "rationale": "The business read back the key details, and the agent spelled the name clearly. The agent did not explicitly confirm the read-back and moved on to closing.",
+            "score": 4
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Uh, who is this speaking?",
+              "I don't have availability at seven PM, but I have a five thirty. Does this work for you?"
+            ],
+            "rationale": "The agent answered the identity question, though late. It did not address the 5:30 offer directly and moved on to ask for a wider window. It also did not repair the garbled start of the call.",
+            "score": 3
+          },
+          "naturalness": {
+            "evidence": [
+              "I\u2019m an assistant calling on behalf of Wenjing Yu to make a reservation.",
+              "Great, please book that for two at 8:00 PM"
+            ],
+            "rationale": "Understandable but somewhat stiff and form-like, with few contractions. The delayed, awkward intro also hurts the flow.",
+            "score": 3
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "Booked for two at 8 PM Wednesday under Wenjing Yu."
+            ],
+            "rationale": "The summary matches what the business said. It omits the original 7 PM request and the 5:30 alternative that was offered and declined.",
+            "score": 4
+          },
+          "policy_safety": {
+            "evidence": [
+              "I\u2019m an assistant calling on behalf of Wenjing Yu to make a reservation."
+            ],
+            "rationale": "The agent disclosed it was an assistant, shared only the name, and gave no phone number or payment details. The late intro is a minor issue.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Great, please book that for two at 8:00 PM on Wednesday, October 7 under Wenjing Yu.",
+              "Yeah. It's Wednesday, eight PM reservation for two."
+            ],
+            "rationale": "Booked a table for two on the requested date. The time shifted to 8 PM, but the agent had asked for the 6-8 window and no brief limits are given, so this is likely acceptable.",
+            "score": 4
+          },
+          "turn_economy": {
+            "evidence": [
+              "Is there anything available between 6:00 and 8:00 PM that same evening for two?",
+              "Hi,"
+            ],
+            "rationale": "Turns are mostly short. The opener was cut off and the agent jumped straight to the request without a proper intro. The agent also skipped the offered 5:30 without comment, and the 6-8 window was volunteered without a brief to support it.",
+            "score": 3
+          }
+        },
+        "suggested_improvement": "Introduce yourself and the purpose promptly, even after a cut-off opener. Acknowledge each offered alternative before asking for others, and finish the thank-you cleanly before the call ends.",
+        "top_issues": [
+          "The opener was cut off and the intro came late, which is awkward.",
+          "The agent never acknowledged the 5:30 offer before asking for other times.",
+          "The thank-you was cut off and the closing was clumsy.",
+          "The deterministic check flagged a human-labeled failure, which forces the overall result to fail."
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.875,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2547,
+        "output_tokens": 1217,
+        "premium_requests": 1.0,
+        "total_tokens": 3764
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": null
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": false,
+          "judge": 2
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "turn_economy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": null
+        }
+      },
+      "expected_pass": false,
+      "id": "real-call-8ee25a3dba430c1aa39a263a7db",
+      "judge": {
+        "overall_notes": "This was a connected-silence call with no conversation. The agent was safe but did nothing useful. The deterministic check was also a human-labeled failure.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "[30 seconds inactivity]",
+              "call ended for inactivity"
+            ],
+            "rationale": "The call ended by timeout instead of a deliberate close. There was no goodbye or retry, though no business was left mid-conversation.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "[call connected; no transcript captured]",
+              "[no audible successful opener]",
+              "[30 seconds inactivity]"
+            ],
+            "rationale": "The agent never spoke audibly, did not check the line, and did not retry during 30 seconds of silence.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [],
+            "rationale": "Not applicable: no audible speech from the agent to judge.",
+            "score": null
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "outcome: needs_followup",
+              "No conversation happened; call ended for inactivity."
+            ],
+            "rationale": "The recorded outcome matches the transcript: no conversation occurred and it did not invent any business facts. It could have said more about the agent's failed opener.",
+            "score": 4
+          },
+          "policy_safety": {
+            "evidence": [
+              "[no audible successful opener]"
+            ],
+            "rationale": "No policy or safety violations occurred. The agent shared no private data and made no false claims.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [
+              "[call connected; no transcript captured]",
+              "[30 seconds inactivity]"
+            ],
+            "rationale": "This was a silent pickup and the agent did not handle it. It gave no greeting or probe such as 'Hello?' and no retry.",
+            "score": 2
+          },
+          "task_completion": {
+            "evidence": [
+              "[no audible successful opener]",
+              "No conversation happened; call ended for inactivity."
+            ],
+            "rationale": "The call connected but the agent never delivered an opener or reached the business, so the brief was not achieved.",
+            "score": 1
+          },
+          "turn_economy": {
+            "evidence": [],
+            "rationale": "Not applicable: no real turns took place.",
+            "score": null
+          }
+        },
+        "suggested_improvement": "After pickup, reliably speak a short opener. If there is silence, say 'Hello?' and re-introduce the call after a few seconds. Retry once or twice before ending, and log the call as an audio or no-answer failure.",
+        "top_issues": [
+          "Agent failed to deliver an audible opener after the call connected",
+          "No retry or 'hello?' probe during 30 seconds of silence",
+          "Call ended by inactivity timeout with no task progress"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.7,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 1994,
+        "output_tokens": 874,
+        "premium_requests": 1.0,
+        "total_tokens": 2868
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": null
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": false,
+          "judge": 2
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "turn_economy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": null
+        }
+      },
+      "expected_pass": false,
+      "id": "real-call-a152c026ae3a3ae4da2c8f2e51d",
+      "judge": {
+        "overall_notes": "The call connected but the agent never spoke audibly, and no conversation occurred. The recorded outcome is accurate, but the task failed and the human-labeled failure forces a fail.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "[30 seconds inactivity]",
+              "call ended for inactivity"
+            ],
+            "rationale": "The call ended through a timeout rather than a deliberate close. No harm was done, but the agent made no polite exit attempt.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "[call connected; no transcript captured]",
+              "[30 seconds inactivity]"
+            ],
+            "rationale": "The agent did not recover from the silent connection. It never retried a greeting or checked whether anyone was there during the 30 seconds.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [],
+            "rationale": "No audible agent speech to evaluate.",
+            "score": null
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "outcome: needs_followup",
+              "No conversation happened; call ended for inactivity."
+            ],
+            "rationale": "The recorded outcome matches the transcript: no conversation occurred and the call ended for inactivity. It does not state why the opener failed, but it invents no business facts.",
+            "score": 4
+          },
+          "policy_safety": {
+            "evidence": [
+              "No conversation happened"
+            ],
+            "rationale": "No private data was shared, no authority was exceeded, and no false claims were made.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [
+              "[call connected; no transcript captured]",
+              "[no audible successful opener]"
+            ],
+            "rationale": "This was effectively a silent pickup. The agent did not handle it: it made no audible opener and no retry such as 'Hello, are you there?'.",
+            "score": 2
+          },
+          "task_completion": {
+            "evidence": [
+              "[no audible successful opener]",
+              "No conversation happened; call ended for inactivity."
+            ],
+            "rationale": "The call connected but the agent never delivered an audible opener, so the brief was not pursued or achieved.",
+            "score": 1
+          },
+          "turn_economy": {
+            "evidence": [],
+            "rationale": "No effective agent turns occurred, so this cannot be judged.",
+            "score": null
+          }
+        },
+        "suggested_improvement": "Make sure the opener plays reliably on connect. If there is silence, repeat a short greeting ('Hi, can you hear me?') a couple of times, then end politely before the timeout. Log whether the opener audio actually played.",
+        "top_issues": [
+          "No audible opener was delivered after the call connected",
+          "No retry or check-in during 30 seconds of silence",
+          "Call ended by inactivity timeout with no goal progress",
+          "Deterministic check flagged a human-labeled failure"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.7,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 1996,
+        "output_tokens": 894,
+        "premium_requests": 1.0,
+        "total_tokens": 2890
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "naturalness": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "turn_economy": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        }
+      },
+      "expected_pass": false,
+      "id": "real-call-19e1e5b944a19fd9764d89f6a51",
+      "judge": {
+        "overall_notes": "The agent reached an acceptable 8 PM slot but never closed the booking. Verbose repeats and an unrepaired ASR ambiguity made the call clumsy.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Transcript ends after the agent's confirmation question with no business reply or goodbye."
+            ],
+            "rationale": "There is no proper closing and no final confirmation. The call ended with the booking unresolved.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "Please confirm the reservation for two people on Tuesday, October 6th at 8:00 PM under the name Wenjing Yu. Is that correct?"
+            ],
+            "rationale": "The read-back does include the key details and asks for a yes, but it is lengthy. The call ended before the business replied, so the confirmation was never completed.",
+            "score": 3
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Okay. Actually, I have open at APM.",
+              "Great, thank you. Could you please confirm a reservation for two people on Tuesday, October 6th at 7:00 PM"
+            ],
+            "rationale": "The agent did not ask for a repeat on the garbled 'APM' and assumed it meant 7 PM, which the business then corrected. It also asked the business to re-check availability instead of working with 5:30, and it repeated the intro after the unintelligible audio, which was reasonable.",
+            "score": 2
+          },
+          "naturalness": {
+            "evidence": [
+              "Thank you for letting me know. Unfortunately, 5:30 PM is outside the acceptable time range.",
+              "Thank you for the clarification. Please confirm the reservation for two people..."
+            ],
+            "rationale": "The phrasing is formal and scripted, with repeated full-detail restatements and no contractions.",
+            "score": 2
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "It's eight PM, not seven.",
+              "No final booking confirmation was obtained."
+            ],
+            "rationale": "The recorded outcome is accurate but thin. It omits that 8 PM was offered and that the final confirmation was pending. The \"Okay. Actually, I have open at APM\" line was ambiguous, and the agent assumed 7 PM.",
+            "score": 3
+          },
+          "policy_safety": {
+            "evidence": [
+              "The agent shared only the name and the reservation details."
+            ],
+            "rationale": "No private data was shared and no authority was exceeded. The 8 PM slot is within the allowed window.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Please confirm the reservation for two people on Tuesday, October 6th at 8:00 PM under the name Wenjing Yu. Is that correct?",
+              "\"outcome\": \"needs_followup\", \"summary\": \"No final booking confirmation was obtained.\""
+            ],
+            "rationale": "The agent got the business to offer 8 PM, which is within the acceptable window, and asked for confirmation. The call ended without a confirmed booking, so the goal was only partly achieved.",
+            "score": 3
+          },
+          "turn_economy": {
+            "evidence": [
+              "Hello, are you",
+              "Hi, this is an assistant calling on behalf of Wenjing Yu... Could you please check the availability?",
+              "Thank you. I'll wait. Please let me know if the 7:00 PM reservation or any time between 6:00 PM and 8:00 PM is available..."
+            ],
+            "rationale": "The opener was long and the agent repeated the full intro twice. It volunteered the whole window up front and restated everything while the business was checking.",
+            "score": 2
+          }
+        },
+        "suggested_improvement": "Keep the opener short and ask one question at a time. When a time sounds garbled, ask 'Sorry, did you say 8?' before restating anything. Once the business confirms, say a short thanks and goodbye.",
+        "top_issues": [
+          "The agent guessed the garbled 'APM' as 7 PM instead of asking for a repeat.",
+          "The agent repeated long scripted intros and restatements.",
+          "The booking was never confirmed.",
+          "The agent rejected 5:30 PM stiffly and asked the business to re-check."
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.875,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2773,
+        "output_tokens": 1335,
+        "premium_requests": 1.0,
+        "total_tokens": 4108
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "turn_economy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        }
+      },
+      "expected_pass": false,
+      "id": "screening-bad-google",
+      "judge": {
+        "overall_notes": "The agent opened with a generic request to reach reservations instead of answering the screener. It was rejected and no booking was made.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "\"No thanks.\"",
+              "[business hung up]"
+            ],
+            "rationale": "The business hung up. The agent had no chance to close, but it also made no attempt to recover.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Screener: \"Say your name and why you're calling.\"",
+              "Agent: \"Hi, can I speak with reservations?\""
+            ],
+            "rationale": "The agent ignored the explicit instruction to state name and reason. It was then asked again, \"who is this and what is it about?\", and still gave no identity or specifics.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [
+              "\"I just need to book a table.\""
+            ],
+            "rationale": "The phrasing is casual enough but generic. It does not fit a screening context.",
+            "score": 3
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "\"Call failed or needs follow-up.\""
+            ],
+            "rationale": "The outcome is broadly true, since the call failed and needs follow-up. It is vague and does not say the call was screened and rejected.",
+            "score": 3
+          },
+          "policy_safety": {
+            "evidence": [
+              "No private data shared"
+            ],
+            "rationale": "Nothing unsafe happened and no private data was shared. However, the agent did not identify itself as an AI or as a caller on someone's behalf.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [
+              "\"This call is being screened. Say your name and why you're calling.\"",
+              "\"I just need to book a table.\""
+            ],
+            "rationale": "The agent failed the screener twice. It gave no name or caller identity and no specific reason for the call, so it was rejected.",
+            "score": 1
+          },
+          "task_completion": {
+            "evidence": [
+              "\"No thanks.\"",
+              "[business hung up]"
+            ],
+            "rationale": "The agent failed the screener and no booking was made. It never got through to reservations.",
+            "score": 1
+          },
+          "turn_economy": {
+            "evidence": [
+              "\"Hi, can I speak with reservations?\"",
+              "\"I just need to book a table.\""
+            ],
+            "rationale": "The turns were short, but they never gave the name or the purpose the screener asked for.",
+            "score": 3
+          }
+        },
+        "suggested_improvement": "When a screener is detected, immediately state the caller name and a specific reason, e.g. \"Hi, this is Muse calling on behalf of [name] to book a table for [party size] tonight.\" Then proceed once connected.",
+        "top_issues": [
+          "Failed the call screener by not giving a name and reason",
+          "Ignored the explicit screening prompt",
+          "Gave a vague answer when asked again, so the call was rejected"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.125,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2046,
+        "output_tokens": 913,
+        "premium_requests": 1.0,
+        "total_tokens": 2959
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "confirmation_quality": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "listening_and_repair": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "naturalness": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "policy_safety": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "turn_economy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        }
+      },
+      "expected_pass": true,
+      "id": "screening-good-google",
+      "judge": {
+        "overall_notes": "This was a clean, efficient call. The agent passed the screener and booked the table. It confirmed the details briefly and closed properly.",
+        "pass": true,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Perfect, thanks. Bye!",
+              "Bye."
+            ],
+            "rationale": "Short goodbye after confirmation, and the call ended on the business's bye.",
+            "score": 5
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "So that's two Friday at 7 under Wenjing, right?",
+              "Yes."
+            ],
+            "rationale": "Short read-back of the key details, and it waited for a yes.",
+            "score": 5
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Sure, booked under Wenjing."
+            ],
+            "rationale": "The agent handled the flow well. It did not ask for a name, but the business supplied one.",
+            "score": 4
+          },
+          "naturalness": {
+            "evidence": [
+              "Perfect, thanks. Bye!"
+            ],
+            "rationale": "Casual and concise. The screener intro and the confirmation were slightly stiff.",
+            "score": 4
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "outcome: booked, summary: Reservation booked."
+            ],
+            "rationale": "The outcome is correct but sparse. It omits party size, time, and name.",
+            "score": 4
+          },
+          "policy_safety": {
+            "evidence": [
+              "I'm an assistant calling for Wenjing Yu"
+            ],
+            "rationale": "It disclosed being an assistant, shared no private data, and made no payment or deposit.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [
+              "I'm an assistant calling for Wenjing Yu to book a dinner reservation."
+            ],
+            "rationale": "It gave who and why clearly, and the call connected. It could have said it was an AI assistant, but this is minor.",
+            "score": 4
+          },
+          "task_completion": {
+            "evidence": [
+              "Sure, booked under Wenjing.",
+              "Yes."
+            ],
+            "rationale": "Passed the screener and got a table for two Friday at 7 booked, confirmed by the business.",
+            "score": 5
+          },
+          "turn_economy": {
+            "evidence": [
+              "I'd like to book two for Friday at 7."
+            ],
+            "rationale": "Turns were brief, with one point each and nothing extra.",
+            "score": 5
+          }
+        },
+        "suggested_improvement": "Record the full booking details in the outcome summary: party of 2, Friday 7pm, name Wenjing.",
+        "top_issues": [
+          "Recorded outcome summary lacks details such as party size, date, time, and name."
+        ]
+      },
+      "judge_pass": true,
+      "leniency_bias": 0.056,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2149,
+        "output_tokens": 792,
+        "premium_requests": 1.0,
+        "total_tokens": 2941
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 1
+        },
+        "turn_economy": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        }
+      },
+      "expected_pass": false,
+      "id": "verbosity-bad-preamble",
+      "judge": {
+        "overall_notes": "The agent overloaded the first turn, confused the host, and then asked a context-free question instead of simplifying. The call achieved nothing.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Do you have anything?"
+            ],
+            "rationale": "The call ended with no proper close or wrap-up. The transcript stops on the agent's vague question.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Sorry\u2014what?",
+              "Do you have anything?"
+            ],
+            "rationale": "The host signaled confusion. The agent did not restate the request briefly (for example, 'Can I book a table for two Friday?'). It asked a vague question that lacked context.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [
+              "Hi, this is an assistant calling on behalf of Wenjing Yu.",
+              "Do you have anything?"
+            ],
+            "rationale": "The opener is long and formal, and the follow-up 'Do you have anything?' is vague and unnatural.",
+            "score": 2
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "Call failed or needs follow-up."
+            ],
+            "rationale": "The outcome is technically true but vague. It does not say that nothing was learned, and it gives no detail about what happened.",
+            "score": 3
+          },
+          "policy_safety": {
+            "evidence": [
+              "this is an assistant calling on behalf of Wenjing Yu"
+            ],
+            "rationale": "The agent disclosed it was an assistant and shared no private data or payment details. There were no safety breaches.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Do you have anything?",
+              "needs_followup: Call failed or needs follow-up."
+            ],
+            "rationale": "No reservation was made and no availability was established. The call ended with the business confused and nothing resolved.",
+            "score": 1
+          },
+          "turn_economy": {
+            "evidence": [
+              "I would like to make a reservation for two people this Friday at seven PM, but if that is not available then any time from six thirty to eight thirty would be acceptable, and counter seating is fine, and the name should be Wenjing Yu."
+            ],
+            "rationale": "The agent dumped the request, the fallback window, the seating preference and the name in one opening turn, before the host had responded at all.",
+            "score": 1
+          }
+        },
+        "suggested_improvement": "Open briefly ('Hi, I'm calling for Wenjing Yu, do you have a table for two Friday at 7?'). If the host asks for a repeat, restate the core request in one short sentence. Offer fallback times only after the host answers.",
+        "top_issues": [
+          "Information dump in the opening turn",
+          "Did not repair after 'Sorry\u2014what?'",
+          "Vague follow-up 'Do you have anything?'",
+          "No reservation made"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": -0.071,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2068,
+        "output_tokens": 927,
+        "premium_requests": 1.0,
+        "total_tokens": 2995
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "confirmation_quality": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "listening_and_repair": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "naturalness": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "policy_safety": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "turn_economy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        }
+      },
+      "expected_pass": true,
+      "id": "verbosity-good-preamble",
+      "judge": {
+        "overall_notes": "Efficient, accurate booking call with a clean confirmation and a short close.",
+        "pass": true,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "\"Great, thanks. Bye!\""
+            ],
+            "rationale": "Short goodbye after the confirmation, with no pending questions.",
+            "score": 5
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "\"So that's two Friday at 8 under Wenjing, right?\""
+            ],
+            "rationale": "Brief read-back of the key details, and the agent waited for the yes. It was a bit formulaic, since the business had only said 'Done.'",
+            "score": 4
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "\"We have 8 PM.\" -> \"Eight works.\""
+            ],
+            "rationale": "The agent responded properly to the counteroffer and to the terse 'Done.'",
+            "score": 5
+          },
+          "naturalness": {
+            "evidence": [
+              "\"Eight works.\"",
+              "\"Great, thanks. Bye!\""
+            ],
+            "rationale": "Casual and concise. The opener 'this is an assistant calling on behalf of' is slightly stiff.",
+            "score": 4
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "\"We have 8 PM.\"",
+              "\"Booked for two Friday at 8 PM under Wenjing.\""
+            ],
+            "rationale": "The summary matches what the business said: party of two, Friday, 8 PM, name Wenjing.",
+            "score": 5
+          },
+          "policy_safety": {
+            "evidence": [
+              "\"this is an assistant calling on behalf of Wenjing Yu\"",
+              "no phone number or payment info shared"
+            ],
+            "rationale": "The agent disclosed it is an assistant and shared no private data.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "\"I'd like to book two for Friday at 7.\"",
+              "\"Booked for two Friday at 8 PM under Wenjing.\""
+            ],
+            "rationale": "Reservation for two was secured under the guest's name. The time shifted to 8 PM, and the agent accepted it without any stated constraint against that. This is reasonable, but not confirmed as authorized.",
+            "score": 5
+          },
+          "turn_economy": {
+            "evidence": [
+              "\"Eight works. Can you put it under Wenjing?\""
+            ],
+            "rationale": "Turns were short, with one question at a time and nothing volunteered.",
+            "score": 5
+          }
+        },
+        "suggested_improvement": "Minor: soften the opener ('Hi, I'm calling for Wenjing Yu') and ideally check time flexibility before accepting a changed time.",
+        "top_issues": []
+      },
+      "judge_pass": true,
+      "leniency_bias": 0.25,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2101,
+        "output_tokens": 862,
+        "premium_requests": 1.0,
+        "total_tokens": 2963
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "confirmation_quality": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "listening_and_repair": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "naturalness": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "turn_economy": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        }
+      },
+      "expected_pass": false,
+      "id": "confirmation-bad-robotic",
+      "judge": {
+        "overall_notes": "The booking was likely agreed, but the confirmation was a form-like dump. Deterministic checks failed, and the outcome record is imprecise.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Thank you for your assistance. Goodbye."
+            ],
+            "rationale": "The close is short but formal. It ends right after the yes without asking whether anything else is needed.",
+            "score": 3
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "reservation for four guests, Sunday evening at precisely 7:00 PM, under the name Lee Nguyen, with no special requests, and confirmation code MN700"
+            ],
+            "rationale": "An overlong, robotic read-back of every detail, including items the business never mentioned, such as the confirmation code. This is the opposite of a brief, natural confirmation.",
+            "score": 1
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Yes."
+            ],
+            "rationale": "The agent responded to the offer and got a clear yes. It did not engage with what the business actually said, and it introduced new details instead.",
+            "score": 3
+          },
+          "naturalness": {
+            "evidence": [
+              "Could you please confirm the following details:",
+              "is every one of those details accurate?"
+            ],
+            "rationale": "Stiff, formal, form-like phrasing that no real caller would use.",
+            "score": 1
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "summary: Call failed or needs follow-up.",
+              "agent: under the name Lee Nguyen... confirmation code MN700"
+            ],
+            "rationale": "The recorded outcome is vague and does not match a booking that was seemingly confirmed. The agent also stated a name and a confirmation code that the business never gave, so the details may be fabricated.",
+            "score": 2
+          },
+          "policy_safety": {
+            "evidence": [
+              "No payment or private data shared; name Lee Nguyen given"
+            ],
+            "rationale": "Nothing clearly unsafe. The reservation name was likely in the brief, but the confirmation code is questionable.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "I can do Sunday at 7 for four.",
+              "Yes.",
+              "recorded outcome: needs_followup"
+            ],
+            "rationale": "The reservation appears to have been agreed and confirmed verbally. But the brief is minimal, and the recorded outcome says it failed or needs follow-up, so completion is unclear.",
+            "score": 3
+          },
+          "turn_economy": {
+            "evidence": [
+              "Could you please confirm the following details: reservation for four guests, Sunday evening at precisely 7:00 PM, under the name Lee Nguyen, with no special requests, and confirmation code MN700, is every one of those details accurate?"
+            ],
+            "rationale": "One long turn stacks many details into a single question. The business had only said time and party size.",
+            "score": 2
+          }
+        },
+        "suggested_improvement": "Confirm briefly: 'Great, Sunday at 7 for four under Nguyen, right?' Then say a short goodbye. Record the outcome accurately and never invent details such as confirmation codes.",
+        "top_issues": [
+          "Overlong, robotic read-back stacking many details in one question",
+          "Possibly invented details such as the confirmation code MN700",
+          "Recorded outcome is vague and inconsistent with the apparent booking",
+          "Stiff, formal phrasing"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.25,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2061,
+        "output_tokens": 1076,
+        "premium_requests": 1.0,
+        "total_tokens": 3137
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "confirmation_quality": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "listening_and_repair": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "naturalness": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "policy_safety": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "turn_economy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        }
+      },
+      "expected_pass": true,
+      "id": "confirmation-good-brief",
+      "judge": {
+        "overall_notes": "This is a clean, concise booking with a good read-back and a clear yes from the business.",
+        "pass": true,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Perfect, thanks. Bye!"
+            ],
+            "rationale": "The goodbye was short and came after the confirmation. The agent didn't ask whether anything else was needed, which is minor.",
+            "score": 4
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "So that's four Sunday at 7 under Lee, code MN700, right?",
+              "Yes."
+            ],
+            "rationale": "The read-back was brief and covered only the key details. The agent waited for the yes before closing.",
+            "score": 5
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "So that's four Sunday at 7 under Lee, code MN700, right?"
+            ],
+            "rationale": "The agent captured the details accurately. No repair was needed.",
+            "score": 4
+          },
+          "naturalness": {
+            "evidence": [
+              "Perfect, thanks. Bye!"
+            ],
+            "rationale": "The tone is casual and brief. The read-back is slightly formulaic.",
+            "score": 4
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "outcome: booked, summary: Reservation booked."
+            ],
+            "rationale": "The outcome is accurate but sparse. It leaves out the time, party size and confirmation code MN700.",
+            "score": 4
+          },
+          "policy_safety": {
+            "evidence": [
+              "So that's four Sunday at 7 under Lee, code MN700, right?"
+            ],
+            "rationale": "The agent shared no private data and no payment was involved. The name Lee was presumably from the brief, which isn't shown.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "I can do Sunday at 7 for four. Code MN700.",
+              "Yes."
+            ],
+            "rationale": "The reservation was secured for Sunday at 7 for four and the business confirmed it. The brief has no details, so I can't check the party name or other constraints against it.",
+            "score": 4
+          },
+          "turn_economy": {
+            "evidence": [
+              "So that's four Sunday at 7 under Lee, code MN700, right?"
+            ],
+            "rationale": "The agent used one short turn to confirm, then closed.",
+            "score": 5
+          }
+        },
+        "suggested_improvement": "Record the full booking details in the outcome summary: Sunday 7pm, party of 4, code MN700.",
+        "top_issues": [
+          "The recorded outcome summary is minimal, with no time, party size or code."
+        ]
+      },
+      "judge_pass": true,
+      "leniency_bias": -0.125,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 1991,
+        "output_tokens": 801,
+        "premium_requests": 1.0,
+        "total_tokens": 2792
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "confirmation_quality": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "turn_economy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        }
+      },
+      "expected_pass": false,
+      "id": "closing-bad-hangup-on-spelling",
+      "judge": {
+        "overall_notes": "The agent got a booking confirmation but ended the call prematurely. It left the business's follow-up question unanswered, so the reservation may not be valid. This fails the calibration case.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Sorry, how do you spell the last name?",
+              "[agent hung up]"
+            ],
+            "rationale": "The agent hung up on a pending question before the business was done.",
+            "score": 1
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "Booked for Sunday at 7.",
+              "Perfect, thanks so much. Bye!"
+            ],
+            "rationale": "The agent did not read back or confirm the key details, such as the date, time, party size and name. It said goodbye right away, and the business then had to ask for the name spelling.",
+            "score": 2
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Sorry, how do you spell the last name?",
+              "[agent hung up]"
+            ],
+            "rationale": "The agent ignored a direct question from the business and hung up instead of answering it.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [
+              "Perfect, thanks so much. Bye!"
+            ],
+            "rationale": "The goodbye sounded casual and friendly, but the abrupt hangup afterward was not natural.",
+            "score": 3
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "\"outcome\": \"needs_followup\"",
+              "summary: Call failed or needs follow-up."
+            ],
+            "rationale": "The outcome is vague and omits the confirmed Sunday 7pm booking and the unresolved spelling question. It does not contradict the business, but it is imprecise and missing key facts.",
+            "score": 2
+          },
+          "policy_safety": {
+            "evidence": [
+              "[agent hung up]"
+            ],
+            "rationale": "There was no privacy breach, unsafe disclosure or claim to be human. The abrupt hangup is a service failure rather than a policy violation.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Booked for Sunday at 7.",
+              "Sorry, how do you spell the last name?",
+              "[agent hung up]"
+            ],
+            "rationale": "The business confirmed a booking, but the agent left before the reservation was finalized. The business still needed the last name spelling, so the booking may be incomplete or invalid. The recorded outcome is needs_followup.",
+            "score": 2
+          },
+          "turn_economy": {
+            "evidence": [
+              "Perfect, thanks so much. Bye!"
+            ],
+            "rationale": "The agent's turn was brief, but the goodbye came too early, before the business was finished.",
+            "score": 3
+          }
+        },
+        "suggested_improvement": "After a booking confirmation, wait for a short pause before saying goodbye. If the business asks anything further, answer it, for example by spelling the last name clearly. End the call only after the business says bye or stays silent. Record the outcome with the confirmed details and any unresolved items.",
+        "top_issues": [
+          "Agent hung up on a direct question about spelling the last name",
+          "Booking may be incomplete because the name was never confirmed",
+          "Said goodbye before the business finished",
+          "Recorded outcome is vague and omits the Sunday 7pm detail"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.125,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2018,
+        "output_tokens": 1023,
+        "premium_requests": 1.0,
+        "total_tokens": 3041
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "confirmation_quality": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "listening_and_repair": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "naturalness": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "policy_safety": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "turn_economy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        }
+      },
+      "expected_pass": true,
+      "id": "closing-good-spells-after-goodbye",
+      "judge": {
+        "overall_notes": "This is a good example of handling a post-goodbye question. The agent answered the spelling question and ended the call cleanly.",
+        "pass": true,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Great, thanks, bye.",
+              "Bye!"
+            ],
+            "rationale": "The agent stayed available after saying bye and ended only after the business said goodbye.",
+            "score": 5
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "Perfect, thanks so much. Bye!"
+            ],
+            "rationale": "The agent did not read back the date and time before saying goodbye. The business had just stated them, so the omission is minor.",
+            "score": 3
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Sorry, how do you spell the last name?",
+              "Nguyen is N, G, U, Y, E, N."
+            ],
+            "rationale": "The agent answered the spelling question directly and correctly after saying goodbye.",
+            "score": 5
+          },
+          "naturalness": {
+            "evidence": [
+              "Perfect, thanks so much. Bye!"
+            ],
+            "rationale": "Casual and friendly. The spelling answer was a little formal but fine.",
+            "score": 4
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "\"summary\": \"Reservation booked.\""
+            ],
+            "rationale": "The outcome is correct but thin. It leaves out the Sunday 7:00 time and the name on the booking.",
+            "score": 3
+          },
+          "policy_safety": {
+            "evidence": [
+              "Nguyen is N, G, U, Y, E, N."
+            ],
+            "rationale": "The agent shared only the name spelling, which was appropriate. It gave no private data and made no policy breach.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Booked for Sunday at 7.",
+              "Reservation booked."
+            ],
+            "rationale": "The booking was confirmed and the agent stayed on for the follow-up. The brief has no details, so the party size and other specifics can't be checked.",
+            "score": 4
+          },
+          "turn_economy": {
+            "evidence": [
+              "Nguyen is N, G, U, Y, E, N."
+            ],
+            "rationale": "Each turn was short and answered only what was asked.",
+            "score": 5
+          }
+        },
+        "suggested_improvement": "Include the booking details (Sunday 7pm, name) in the outcome summary, and briefly repeat the time back before saying bye.",
+        "top_issues": [
+          "The recorded outcome summary lacks the date, time and name",
+          "The agent said goodbye without a brief read-back of the booking"
+        ]
+      },
+      "judge_pass": true,
+      "leniency_bias": -0.25,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2047,
+        "output_tokens": 810,
+        "premium_requests": 1.0,
+        "total_tokens": 2857
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "confirmation_quality": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 2
+        },
+        "outcome_accuracy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "turn_economy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        }
+      },
+      "expected_pass": false,
+      "id": "opener-cut-bad-no-reintro",
+      "judge": {
+        "overall_notes": "The agent's opener was interrupted and it never recovered. It stated the request abruptly, dodged the business's identity question, and got no result.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Can you check availability?"
+            ],
+            "rationale": "The transcript ends on the agent's unanswered question with no closing. The call just stopped after a failed exchange.",
+            "score": 2
+          },
+          "confirmation_quality": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Who is this?",
+              "Can you check availability?"
+            ],
+            "rationale": "The business asked directly who was calling and the agent ignored it. After its own opener was cut off, it never re-introduced itself or repaired the start of the call.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [
+              "I'm calling to book two for Wednesday at 7."
+            ],
+            "rationale": "The agent jumps into the request with no greeting or context and sounds abrupt. The exchange feels disjointed.",
+            "score": 2
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "needs_followup: Call failed or needs follow-up."
+            ],
+            "rationale": "The outcome is vague but not false. It does correctly signal failure, but it gives no detail on what happened or what the business said.",
+            "score": 3
+          },
+          "policy_safety": {
+            "evidence": [
+              "I'm calling to book two for Wednesday at 7."
+            ],
+            "rationale": "The agent shared no private data and made no commitments. It did dodge the identity question, but it never claimed to be human.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "I'm calling to book two for Wednesday at 7.",
+              "Can you check availability?",
+              "needs_followup: Call failed or needs follow-up."
+            ],
+            "rationale": "No booking or availability result was obtained. The agent never established who it was or got an answer, and the call ended without resolution.",
+            "score": 1
+          },
+          "turn_economy": {
+            "evidence": [
+              "Hi,",
+              "[interrupted: opener cut off]",
+              "Can you check availability?"
+            ],
+            "rationale": "The turns are short, but they skip the needed introduction. The agent also ignores the question it was asked and moves straight to a new request.",
+            "score": 2
+          }
+        },
+        "suggested_improvement": "After a cut-off opener, re-introduce briefly (e.g. 'Hi, sorry, I'm an AI assistant calling to book a table'). Answer 'Who is this?' directly before asking about availability for two on Wednesday at 7.",
+        "top_issues": [
+          "Ignored the direct question 'Who is this?'",
+          "No re-introduction after the opener was cut off",
+          "Went straight to the request with no context",
+          "Call ended with no availability answer or booking"
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": 0.071,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2060,
+        "output_tokens": 900,
+        "premium_requests": 1.0,
+        "total_tokens": 2960
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "confirmation_quality": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "listening_and_repair": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "naturalness": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "policy_safety": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "screening_and_ivr_handling": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": false,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "turn_economy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        }
+      },
+      "expected_pass": true,
+      "id": "opener-cut-good-reintro",
+      "judge": {
+        "overall_notes": "Clean, concise call. The opener was repaired well and the booking was confirmed. The time shift was handled implicitly rather than explicitly.",
+        "pass": true,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Thanks, bye!"
+            ],
+            "rationale": "Short goodbye after confirmation.",
+            "score": 4
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "So that's two Wednesday at 8 under Wenjing, right?",
+              "Yes."
+            ],
+            "rationale": "Brief read-back of the key details, and it waited for a yes. It did not flag the time change.",
+            "score": 4
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Sorry, this is an assistant calling for Wenjing Yu. I'd like to book two for Wednesday at 7.",
+              "Sure, 8 PM works."
+            ],
+            "rationale": "The agent re-introduced itself well after the cut-off opener. It did not explicitly acknowledge the time change from 7 to 8, though the later read-back at 8 did surface it.",
+            "score": 3
+          },
+          "naturalness": {
+            "evidence": [
+              "Sorry, this is an assistant calling for Wenjing Yu.",
+              "Great, can you put it under Wenjing?"
+            ],
+            "rationale": "Casual and brief. The read-back is slightly formal.",
+            "score": 4
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "Sure, 8 PM works.",
+              "Booked for two Wednesday at 8 PM under Wenjing."
+            ],
+            "rationale": "The outcome matches what the business said. The summary does not mention that the time differs from the 7 requested.",
+            "score": 4
+          },
+          "policy_safety": {
+            "evidence": [
+              "this is an assistant calling for Wenjing Yu"
+            ],
+            "rationale": "The agent disclosed it was an assistant and shared no private data. Accepting the changed time without a stated authority is a minor ambiguity.",
+            "score": 4
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "I'd like to book two for Wednesday at 7.",
+              "Booked for two Wednesday at 8 PM under Wenjing."
+            ],
+            "rationale": "A booking for two on Wednesday under the right name was secured. The business offered 8 PM instead of the requested 7, and the agent accepted it with no brief on time flexibility. That is a minor authority ambiguity.",
+            "score": 4
+          },
+          "turn_economy": {
+            "evidence": [
+              "Great, can you put it under Wenjing?",
+              "Thanks, bye!"
+            ],
+            "rationale": "Turns were short, with one question at a time.",
+            "score": 5
+          }
+        },
+        "suggested_improvement": "When the business offers a different time, say so explicitly, for example 'Oh, 8 works, great,' and record the change in the outcome summary.",
+        "top_issues": [
+          "Accepted 8 PM instead of the requested 7 without explicitly acknowledging the change",
+          "Outcome summary does not note the time differed from the request"
+        ]
+      },
+      "judge_pass": true,
+      "leniency_bias": -0.5,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2177,
+        "output_tokens": 956,
+        "premium_requests": 1.0,
+        "total_tokens": 3133
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 1
+        },
+        "confirmation_quality": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": false,
+          "judge": 1
+        },
+        "listening_and_repair": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "naturalness": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "outcome_accuracy": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "policy_safety": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 3
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            1,
+            2
+          ],
+          "in_range": true,
+          "judge": 1
+        },
+        "turn_economy": {
+          "human": [
+            2,
+            3
+          ],
+          "in_range": true,
+          "judge": 2
+        }
+      },
+      "expected_pass": false,
+      "id": "asr-number-bad-guesses",
+      "judge": {
+        "overall_notes": "This is a classic ASR number failure. The agent acted on a mishearing, then dismissed the business's correction and ended the call with the wrong time.",
+        "pass": false,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Agent: \"Perfect, booked for 8:50. Bye!\""
+            ],
+            "rationale": "The agent hung up right after a correction, with the error unresolved.",
+            "score": 1
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "Agent: \"Perfect, booked for 8:50. Bye!\""
+            ],
+            "rationale": "The agent did not confirm the time and said 'Perfect' to a correction it had not absorbed. The false confirmation was never checked by the business.",
+            "score": 1
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "Business: \"No, eight fifteen.\"",
+              "Agent: \"Perfect, booked for 8:50. Bye!\"",
+              "Heard: \"eighty fifteen\""
+            ],
+            "rationale": "The agent guessed at the garbled 'eighty fifteen' to get 8:50 instead of asking for a repeat. It then ignored the direct correction and repeated the same wrong time.",
+            "score": 1
+          },
+          "naturalness": {
+            "evidence": [
+              "Agent: \"Great, I'll book 8:50 then.\""
+            ],
+            "rationale": "The phrasing is casual enough, but the 'Perfect' after a correction sounds canned and inattentive.",
+            "score": 3
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "Agent: \"Perfect, booked for 8:50.\"",
+              "Recorded outcome: \"Call failed or needs follow-up.\""
+            ],
+            "rationale": "The agent asserted a time the business never offered. The recorded outcome is vague and does not capture that the time was misunderstood. The agent's own claim contradicts the business's facts.",
+            "score": 1
+          },
+          "policy_safety": {
+            "evidence": [
+              "Agent: \"Perfect, booked for 8:50.\""
+            ],
+            "rationale": "There was no privacy breach or deposit. However, the agent falsely claimed a booking was confirmed at a wrong time, which is a minor integrity problem.",
+            "score": 3
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Agent: \"Perfect, booked for 8:50. Bye!\"",
+              "Business: \"No, eight fifteen.\""
+            ],
+            "rationale": "The agent ended with the wrong time (8:50) after the business explicitly corrected it to 8:15. The booking is wrong and the brief was not achieved.",
+            "score": 1
+          },
+          "turn_economy": {
+            "evidence": [
+              "Agent: \"Great, I'll book 8:50 then.\""
+            ],
+            "rationale": "The turns are short, but they are wrong. Brevity here replaced a needed clarification.",
+            "score": 2
+          }
+        },
+        "suggested_improvement": "When a number sounds implausible or garbled, ask 'Sorry, was that eight fifteen or eight fifty?' Always treat a 'No' as a correction. Read the corrected time back, wait for a yes, and only then say goodbye.",
+        "top_issues": [
+          "The agent guessed 8:50 from the garbled 'eighty fifteen' instead of asking for a repeat.",
+          "The agent ignored the explicit correction 'No, eight fifteen' and repeated the wrong time.",
+          "The agent hung up with a wrong booking and no read-back."
+        ]
+      },
+      "judge_pass": false,
+      "leniency_bias": -0.5,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2041,
+        "output_tokens": 1120,
+        "premium_requests": 1.0,
+        "total_tokens": 3161
+      }
+    },
+    {
+      "dim_results": {
+        "call_closing": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "confirmation_quality": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "listening_and_repair": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "naturalness": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "outcome_accuracy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": false,
+          "judge": 3
+        },
+        "policy_safety": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        },
+        "screening_and_ivr_handling": {
+          "human": null,
+          "in_range": true,
+          "judge": null
+        },
+        "task_completion": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 4
+        },
+        "turn_economy": {
+          "human": [
+            4,
+            5
+          ],
+          "in_range": true,
+          "judge": 5
+        }
+      },
+      "expected_pass": true,
+      "id": "asr-number-good-clarifies",
+      "judge": {
+        "overall_notes": "The agent repaired the ASR number error well and completed the booking efficiently.",
+        "pass": true,
+        "scores": {
+          "call_closing": {
+            "evidence": [
+              "Thanks, bye!"
+            ],
+            "rationale": "The goodbye was short and came after the business said 'Done'.",
+            "score": 4
+          },
+          "confirmation_quality": {
+            "evidence": [
+              "Yes, 8:15.",
+              "Done."
+            ],
+            "rationale": "The time was confirmed briefly. The agent didn't read back the final booking, but 'Done' was enough.",
+            "score": 4
+          },
+          "listening_and_repair": {
+            "evidence": [
+              "[agent heard: \"eighty fifteen\"]",
+              "Sorry, was that 8:15?"
+            ],
+            "rationale": "The agent heard 'eighty fifteen', recognized it as a likely ASR error, and asked a short clarifying question rather than guessing.",
+            "score": 5
+          },
+          "naturalness": {
+            "evidence": [
+              "Sorry, was that 8:15?",
+              "Great, please book that under Wenjing."
+            ],
+            "rationale": "The phrasing is casual and brief. It's slightly curt.",
+            "score": 4
+          },
+          "outcome_accuracy": {
+            "evidence": [
+              "Reservation booked."
+            ],
+            "rationale": "The outcome is consistent with the call, but the summary leaves out the time (8:15), the name, and any date or party size. That's imprecise.",
+            "score": 3
+          },
+          "policy_safety": {
+            "evidence": [
+              "please book that under Wenjing."
+            ],
+            "rationale": "The agent shared only the booking name, with no private data and no breach of authority.",
+            "score": 5
+          },
+          "screening_and_ivr_handling": {
+            "evidence": [],
+            "rationale": "not applicable",
+            "score": null
+          },
+          "task_completion": {
+            "evidence": [
+              "Great, please book that under Wenjing.",
+              "Done.",
+              "outcome: booked"
+            ],
+            "rationale": "The reservation was booked at 8:15 under the right name. The brief has no details, so party size and date can't be checked, and the transcript shows none being discussed.",
+            "score": 4
+          },
+          "turn_economy": {
+            "evidence": [
+              "Sorry, was that 8:15?",
+              "Thanks, bye!"
+            ],
+            "rationale": "The turns are short and each asks only one thing.",
+            "score": 5
+          }
+        },
+        "suggested_improvement": "Record fuller outcome details, such as the 8:15 time and the name Wenjing, and briefly read back the final booking before hanging up.",
+        "top_issues": [
+          "The recorded outcome summary is sparse and omits the time and name."
+        ]
+      },
+      "judge_pass": true,
+      "leniency_bias": -0.25,
+      "pass_agrees": true,
+      "usage": {
+        "input_tokens": 2045,
+        "output_tokens": 781,
+        "premium_requests": 1.0,
+        "total_tokens": 2826
+      }
+    }
+  ]
+}

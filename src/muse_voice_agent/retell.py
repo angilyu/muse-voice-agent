@@ -27,6 +27,7 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from .config import Settings
 from .graph import CallControl, CallOutcome, build_call_graph
+from .outcome_fallback import has_business_speech, infer_outcome
 from .store import FINAL_STATUSES, CallStore
 from .tasks import parse_task
 
@@ -527,6 +528,50 @@ def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -
         store.update_call(call_id, status="failed", error=f"retell: {reason}")
 
 
+OUTCOME_RECOVERY_TIMEOUT_S = 30.0
+
+
+async def recover_outcome(
+    store: CallStore,
+    call_id: str,
+    call: dict[str, Any],
+    model: BaseChatModel | None = None,
+    timeout_s: float = OUTCOME_RECOVERY_TIMEOUT_S,
+) -> bool:
+    """If a connected call ended before record_outcome, infer the result from the transcript.
+
+    Returns True when an inferred outcome was stored. Any failure leaves the record untouched so
+    finalize_from_retell falls back to "needs_followup".
+    """
+    reason = call.get("disconnection_reason") or ""
+    record = store.get_call(call_id)
+    if record is None or record["outcome"] or reason not in INCOMPLETE_REASONS:
+        return False
+    turns = _store_transcript(call.get("transcript_object") or [])
+    if not has_business_speech(turns):
+        return False
+    try:
+        task = parse_task(record["task"])
+        outcome = await asyncio.wait_for(infer_outcome(task, turns, model=model), timeout_s)
+    except Exception as e:  # noqa: BLE001
+        logger.warning("outcome recovery failed for %s: %s", call_id, e)
+        return False
+    if outcome is None:
+        return False
+    current = store.get_call(call_id)
+    if current is None or current["outcome"]:
+        return False  # the live session recorded the real result while we were inferring
+    logger.info("inferred outcome for %s: %s", call_id, outcome.model_dump_json())
+    store.update_call(
+        call_id,
+        status="completed",
+        outcome=outcome.outcome,
+        summary=outcome.summary,
+        details=outcome.model_dump(exclude_none=True),
+    )
+    return True
+
+
 async def monitor_call(
     settings: Settings,
     store: CallStore,
@@ -544,6 +589,7 @@ async def monitor_call(
                 logger.warning("get-call %s failed: %s", retell_call_id, e)
                 continue
             if call.get("call_status") in ("ended", "error", "not_connected"):
+                await recover_outcome(store, call_id, call)
                 finalize_from_retell(store, call_id, call)
                 return
     record = store.get_call(call_id)

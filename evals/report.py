@@ -103,6 +103,7 @@ def aggregate_results(results: list[dict[str, Any]]) -> dict[str, Any]:
         "count": total,
         "errored_cases": errored,
         "judge_errors": judge_errors,
+        "outcome_inferred_cases": sum(1 for r in results if r.get("outcome_inferred")),
         "deterministic_pass_rate": round(sum(deterministic_passes) / total, 3) if total else None,
         "mean_overall_score": _mean(overall_scores),
         "mean_rubric_scores": {k: _mean(v) for k, v in sorted(rubric_dims.items())},
