@@ -55,6 +55,13 @@ class _BaseTask(BaseModel):
         max_length=40,
         description="The calling assistant's own name, e.g. 'Eva'. The agent says it in the opener.",
     )
+    callback_of: str | None = Field(
+        default=None, description="Original outbound call id, for inbound callbacks."
+    )
+    callback_context: str | None = Field(
+        default=None,
+        description="Prior-call context to use when answering an inbound callback.",
+    )
 
     @field_validator("assistant_name", mode="before")
     @classmethod
@@ -197,9 +204,35 @@ class GeneralCall(_BaseTask):
         return self
 
 
-AnyTask = RestaurantReservation | HandymanQuote | GeneralCall
+class InboundMessage(BaseModel):
+    """An inbound call from a number we cannot match to a recent outbound call."""
+
+    kind: Literal["inbound_message"] = "inbound_message"
+    business_name: str = "Unknown inbound caller"
+    phone_number: str = Field(description="Inbound caller phone number")
+    assistant_name: str | None = Field(default=None, max_length=40)
+
+    @field_validator("phone_number")
+    @classmethod
+    def _phone(cls, v: str) -> str:
+        return normalize_phone(v)
+
+    @field_validator("assistant_name", mode="before")
+    @classmethod
+    def _assistant_name(cls, v: object) -> object:
+        if isinstance(v, str):
+            v = " ".join(v.split()).strip(" .,")
+            if not v or v.lower() in _PLACEHOLDER_ASSISTANT_NAMES:
+                return None
+            if not _ASSISTANT_NAME.fullmatch(v):
+                raise ValueError("assistant_name must be a short name like 'Eva'")
+        return v
+
+
+AnyTask = RestaurantReservation | HandymanQuote | GeneralCall | InboundMessage
 CallTask = Annotated[
-    Union[RestaurantReservation, HandymanQuote, GeneralCall], Field(discriminator="kind")
+    Union[RestaurantReservation, HandymanQuote, GeneralCall, InboundMessage],
+    Field(discriminator="kind"),
 ]
 CALL_TASK_ADAPTER: TypeAdapter[CallTask] = TypeAdapter(CallTask)
 
@@ -302,10 +335,20 @@ def self_intro(task: AnyTask, *, ai: bool = True) -> str:
 
 def opening_line(task: AnyTask) -> str:
     """Fixed first sentence, spoken before the LLM runs so the callee hears us immediately."""
+    if isinstance(task, InboundMessage):
+        return f"Hi, this is {self_intro(task, ai=True)}. I can take a message."
+    if getattr(task, "callback_of", None):
+        return (
+            f"Hi, this is {self_intro(task, ai=False)} for {task.customer_name}. "
+            "Thanks for calling back."
+        )
     return f"Hi, this is {self_intro(task, ai=False)} calling on behalf of {task.customer_name}."
 
 
 def build_system_prompt(task: AnyTask) -> str:
+    if isinstance(task, InboundMessage):
+        return _inbound_message_prompt(task)
+
     callback_clause = (
         f" and the callback number {task.callback_number} if they ask for one"
         if task.callback_number
@@ -319,8 +362,20 @@ def build_system_prompt(task: AnyTask) -> str:
         today=_today(),
     )
 
+    callback_context = (
+        "\nInbound callback context:\n"
+        f"- This is an inbound callback to the assistant line for original call {task.callback_of}.\n"
+        "- Answer as the assistant for the same customer. Thank them for calling back, connect the "
+        "conversation to the original request, and continue or finish that request.\n"
+        "- The original authority, limits, privacy rules and no-payment/no-address rules still apply. "
+        "Do not expand what you may commit to just because they called back.\n"
+        f"- Prior call context and outcome:\n{task.callback_context}\n"
+        if getattr(task, "callback_of", None)
+        else ""
+    )
+
     if isinstance(task, GeneralCall):
-        return _general_goal(task) + "\n" + rules
+        return callback_context + _general_goal(task) + "\n" + rules
     if isinstance(task, RestaurantReservation):
         goal = f"""You are calling {task.business_name} to book a table.
 Reservation request:
@@ -355,7 +410,32 @@ hourly rate, trip fee, free estimate visit), and their earliest availability. Do
 to anything. Use outcome "quote_received", "declined" (they don't do this work) or "needs_followup"
 (e.g. they need a site visit or photos first)."""
 
-    return goal + "\n" + rules
+    return callback_context + goal + "\n" + rules
+
+
+def _inbound_message_prompt(task: InboundMessage) -> str:
+    return f"""You are {self_intro(task)} answering an inbound call to an AI assistant phone line.
+
+This caller's number ({task.phone_number}) did not match any recent business this assistant called.
+
+Goal:
+- Politely explain this is an AI assistant line.
+- Do not claim to know why they are calling.
+- Ask for and record their name, best callback number, and reason for calling.
+- Never book, order, schedule, cancel, promise, transfer money, share private customer details, or
+  commit to anything.
+- Once you have a message, say a brief goodbye, call record_outcome with outcome "info_received",
+  include the name/number/reason in the summary and answers, then call end_call after goodbye.
+
+How to talk:
+- Keep every turn to one short sentence and ask one thing at a time.
+- If they ask whether you're a robot, an AI, automated or a real person, say honestly that you're
+  an AI assistant in the first few words.
+- If they refuse to leave a message or it is clearly a wrong number, record outcome "needs_followup"
+  with a compact summary and end the call.
+
+Today is {_today()} (Pacific time).
+"""
 
 
 def _general_goal(task: GeneralCall) -> str:

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from dataclasses import replace
 
 import httpx
@@ -153,6 +154,10 @@ def test_custom_llm_websocket_conversation(settings):
     assert record["outcome"] == "booked"
     assert record["provider_call_id"] == "rc_1"
     assert [t["role"] for t in record["transcript"]][:3] == ["user", "assistant", "user"]
+
+
+async def _noop_monitor(*args, **kwargs):  # noqa: ANN002, ANN003
+    return None
 
 
 def _bound_session(settings, store, model, path="rc_1"):
@@ -321,6 +326,78 @@ def test_websocket_rejects_unknown_call(settings):
         assert exc.value.code == 1008
 
 
+def test_inbound_callback_binds_to_recent_outbound_call(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(_task().model_dump(), dry_run=False)
+    store.update_call(parent["id"], status="completed", outcome="no_answer", summary="They did not pick up.")
+    model = FakeToolModel(messages=iter([AIMessage(content="Thanks for calling back about Friday at 7.")]))
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json(
+            {
+                "interaction_type": "call_details",
+                "call": {
+                    "from_number": "(415) 555-0123",
+                    "to_number": settings.retell_from_number,
+                    "start_timestamp": 1_700_000_000_000,
+                },
+            }
+        )
+        ws.send_json(
+            {
+                "interaction_type": "response_required",
+                "response_id": 1,
+                "transcript": [{"role": "user", "content": "Hi, you called us?"}],
+            }
+        )
+        text, _ = _collect(ws, 1)
+
+    callbacks = store.list_callbacks(parent["id"])
+    assert len(callbacks) == 1
+    callback = callbacks[0]
+    assert callback["direction"] == "inbound"
+    assert callback["parent_call_id"] == parent["id"]
+    assert callback["provider_call_id"] == "rc_in"
+    assert callback["started_at"] == 1_700_000_000.0
+    assert callback["task"]["callback_of"] == parent["id"]
+    assert "original_call_id" in callback["task"]["callback_context"]
+    assert text.startswith("Hi, this is an assistant for Angi. Thanks for calling back.")
+
+
+def test_unknown_inbound_caller_takes_message_only(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    store = CallStore(settings.call_db_path)
+    model = FakeToolModel(messages=iter([AIMessage(content="Could I take your name and a message?")]))
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_unknown") as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json(
+            {
+                "interaction_type": "call_details",
+                "call": {"from_number": "415-555-0999", "to_number": settings.retell_from_number},
+            }
+        )
+        ws.send_json(
+            {
+                "interaction_type": "response_required",
+                "response_id": 1,
+                "transcript": [{"role": "user", "content": "Hello?"}],
+            }
+        )
+        text, _ = _collect(ws, 1)
+
+    [record] = store.list_calls()
+    assert record["kind"] == "inbound_message"
+    assert record["direction"] == "inbound"
+    assert record["parent_call_id"] is None
+    assert record["phone_number"] == "+14155550999"
+    assert text.startswith("Hi, this is an AI assistant. I can take a message.")
+
+
 def test_http_still_requires_bearer_token(settings):
     app = build_app(settings, CallStore(settings.call_db_path))
     assert TestClient(app).post("/mcp", json={}).status_code == 401
@@ -452,6 +529,21 @@ def test_store_migrates_old_database(tmp_path):
     store.update_call(call_id, provider_call_id="rc_1", started_at=1.0, end_reason="agent_hangup")
     record = store.get_call(call_id)
     assert (record["provider_call_id"], record["started_at"], record["outcome_source"]) == ("rc_1", 1.0, None)
+    assert (record["direction"], record["parent_call_id"]) == ("outbound", None)
+
+
+def test_callback_matching_prefers_recent_unfinished_call(settings):
+    store = CallStore(settings.call_db_path)
+    older = store.create_call(_task().model_dump(), dry_run=False)
+    newer_done = store.create_call(_task().model_dump(), dry_run=False)
+    newest_active = store.create_call(_task().model_dump(), dry_run=False)
+    now = time.time()
+    store.update_call(older["id"], status="completed", created_at=now - 30)
+    store.update_call(newer_done["id"], status="completed", created_at=now - 10)
+    store.update_call(newest_active["id"], status="in_progress", created_at=now - 20)
+
+    assert store.find_callback_parent("(415) 555-0123", lookback_seconds=10_000_000)["id"] == newest_active["id"]
+    assert store.find_callback_parent("+14155550123", lookback_seconds=1) is None
 
 
 def test_finalize_keeps_recorded_outcome(settings):

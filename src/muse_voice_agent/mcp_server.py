@@ -61,6 +61,9 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   duration, and suggested next_steps, plus the speaker-labeled transcript. Tell the user the
   summary, key details (date/time, total, quote), any unanswered questions, and offer the next
   steps (e.g. add a booking to their calendar, retry, or call another business).
+- If the business calls back the agent's Retell number, the inbound callback is linked to the
+  original outbound call. get_call_status on the original call includes callback results, and
+  list_calls includes inbound callback records with direction="inbound" and callback_of set.
 - Always pass customer_name: the full name of the user you're calling for. The agent introduces
   itself as their assistant. If you don't know the user's name, ask them before calling.
 - Always pass assistant_name: your own name, the one the user knows you by (e.g. "Eva"). The agent
@@ -71,7 +74,10 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
 
 
 def _public_view(
-    record: dict[str, Any], include_transcript: bool = False, include_report: bool = False
+    record: dict[str, Any],
+    include_transcript: bool = False,
+    include_report: bool = False,
+    callback_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     done = record["status"] in FINAL_STATUSES
     view = {
@@ -86,11 +92,18 @@ def _public_view(
         "details": record["details"],
         "error": record["error"],
         "simulated": record["dry_run"],
+        "direction": record.get("direction") or "outbound",
+        "callback_of": record.get("parent_call_id"),
     }
     if include_report and done:
         view["report"] = build_report(record)
     if include_transcript:
         view["transcript"] = speaker_transcript(record["transcript"])
+    if callback_records:
+        view["callbacks"] = [
+            _public_view(r, include_transcript=include_transcript, include_report=include_report)
+            for r in callback_records
+        ]
     return view
 
 
@@ -295,7 +308,13 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             return {"error": "not_found", "message": f"No call with id {call_id}"}
         if include_transcript is None:
             include_transcript = record["status"] in FINAL_STATUSES
-        return _public_view(record, include_transcript=include_transcript, include_report=True)
+        callbacks = store.list_callbacks(call_id)
+        return _public_view(
+            record,
+            include_transcript=include_transcript,
+            include_report=True,
+            callback_records=callbacks,
+        )
 
     @mcp.tool(annotations=ToolAnnotations(title="List recent calls", readOnlyHint=True))
     async def list_calls(limit: int = 10) -> dict[str, Any]:

@@ -151,6 +151,54 @@ async def test_handyman_quote_dry_run(settings):
     assert listed["calls"][0]["call_id"] == started["call_id"]
 
 
+async def test_original_call_status_surfaces_inbound_callback(settings):
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(
+        {
+            "kind": "general",
+            "business_name": "Hotel Zed",
+            "phone_number": "+14155550100",
+            "customer_name": "Angi",
+            "goal": "Check rooms",
+            "questions": [],
+            "shareable_details": {},
+            "authority": "info_only",
+            "limits": None,
+            "callback_number": None,
+            "assistant_name": None,
+        },
+        dry_run=False,
+    )
+    store.update_call(parent["id"], status="completed", outcome="needs_followup", summary="They will call back.")
+    callback = store.create_call(
+        {
+            **parent["task"],
+            "callback_of": parent["id"],
+            "callback_context": "prior call context",
+        },
+        dry_run=False,
+        direction="inbound",
+        parent_call_id=parent["id"],
+        status="completed",
+    )
+    store.update_call(
+        callback["id"],
+        outcome="info_received",
+        summary="They called back with room availability.",
+        outcome_source="agent",
+    )
+
+    async with Client(build_server(settings, store)) as client:
+        status = _data(await client.call_tool("get_call_status", {"call_id": parent["id"]}))
+        listed = _data(await client.call_tool("list_calls", {"limit": 2}))
+
+    assert status["callbacks"][0]["call_id"] == callback["id"]
+    assert status["callbacks"][0]["callback_of"] == parent["id"]
+    assert status["callbacks"][0]["report"]["outcome_source"] == "agent"
+    assert listed["calls"][0]["direction"] == "inbound"
+    assert listed["calls"][0]["callback_of"] == parent["id"]
+
+
 async def test_general_call_dry_run_returns_answers(settings):
     async with Client(build_server(settings)) as client:
         started = _data(

@@ -31,8 +31,9 @@ from .config import Settings
 from .graph import CallControl, CallOutcome, build_call_graph
 from .outcome_fallback import has_business_speech, infer_outcome
 from .pickup import classify_line, is_note
+from .report import build_report
 from .store import FINAL_STATUSES, CallStore
-from .tasks import parse_task
+from .tasks import InboundMessage, parse_task
 
 logger = logging.getLogger("muse_voice_agent.retell")
 
@@ -53,6 +54,7 @@ CLOSING_REMINDER_MS = 4000
 # Said when a reply to a person is slow to start, so the line doesn't go dead while the model thinks.
 FILLER = "Hmm, "
 _LEADING_FILLER = re.compile(r"^\s*(?:hmm+|um+|uh+)\b[,.!]?\s*", re.I)
+_background: set[asyncio.Task] = set()
 
 
 class RetellError(Exception):
@@ -200,6 +202,61 @@ def _store_transcript(transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ]
 
 
+def _spawn(coro) -> None:  # noqa: ANN001
+    task = asyncio.create_task(coro)
+    _background.add(task)
+    task.add_done_callback(_background.discard)
+
+
+def _timing_fields(call: dict[str, Any]) -> dict[str, Any]:
+    fields: dict[str, Any] = {}
+    for key, column in (("start_timestamp", "started_at"), ("end_timestamp", "ended_at")):
+        if isinstance(call.get(key), (int, float)):
+            fields[column] = call[key] / 1000
+    if call.get("disconnection_reason"):
+        fields["end_reason"] = call["disconnection_reason"]
+    return fields
+
+
+def _inbound_caller_number(call: dict[str, Any], settings: Settings) -> str | None:
+    candidates = [
+        call.get("from_number"),
+        call.get("caller_number"),
+        call.get("from"),
+        (call.get("phone_call") or {}).get("from_number")
+        if isinstance(call.get("phone_call"), dict)
+        else None,
+    ]
+    own_numbers = {n for n in (settings.retell_from_number, call.get("to_number")) if n}
+    for number in candidates:
+        if isinstance(number, str) and number and number not in own_numbers:
+            return number
+    return next((n for n in candidates if isinstance(n, str) and n), None)
+
+
+def _callback_context(parent: dict[str, Any]) -> str:
+    task = parent.get("task") or {}
+    context: dict[str, Any] = {
+        "original_call_id": parent["id"],
+        "original_status": parent.get("status"),
+        "original_outcome": parent.get("outcome"),
+        "original_summary": parent.get("summary"),
+        "original_task": {
+            k: v
+            for k, v in task.items()
+            if k not in {"callback_context"} and v not in (None, [], {})
+        },
+    }
+    if parent.get("status") in FINAL_STATUSES:
+        context["original_report"] = build_report(parent)
+    elif parent.get("details"):
+        context["original_details"] = parent["details"]
+    transcript = parent.get("transcript") or []
+    if transcript:
+        context["recent_transcript"] = transcript[-8:]
+    return json.dumps(context, ensure_ascii=False, default=str)
+
+
 class RetellLLMSession:
     """Handles one Retell custom-LLM websocket connection (one phone call)."""
 
@@ -298,6 +355,9 @@ class RetellLLMSession:
     async def _bind(self, call: dict[str, Any]) -> None:
         call_id = (call.get("metadata") or {}).get(METADATA_KEY)
         record = self.store.get_call(call_id) if call_id else None
+        if record is None and not call_id:
+            record = await self._create_inbound_call(call)
+            call_id = record["id"] if record else None
         if record is None or record["status"] in FINAL_STATUSES:
             logger.warning(
                 "rejecting retell call %s: unknown/finished call %r", self.retell_call_id, call_id
@@ -308,11 +368,55 @@ class RetellLLMSession:
         self.graph = build_call_graph(
             parse_task(record["task"]), self._on_outcome, self.model, control=self.control
         )
-        self.store.update_call(call_id, status="in_progress", provider_call_id=self.retell_call_id)
+        timing = _timing_fields(call)
+        self.store.update_call(
+            call_id, status="in_progress", provider_call_id=self.retell_call_id, **timing
+        )
         self._bound.set()
         logger.info("retell call %s bound to %s", self.retell_call_id, call_id)
+        if record.get("direction") == "inbound" and self.settings is not None:
+            _spawn(monitor_call(self.settings, self.store, call_id, self.retell_call_id))
         if self.settings is not None and self.silent_pickup_seconds is not None:
             self._watcher = asyncio.create_task(self._watch_silent_pickup())
+
+    async def _create_inbound_call(self, call: dict[str, Any]) -> dict[str, Any] | None:
+        if self.settings is None:
+            return None
+        caller = _inbound_caller_number(call, self.settings)
+        if not caller:
+            logger.warning("inbound retell call %s had no caller number", self.retell_call_id)
+            return None
+        parent = self.store.find_callback_parent(
+            caller,
+            lookback_seconds=max(1, self.settings.inbound_callback_lookback_days) * 24 * 60 * 60,
+        )
+        if parent:
+            task = dict(parent["task"])
+            task["callback_of"] = parent["id"]
+            task["callback_context"] = _callback_context(parent)
+            business = parent["business_name"]
+            logger.info(
+                "inbound retell call %s from %s matched outbound call %s",
+                self.retell_call_id,
+                caller,
+                parent["id"],
+            )
+        else:
+            task = InboundMessage(phone_number=caller).model_dump()
+            business = task["business_name"]
+            logger.info("inbound retell call %s from unknown caller %s", self.retell_call_id, caller)
+        record = self.store.create_call(
+            task,
+            dry_run=False,
+            direction="inbound",
+            parent_call_id=parent["id"] if parent else None,
+            status="in_progress",
+            provider_call_id=self.retell_call_id,
+        )
+        if business != record["business_name"]:
+            self.store.update_call(record["id"], business_name=business)
+            record = self.store.get_call(record["id"]) or record
+        return record
 
     def _anyone_spoke(self) -> bool:
         transcript = self._last_transcript or []

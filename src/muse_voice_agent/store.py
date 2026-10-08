@@ -20,6 +20,8 @@ _ADDED_COLUMNS = {
     "ended_at": "REAL",
     "end_reason": "TEXT",  # e.g. Retell's disconnection_reason: user_hangup, agent_hangup...
     "outcome_source": "TEXT",  # agent | transcript | call_system
+    "direction": "TEXT NOT NULL DEFAULT 'outbound'",
+    "parent_call_id": "TEXT",
 }
 
 _SCHEMA = """
@@ -41,6 +43,8 @@ CREATE TABLE IF NOT EXISTS calls (
     ended_at REAL,
     end_reason TEXT,
     outcome_source TEXT,
+    direction TEXT NOT NULL DEFAULT 'outbound',
+    parent_call_id TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -69,21 +73,34 @@ class CallStore:
         finally:
             conn.close()
 
-    def create_call(self, task: dict[str, Any], *, dry_run: bool) -> dict[str, Any]:
+    def create_call(
+        self,
+        task: dict[str, Any],
+        *,
+        dry_run: bool,
+        direction: str = "outbound",
+        parent_call_id: str | None = None,
+        status: str = "queued",
+        provider_call_id: str | None = None,
+    ) -> dict[str, Any]:
         call_id = uuid.uuid4().hex[:12]
         now = time.time()
         with self._conn() as c:
             c.execute(
                 "INSERT INTO calls (id, kind, business_name, phone_number, task_json, status,"
-                " dry_run, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                " dry_run, provider_call_id, direction, parent_call_id, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     task["kind"],
                     task["business_name"],
                     task["phone_number"],
                     json.dumps(task),
-                    "queued",
+                    status,
                     int(dry_run),
+                    provider_call_id,
+                    direction,
+                    parent_call_id,
                     now,
                     now,
                 ),
@@ -120,6 +137,39 @@ class CallStore:
         with self._conn() as c:
             row = c.execute("SELECT * FROM calls WHERE id = ?", (call_id,)).fetchone()
         return _row_to_dict(row) if row else None
+
+    def find_callback_parent(
+        self, caller_number: str, *, lookback_seconds: int
+    ) -> dict[str, Any] | None:
+        """Find the recent outbound call an inbound callback is most likely responding to."""
+        from .tasks import normalize_phone
+
+        phone = normalize_phone(caller_number)
+        since = time.time() - lookback_seconds
+        final_marks = ",".join("?" * len(FINAL_STATUSES))
+        with self._conn() as c:
+            row = c.execute(
+                f"""
+                SELECT * FROM calls
+                WHERE direction = 'outbound'
+                  AND phone_number = ?
+                  AND created_at >= ?
+                ORDER BY
+                  CASE WHEN status NOT IN ({final_marks}) THEN 0 ELSE 1 END,
+                  created_at DESC
+                LIMIT 1
+                """,
+                (phone, since, *FINAL_STATUSES),
+            ).fetchone()
+        return _row_to_dict(row) if row else None
+
+    def list_callbacks(self, parent_call_id: str) -> list[dict[str, Any]]:
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT * FROM calls WHERE parent_call_id = ? ORDER BY created_at DESC",
+                (parent_call_id,),
+            ).fetchall()
+        return [_row_to_dict(r) for r in rows]
 
     def list_calls(self, limit: int = 10) -> list[dict[str, Any]]:
         with self._conn() as c:

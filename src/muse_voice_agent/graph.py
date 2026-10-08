@@ -41,7 +41,14 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field, create_model
 
 from .pickup import classify_line, is_greeting, is_note
-from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line, self_intro
+from .tasks import (
+    AnyTask,
+    GeneralCall,
+    InboundMessage,
+    build_system_prompt,
+    opening_line,
+    self_intro,
+)
 
 _TOOL_MARKER = "<function="
 _TOOL_MARKUP = re.compile(r"<function=.*?/>", re.S)
@@ -191,7 +198,7 @@ class _ToolMarkupFilter:
 
 def _line_notes(task: AnyTask, kind: str | None, *, intro_now: bool, reintro: bool) -> list[str]:
     """Notes about what's on the line, from the keyword classifier."""
-    name = task.customer_name
+    name = getattr(task, "customer_name", "the caller")
     if reintro:
         return [
             "A person just picked up and didn't hear you before (you were talking to silence, a "
@@ -236,16 +243,17 @@ def _status_notes(
             '"Bye!" and call end_call in the same reply.'
         )
     elif control.opener_spoken and not intro_now:
-        first = task.customer_name.split()[0].lower()
+        customer_name = getattr(task, "customer_name", "")
+        first = customer_name.split()[0].lower() if customer_name else ""
         heard = any(
-            isinstance(m, AIMessage) and first in _content_text(m).lower() for m in history
+            first and isinstance(m, AIMessage) and first in _content_text(m).lower() for m in history
         )
-        if not heard:
+        if customer_name and not heard:
             notes.append(
                 "Your introduction got cut off, so they don't know who you are. Start this reply "
                 "without apologizing, e.g. \"I'm "
                 + (f"{task.assistant_name}, " if task.assistant_name else "")
-                + f'the assistant for {task.customer_name}."'
+                + f'the assistant for {customer_name}."'
             )
     return notes
 
@@ -386,6 +394,14 @@ UNAUTHORIZED_COMMIT_NOTE = "Agent was not authorized to commit; confirm with the
 
 def apply_authority(task: AnyTask, outcome: CallOutcome) -> CallOutcome:
     """An info-only brief never reports a booking or order as done, whoever recorded it."""
+    if isinstance(task, InboundMessage) and outcome.outcome in {"booked", "ordered"}:
+        note = "Unknown inbound caller; no commitment was authorized."
+        return outcome.model_copy(
+            update={
+                "outcome": "needs_followup",
+                "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
+            }
+        )
     if not (
         isinstance(task, GeneralCall)
         and task.authority == "info_only"

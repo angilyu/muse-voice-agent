@@ -33,6 +33,10 @@ Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus
 - **Results the assistant can use.** Every call ends with a typed `CallOutcome`: `booked`,
   `quote_received`, `info_received`, `voicemail`, and so on. It includes per-question answers,
   confirmation numbers, and the full transcript.
+- **Inbound callbacks.** If a business calls back the Retell number, the agent matches the caller to
+  a recent outbound call, answers as the same assistant with the original brief and result as
+  context, and links the callback report to the original call. Unknown callers are told this is an
+  AI assistant line and can only leave a message.
 - **Your code decides what's said, Retell handles the phone audio.** Retell AI does dialing,
   speech-to-text, text-to-speech, barge-in and voicemail detection. A LangGraph graph you control
   writes each reply over Retell's custom-LLM websocket.
@@ -55,6 +59,7 @@ flowchart LR
     R <-->|"custom-LLM websocket<br/>(one message per turn)"| G[LangGraph<br/>conversation graph]
     G -->|record_outcome| DB[(SQLite call log)]
     M -->|get_call_status| S --> DB
+    B -->|inbound callback| R
 ```
 
 1. The assistant calls a tool such as `place_call`. The server checks the brief, applies its limits,
@@ -81,6 +86,9 @@ flowchart LR
    before the agent recorded the result, for example right after "you're all set", the monitor
    reads the result from the transcript. Its `follow_up` says it was read from the transcript.
 4. The assistant polls `get_call_status(call_id)` until `done` is true, then tells you the result.
+   If the business calls back later, the inbound call is stored as `direction: "inbound"` with
+   `callback_of` pointing to the original `call_id`; the original call's status response includes a
+   `callbacks` array with the callback result and report.
 
 ```mermaid
 sequenceDiagram
@@ -198,6 +206,18 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
     "follow_up": null
   },
   "simulated": false,
+  "direction": "outbound",
+  "callback_of": null,
+  "callbacks": [
+    {
+      "call_id": "cb_…",
+      "direction": "inbound",
+      "callback_of": "c_8f2…",
+      "status": "completed",
+      "outcome": "booked",
+      "summary": "The restaurant called back and confirmed the Saturday reservation."
+    }
+  ],
   "report": {                       // only once done
     "request": { "customer_name": "Wenjing Yu", "goal": "…", "questions": ["…"], "authority": "info_only" },
     "reached": "person",            // person | voicemail | phone_menu | no_answer | not_connected | unknown
@@ -225,7 +245,21 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
 The `report` lets the assistant answer follow-ups in the chat ("what time did they say?", "did they
 answer the parking question?", "add it to my calendar") without placing another call. Pass
 `include_transcript: false` to skip the transcript, or `true` to get it while the call is still in
-progress. `list_calls` stays compact and never includes reports or transcripts.
+progress. `list_calls` stays compact and never includes reports or transcripts, but it does include
+inbound callback rows so the client can see recent callbacks.
+
+### Retell inbound callback setup
+
+Outbound setup still works as before:
+
+```bash
+uv run python scripts/setup_retell.py +16282779475 --public-url https://<your-host>
+```
+
+To make the same Retell number answer inbound callbacks, run the setup script with
+`--enable-inbound` or set the phone number's `inbound_agent_id` to `RETELL_AGENT_ID` in the Retell
+dashboard. Do this only after the deployed server has `PUBLIC_BASE_URL`, `RETELL_WS_SECRET`, and the
+current code. Callback matching uses `INBOUND_CALLBACK_LOOKBACK_DAYS` (default 14).
 
 Depending on the call type, `details` can also include `confirmed_date`, `confirmed_time`,
 `party_size`, `booked_under`, `order_total`, `pickup_time`, `quote`, and `availability`.

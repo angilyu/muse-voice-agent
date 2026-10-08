@@ -132,6 +132,10 @@ class Settings:
     # Retell: if a reply to a person has no words yet after this long, say "Hmm," so the line
     # doesn't go dead while the model thinks (0 disables).
     filler_after_ms: int = field(default_factory=lambda: _int("FILLER_AFTER_MS", 1500))
+    # Retell inbound: match callbacks to outbound calls from the same number this many days back.
+    inbound_callback_lookback_days: int = field(
+        default_factory=lambda: _int("INBOUND_CALLBACK_LOOKBACK_DAYS", 14)
+    )
     default_customer_name: str = field(default_factory=lambda: _str("DEFAULT_CUSTOMER_NAME"))
     default_callback_number: str = field(default_factory=lambda: _str("DEFAULT_CALLBACK_NUMBER"))
 
