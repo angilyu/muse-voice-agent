@@ -21,7 +21,7 @@ import urllib.request
 from dotenv import set_key
 
 from muse_voice_agent.config import PROJECT_ROOT, get_settings
-from muse_voice_agent.retell import RetellClient, RetellError
+from muse_voice_agent.retell import RetellClient, RetellError, VOICEMAIL_DETECTION_PROMPT
 from muse_voice_agent.tasks import normalize_phone
 
 ENV_PATH = PROJECT_ROOT / ".env"
@@ -75,6 +75,11 @@ async def main_async(number: str, public_url: str | None, termination_uri: str |
         # Long enough to sit on hold; silent pickups are handled by SILENT_PICKUP_MS instead.
         "end_call_after_silence_ms": 60_000,
         "ring_duration_ms": 30_000,
+        # Per-call overrides provide the exact voicemail message; default to safe hangup.
+        "voicemail_option": {
+            "action": {"type": "hangup"},
+            "detection_prompt": VOICEMAIL_DETECTION_PROMPT,
+        },
         "enable_backchannel": False,
     }
 

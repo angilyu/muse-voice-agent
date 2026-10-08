@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-LineKind = Literal["screener", "screener_wait", "voicemail", "menu", "person"]
+LineKind = Literal["screener", "screener_wait", "voicemail", "voicemail_no_message", "menu", "person"]
 
 _SCREENER = re.compile(
     r"screening service|call screen|(?:this call|calls?) (?:is|are) (?:being )?screened"
@@ -34,8 +34,16 @@ _SCREENER_WAIT = re.compile(
 )
 _VOICEMAIL = re.compile(
     r"leave (?:a|your) (?:brief |short )?message|after the (?:tone|beep)|at the (?:tone|beep)"
-    r"|voice ?mail|mailbox|record your message"
+    r"|voice ?mail|record your message|(?:person|party|number|subscriber) you (?:are|were|'re) "
+    r"(?:calling|trying to reach).*not available|(?:person|party|number|subscriber) .* is unavailable"
     r"|(?:unable to|can'?t|cannot) (?:take your call|come to the phone)",
+    re.I,
+)
+_VOICEMAIL_NO_MESSAGE = re.compile(
+    r"mailbox (?:is )?(?:full|not set up)|(?:mailbox|voicemail box) .* (?:full|not accepting|cannot accept|can't accept|not been set up|not set up)"
+    r"|(?:not accepting|cannot accept|can't accept) (?:new )?messages"
+    r"|(?:message|messages) (?:cannot|can't) be (?:left|recorded)"
+    r"|no (?:tone|beep)|without (?:a )?(?:tone|beep)",
     re.I,
 )
 _MENU = re.compile(
@@ -57,6 +65,8 @@ NOTE_PREFIX = "["
 def classify_line(text: str) -> LineKind:
     """Best guess at who produced one business line."""
     text = (text or "").strip()
+    if _VOICEMAIL_NO_MESSAGE.search(text):
+        return "voicemail_no_message"
     if _VOICEMAIL.search(text):
         return "voicemail"
     if _SCREENER.search(text):

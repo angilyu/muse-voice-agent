@@ -65,6 +65,10 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   itself as their assistant. If you don't know the user's name, ask them before calling.
 - Always pass assistant_name: your own name, the one the user knows you by (e.g. "Eva"). The agent
   opens with "Hi, this is {assistant_name}, an assistant calling on behalf of {customer_name}."
+- For calls that may reach voicemail, pass callback_number when the user has a preferred callback
+  number. If omitted, the server uses VOICEMAIL_CALLBACK_NUMBER, then DEFAULT_CALLBACK_NUMBER, then
+  the Retell outbound number. Call tools default to leave_voicemail=true; set false only when the
+  user does not want a voicemail left.
 - Always confirm the business, phone number, and the brief with the user before calling.
 - Phone numbers should be E.164 (e.g. +14155550123).
 """
@@ -92,6 +96,16 @@ def _public_view(
     if include_transcript:
         view["transcript"] = speaker_transcript(record["transcript"])
     return view
+
+
+def _callback_number(callback_number: str | None, settings: Settings) -> str | None:
+    return (
+        callback_number
+        or settings.voicemail_callback_number
+        or settings.default_callback_number
+        or settings.retell_from_number
+        or None
+    )
 
 
 def build_server(settings: Settings | None = None, store: CallStore | None = None) -> MCPServer:
@@ -129,6 +143,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         authority: Authority = "info_only",
         limits: str | None = None,
         callback_number: str | None = None,
+        leave_voicemail: bool = True,
         assistant_name: str | None = None,
     ) -> dict[str, Any]:
         """Phone any business for any errand Muse can brief.
@@ -155,7 +170,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             limits: Required for may_commit_within_limits/may_book_within_limits, e.g. "two
                 jasmine green milk teas, 25% sugar, less ice, defaults otherwise, pickup order,
                 pay at pickup, no card over phone" or "Oct 10-12 only, max $250/night, no deposit".
-            callback_number: Number the business may call back (shared only if asked).
+            callback_number: Preferred callback number for voicemail and for live calls if asked.
+                If omitted, the server falls back to VOICEMAIL_CALLBACK_NUMBER,
+                DEFAULT_CALLBACK_NUMBER, then RETELL_FROM_NUMBER.
+            leave_voicemail: Whether to leave a concise callback message when voicemail answers.
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
         """
@@ -169,7 +187,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             shareable_details=shareable_details or {},
             authority=authority,
             limits=limits,
-            callback_number=callback_number or settings.default_callback_number or None,
+            callback_number=_callback_number(callback_number, settings),
+            leave_voicemail=leave_voicemail,
             assistant_name=assistant_name,
         )
 
@@ -191,6 +210,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         flexibility: str | None = None,
         special_requests: str | None = None,
         callback_number: str | None = None,
+        leave_voicemail: bool = True,
         assistant_name: str | None = None,
     ) -> dict[str, Any]:
         """Phone a restaurant and try to book a table. Returns a call_id right away.
@@ -207,7 +227,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 pass it when they're flexible: without it the agent can't book a nearby time, so
                 if the exact time is taken it only collects the closest times for the user.
             special_requests: Seating preferences, allergies, occasion.
-            callback_number: Number the restaurant may call back (shared only if asked).
+            callback_number: Preferred callback number for voicemail and for live calls if asked.
+                If omitted, the server falls back to VOICEMAIL_CALLBACK_NUMBER,
+                DEFAULT_CALLBACK_NUMBER, then RETELL_FROM_NUMBER.
+            leave_voicemail: Whether to leave a concise callback message when voicemail answers.
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
         """
@@ -221,7 +244,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             time=time,
             flexibility=flexibility,
             special_requests=special_requests,
-            callback_number=callback_number or settings.default_callback_number or None,
+            callback_number=_callback_number(callback_number, settings),
+            leave_voicemail=leave_voicemail,
             assistant_name=assistant_name,
         )
 
@@ -242,6 +266,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         preferred_timing: str | None = None,
         budget: str | None = None,
         callback_number: str | None = None,
+        leave_voicemail: bool = True,
         assistant_name: str | None = None,
     ) -> dict[str, Any]:
         """Phone a handyman/contractor and ask for a price quote and availability (does not book).
@@ -255,7 +280,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             location: City / neighborhood / ZIP (avoid full street address).
             preferred_timing: e.g. "weekday mornings next week".
             budget: Optional budget, only mentioned if asked.
-            callback_number: Number the business may call back (shared only if asked).
+            callback_number: Preferred callback number for voicemail and for live calls if asked.
+                If omitted, the server falls back to VOICEMAIL_CALLBACK_NUMBER,
+                DEFAULT_CALLBACK_NUMBER, then RETELL_FROM_NUMBER.
+            leave_voicemail: Whether to leave a concise callback message when voicemail answers.
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
         """
@@ -268,7 +296,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             location=location,
             preferred_timing=preferred_timing,
             budget=budget,
-            callback_number=callback_number or settings.default_callback_number or None,
+            callback_number=_callback_number(callback_number, settings),
+            leave_voicemail=leave_voicemail,
             assistant_name=assistant_name,
         )
 

@@ -31,7 +31,7 @@ _UNANSWERED = re.compile(
     re.IGNORECASE,
 )
 
-_REQUEST_SKIP = {"kind", "business_name", "phone_number"}
+_REQUEST_SKIP = {"kind", "business_name", "phone_number", "leave_voicemail"}
 
 
 def _iso(ts: float | None) -> str | None:
@@ -134,7 +134,10 @@ def _next_steps(
     elif outcome == "declined":
         steps.append("The business wouldn't help by phone; suggest the user contact them directly.")
     elif outcome == "voicemail":
-        steps.append("Reached voicemail; offer to call again later or try another business.")
+        if details.get("voicemail_message"):
+            steps.append("Left voicemail; wait for a callback or offer to call again later.")
+        else:
+            steps.append("Reached voicemail without leaving a message; offer to call again later or try another business.")
     elif outcome == "needs_followup":
         steps.append(
             details.get("follow_up")
@@ -186,5 +189,7 @@ def build_report(record: dict[str, Any]) -> dict[str, Any]:
         "committed_on_users_behalf": record.get("outcome") in ("booked", "ordered"),
         "answers": answers,
         "unanswered_questions": unanswered,
+        "voicemail_message": details.get("voicemail_message"),
+        "callback_number": details.get("callback_number"),
         "next_steps": _next_steps(record, details, unanswered, source),
     }

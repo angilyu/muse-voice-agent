@@ -134,6 +134,7 @@ class Settings:
     filler_after_ms: int = field(default_factory=lambda: _int("FILLER_AFTER_MS", 1500))
     default_customer_name: str = field(default_factory=lambda: _str("DEFAULT_CUSTOMER_NAME"))
     default_callback_number: str = field(default_factory=lambda: _str("DEFAULT_CALLBACK_NUMBER"))
+    voicemail_callback_number: str = field(default_factory=lambda: _str("VOICEMAIL_CALLBACK_NUMBER"))
 
     # Storage
     call_db_path: Path = field(

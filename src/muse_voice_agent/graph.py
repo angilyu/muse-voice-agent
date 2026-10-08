@@ -41,7 +41,14 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field, create_model
 
 from .pickup import classify_line, is_greeting, is_note
-from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line, self_intro
+from .tasks import (
+    AnyTask,
+    GeneralCall,
+    build_system_prompt,
+    build_voicemail_message,
+    opening_line,
+    self_intro,
+)
 
 _TOOL_MARKER = "<function="
 _TOOL_MARKUP = re.compile(r"<function=.*?/>", re.S)
@@ -78,6 +85,8 @@ class CallOutcome(BaseModel):
     availability: str | None = Field(default=None, description="Earliest availability offered")
     contact_person: str | None = Field(default=None, description="Who you spoke with")
     follow_up: str | None = Field(default=None, description="Anything the customer must do next")
+    voicemail_message: str | None = Field(default=None, description="Exact voicemail message left")
+    callback_number: str | None = Field(default=None, description="Callback number left on voicemail")
     answers: list[Answer] | None = Field(
         default=None, description="Each question you were asked to get answered, with the answer"
     )
@@ -208,9 +217,14 @@ def _line_notes(task: AnyTask, kind: str | None, *, intro_now: bool, reintro: bo
     if kind == "voicemail":
         return [
             "This is voicemail or an answering machine. Leave one short message: why you're calling "
-            f"for {name}, and that {name} will call back"
+            f"for {name}, and the callback number digit by digit twice"
             + (" (your opener just said who you are, so don't introduce yourself again)" if intro_now else "")
             + ". Then record outcome \"voicemail\" and call end_call in the same reply."
+        ]
+    if kind == "voicemail_no_message":
+        return [
+            "This voicemail box cannot take a message. Do not speak a voicemail message. Record "
+            "outcome \"voicemail\" noting that no message was left, and call end_call."
         ]
     if kind == "menu":
         return [
@@ -401,6 +415,25 @@ def apply_authority(task: AnyTask, outcome: CallOutcome) -> CallOutcome:
     )
 
 
+def _voicemail_outcome(task: AnyTask, *, left_message: bool, reason: str | None = None) -> CallOutcome:
+    if left_message:
+        message = build_voicemail_message(task)
+        return CallOutcome(
+            outcome="voicemail",
+            summary=f"Left a voicemail for {task.customer_name} with callback number {task.callback_number}.",
+            follow_up="Wait for a callback or try again later.",
+            voicemail_message=message,
+            callback_number=task.callback_number,
+        )
+    why = reason or "No voicemail message was left."
+    return CallOutcome(
+        outcome="voicemail",
+        summary=why,
+        follow_up="Try calling again later or try another business.",
+        callback_number=task.callback_number,
+    )
+
+
 def build_call_graph(
     task: AnyTask,
     on_outcome: Callable[[CallOutcome], None],
@@ -490,6 +523,23 @@ def build_call_graph(
             # now would only be heard by the recording, so wait quietly for a person.
             control.on_hold = True
             return {"messages": []}
+        if kind in {"voicemail", "voicemail_no_message"} and control.outcome is None:
+            left = kind == "voicemail" and task.leave_voicemail and bool(task.callback_number)
+            if left:
+                message = build_voicemail_message(task)
+                writer(message)
+                outcome = _voicemail_outcome(task, left_message=True)
+            else:
+                reason = (
+                    "Reached voicemail, but the mailbox could not take a message."
+                    if kind == "voicemail_no_message"
+                    else "Reached voicemail; no message was left."
+                )
+                outcome = _voicemail_outcome(task, left_message=False, reason=reason)
+            control.outcome = outcome
+            on_outcome(outcome)
+            control.end_requested = True
+            return {"messages": [AIMessage(content=outcome.voicemail_message or "")]}
 
         # Speak the fixed opener before the LLM runs, so its latency overlaps with the opener's
         # playback instead of leaving the callee in silence: on our first turn (unless it's a phone
