@@ -20,6 +20,7 @@ _ADDED_COLUMNS = {
     "ended_at": "REAL",
     "end_reason": "TEXT",  # e.g. Retell's disconnection_reason: user_hangup, agent_hangup...
     "outcome_source": "TEXT",  # agent | transcript | call_system
+    "follow_up_of": "TEXT",
 }
 
 _SCHEMA = """
@@ -41,6 +42,7 @@ CREATE TABLE IF NOT EXISTS calls (
     ended_at REAL,
     end_reason TEXT,
     outcome_source TEXT,
+    follow_up_of TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -49,18 +51,33 @@ CREATE TABLE IF NOT EXISTS calls (
 
 class CallStore:
     def __init__(self, path: Path | str):
+        self._memory_conn: sqlite3.Connection | None = None
+        if str(path) == ":memory:":
+            self.path = Path(":memory:")
+            self._memory_conn = sqlite3.connect(":memory:", timeout=10)
+            self._memory_conn.row_factory = sqlite3.Row
+            self._ensure_schema(self._memory_conn)
+            return
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.execute("PRAGMA journal_mode=WAL")
-            c.executescript(_SCHEMA)
-            cols = {r["name"] for r in c.execute("PRAGMA table_info(calls)")}
-            for name, sql_type in _ADDED_COLUMNS.items():
-                if name not in cols:
-                    c.execute(f"ALTER TABLE calls ADD COLUMN {name} {sql_type}")
+            self._ensure_schema(c)
+
+    @staticmethod
+    def _ensure_schema(c: sqlite3.Connection) -> None:
+        c.executescript(_SCHEMA)
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(calls)")}
+        for name, sql_type in _ADDED_COLUMNS.items():
+            if name not in cols:
+                c.execute(f"ALTER TABLE calls ADD COLUMN {name} {sql_type}")
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:
+        if self._memory_conn is not None:
+            yield self._memory_conn
+            self._memory_conn.commit()
+            return
         conn = sqlite3.connect(self.path, timeout=10)
         conn.row_factory = sqlite3.Row
         try:
@@ -75,7 +92,7 @@ class CallStore:
         with self._conn() as c:
             c.execute(
                 "INSERT INTO calls (id, kind, business_name, phone_number, task_json, status,"
-                " dry_run, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                " dry_run, follow_up_of, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     task["kind"],
@@ -84,6 +101,7 @@ class CallStore:
                     json.dumps(task),
                     "queued",
                     int(dry_run),
+                    task.get("follow_up_of"),
                     now,
                     now,
                 ),

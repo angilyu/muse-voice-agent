@@ -222,6 +222,15 @@ assistant calling for …". Without it, the opener stays "Hi, this is an assista
 of {customer_name}". Placeholders ("assistant", "AI", "unknown") are ignored; names must be letters
 only, up to 40 characters.
 
+All three call tools also take optional **`follow_up_of`** with an earlier `call_id`. Use it when a
+business said to call back later, left questions unanswered, or you need to confirm, change, or
+cancel something from an earlier call. The earlier call must be done first; otherwise the server
+returns `follow_up_not_ready`. For follow-ups, `business_name` and `phone_number` inherit from the
+previous call unless you provide overrides. The server adds a compact previous-call summary (result,
+person spoken to, learned answers, commitments, unanswered questions, and next steps) to the new
+agent prompt, not the full transcript, so the agent can say things like "I called earlier about the
+fence quote and was told to call back after 3" without re-asking already answered questions.
+
 ### `place_call`: the general-purpose call
 
 ```jsonc
@@ -234,7 +243,8 @@ only, up to 40 characters.
   "questions": ["Is a king room available Oct 10–12?", "What's the nightly rate?"],
   "shareable_details": { "guests": "2 adults" },          // what the agent may say if asked
   "authority": "info_only",                                // or "may_commit_within_limits"
-  "limits": null                                           // required with may_commit, e.g. "under $300/night, no prepayment"
+  "limits": null,                                          // required with may_commit, e.g. "under $300/night, no prepayment"
+  "follow_up_of": null                                     // optional previous call_id to continue a thread
 }
 ```
 
@@ -269,6 +279,7 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
   "outcome": "info_received",     // booked | ordered | quote_received | info_received | unavailable
                                   // | declined | needs_followup | voicemail
   "summary": "Hotel Zed has a king room Oct 10–12 at $289/night plus tax.",
+  "follow_up_of": null,
   "details": {
     "answers": [
       { "question": "Is a king room available Oct 10–12?", "answer": "Yes" },
@@ -280,6 +291,7 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
   },
   "simulated": false,
   "report": {                       // only once done
+    "follow_up_of": null,
     "request": { "customer_name": "Wenjing Yu", "goal": "…", "questions": ["…"], "authority": "info_only" },
     "reached": "person",            // person | voicemail | phone_menu | no_answer | not_connected | unknown
     "started_at": "2026-10-05T18:02:11+00:00",

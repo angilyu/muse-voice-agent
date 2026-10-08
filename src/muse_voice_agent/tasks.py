@@ -55,6 +55,16 @@ class _BaseTask(BaseModel):
         max_length=40,
         description="The calling assistant's own name, e.g. 'Eva'. The agent says it in the opener.",
     )
+    follow_up_of: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Call id this call follows up on, if any.",
+    )
+    previous_call_context: str | None = Field(
+        default=None,
+        max_length=3000,
+        description="Compact context from earlier calls in the same follow-up thread.",
+    )
 
     @field_validator("assistant_name", mode="before")
     @classmethod
@@ -319,8 +329,10 @@ def build_system_prompt(task: AnyTask) -> str:
         today=_today(),
     )
 
+    follow_up = _follow_up_prompt(task)
+
     if isinstance(task, GeneralCall):
-        return _general_goal(task) + "\n" + rules
+        return follow_up + _general_goal(task) + "\n" + rules
     if isinstance(task, RestaurantReservation):
         goal = f"""You are calling {task.business_name} to book a table.
 Reservation request:
@@ -355,7 +367,21 @@ hourly rate, trip fee, free estimate visit), and their earliest availability. Do
 to anything. Use outcome "quote_received", "declined" (they don't do this work) or "needs_followup"
 (e.g. they need a site visit or photos first)."""
 
-    return goal + "\n" + rules
+    return follow_up + goal + "\n" + rules
+
+
+def _follow_up_prompt(task: AnyTask) -> str:
+    if not task.previous_call_context:
+        return ""
+    return f"""{task.previous_call_context}
+
+Follow-up calling instructions:
+- Treat this as a continuation of the earlier call thread, not a cold first call.
+- After the fixed opener, briefly say why you are calling back, e.g. "I called earlier about the fence quote and was told to call back after 3."
+- Do not re-ask questions already answered above unless you need to confirm, change, or use that answer for the new request.
+- If a person was named, ask for them or mention that you spoke with them earlier.
+
+"""
 
 
 def _general_goal(task: GeneralCall) -> str:
