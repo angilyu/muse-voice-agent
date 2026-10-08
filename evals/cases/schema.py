@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from muse_voice_agent.tasks import AnyTask, parse_task
 
 CASES_PATH = Path(__file__).with_name("bay_area_cases.json")
+COVERAGE_CASES_PATH = Path(__file__).with_name("coverage_matrix_cases.json")
 REGRESSION_CASES_PATH = Path(__file__).with_name("regression_cases.json")
 SPLITS_PATH = Path(__file__).with_name("splits.json")
 
@@ -88,8 +89,15 @@ class EvalCase(BaseModel):
         return self
 
 
-def load_all_cases(path: Path = CASES_PATH, *, include_regression: bool = True) -> list[EvalCase]:
+def load_all_cases(
+    path: Path = CASES_PATH,
+    *,
+    include_regression: bool = True,
+    include_coverage: bool = True,
+) -> list[EvalCase]:
     paths = [path]
+    if include_coverage and path == CASES_PATH and COVERAGE_CASES_PATH.exists():
+        paths.append(COVERAGE_CASES_PATH)
     if include_regression and path == CASES_PATH and REGRESSION_CASES_PATH.exists():
         paths.append(REGRESSION_CASES_PATH)
     raw: list[dict[str, Any]] = []
