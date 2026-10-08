@@ -18,6 +18,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from muse_voice_agent import retell as retell_module
 from muse_voice_agent.graph import CallControl, CallOutcome, build_call_graph
 from muse_voice_agent.outcome_fallback import infer_outcome
+from muse_voice_agent.pickup import classify_line, is_greeting
 from muse_voice_agent.retell import transcript_to_messages
 
 from . import copilot_llm
@@ -29,7 +30,7 @@ from .report import aggregate_results, load_json, utc_run_name, write_json
 
 logger = logging.getLogger(__name__)
 
-SIMULATOR_PROMPT_VERSION = "business-simulator-v4-2026-10-06"
+SIMULATOR_PROMPT_VERSION = "business-simulator-v5-2026-10-07"
 SILENT_PICKUP_NOTE = getattr(
     retell_module,
     "SILENT_PICKUP_NOTE",
@@ -78,7 +79,11 @@ Maintain strict facts discipline regardless of style.
 
 Behavior cues to enact naturally:
 - call_screener or live_voicemail_screen: first ask who's calling and why. If the caller answers
-  both in one concise turn, say you're connecting them and then have a person answer.
+  both in one concise turn, say only "Thanks, please stay on the line while I connect you." Then, on
+  your next turn, a person picks up who did NOT hear the caller: they say only a short greeting such
+  as "Hello?" or "Hi, this is Sam."
+- offers_far_alternative: the requested time is full. First offer only facts.first_offer. If the
+  caller asks for anything closer, offer facts.closest_offer; never volunteer it unasked.
 - press_1_screen: first play a recording that says to press 1 to be connected. If the transcript
   contains [pressed 1], connect a person; otherwise repeat the recording once.
 - silent_pickup: your first response is an empty string; after the caller speaks, say "Hello?"
@@ -321,6 +326,23 @@ def speakability(agent_texts: list[str]) -> dict[str, Any]:
     }
 
 
+WHY_RE = re.compile(
+    r"\b(book|reservation|table|quote|appointment|calling|ask|check|schedule|repair|order|price|availab\w*)\b",
+    re.I,
+)
+
+
+def _next_agent_reply(transcript: list[dict[str, str]], index: int) -> str:
+    return next(
+        (
+            t["content"]
+            for t in transcript[index + 1 :]
+            if t.get("role") == "agent" and not _is_marker(t.get("content", ""))
+        ),
+        "",
+    )
+
+
 def conversation_metrics(
     case: EvalCase,
     transcript: list[dict[str, str]],
@@ -356,18 +378,41 @@ def conversation_metrics(
     opener_pattern = re.compile(r"\bassistant calling on behalf of\b", re.I)
     # Re-introducing yourself is the right answer to "who's calling?", so only count unprompted repeats.
     asked_who = re.compile(r"\bwho(?:'s| is)? (?:this|calling|speaking|is this)\b|\bwho are you\b|\bwhat(?:'s| is) your name\b", re.I)
+    asked_repeat = re.compile(
+        r"^\W*(?:sorry|what|pardon|huh)\W*(?:what)?\W*$|\bcome again\b|\bsay that again\b"
+        r"|\bdidn'?t (?:catch|hear|get) (?:that|you|it)\b",
+        re.I,
+    )
     opener_repeats = []
     agent_idx = -1
     last_business_line = ""
+    business_kinds: list[str] = []  # what each business line the agent heard sounded like
     for t in transcript:
         content = t.get("content", "")
+        if content.startswith("[stt dropped") and business_kinds:
+            business_kinds.pop()  # the agent never heard that line
+            continue
         if _is_marker(content):
             continue
         if t.get("role") != "agent":
             last_business_line = content
+            business_kinds.append(classify_line(content))
             continue
         agent_idx += 1
-        if agent_idx > 0 and opener_pattern.search(content) and not asked_who.search(last_business_line):
+        # Re-introducing to a person who just greeted us after silence, a screener handoff or a
+        # menu is expected: they never heard the opener.
+        reintro = (
+            business_kinds[-1:] == ["person"]
+            and (len(business_kinds) == 1 or business_kinds[-2] != "person")
+            and is_greeting(last_business_line, task.business_name)
+        )
+        if (
+            agent_idx > 0
+            and opener_pattern.search(content)
+            and not asked_who.search(last_business_line)
+            and not asked_repeat.search(last_business_line)
+            and not reintro
+        ):
             opener_repeats.append(agent_idx + 1)
     if opener_repeats:
         issues.append(f"opener repeated after first turn (turns {opener_repeats})")
@@ -420,7 +465,11 @@ def conversation_metrics(
         )
         if previous_business and QUESTION_RE.search(previous_business):
             issues.append("agent hung up with an unanswered business question")
-        elif previous_business and not FAREWELL_RE.search(previous_business):
+        elif (
+            previous_business
+            and not FAREWELL_RE.search(previous_business)
+            and not (outcome is not None and outcome.outcome == "voicemail")
+        ):
             issues.append("agent hung up before the business said bye")
     elif outcome is not None and not outcome_inferred and not business_hung_up and not closing_silence:
         issues.append("call never ended after outcome was recorded")
@@ -444,30 +493,91 @@ def conversation_metrics(
             if turn.get("role") != "user":
                 continue
             text = turn.get("content", "")
-            if re.search(r"who|calling|why|regarding|screen", text, re.I):
-                reply = next(
-                    (
-                        t["content"]
-                        for t in transcript[i + 1 :]
-                        if t.get("role") == "agent" and not _is_marker(t.get("content", ""))
-                    ),
-                    "",
-                )
+            if classify_line(text) == "screener" or re.search(r"who|calling|why|regarding|reason|screen", text, re.I):
+                reply = _next_agent_reply(transcript, i)
                 who = bool(
                     re.search(r"\bassistant\b", reply, re.I)
                     and _contains(reply, [task.customer_name.split()[0], task.customer_name])
                 )
-                why = bool(
-                    re.search(
-                        r"\b(book|reservation|table|quote|appointment|calling|ask|check|schedule|repair)\b",
-                        reply,
-                        re.I,
-                    )
-                )
+                why = bool(WHY_RE.search(reply))
                 answered_screener = who and why
                 break
         if not answered_screener:
             issues.append("call screener was not answered with who and why in one turn")
+        # The person the screener connects never heard us, so our first words to them must say why.
+        told_person_why = None
+        told_person_who = None
+        seen_screener = False
+        for i, turn in enumerate(transcript):
+            text = turn.get("content", "")
+            if turn.get("role") != "user" or _is_marker(text):
+                continue
+            kind = classify_line(text)
+            if kind in {"screener", "screener_wait"}:
+                seen_screener = True
+                continue
+            if not seen_screener:
+                break  # a person answered before any screener
+            if transcript[i + 1 : i + 2] and transcript[i + 1].get("content", "").startswith("[stt dropped"):
+                continue  # the agent never heard it
+            if kind != "person" or not is_greeting(text, task.business_name):
+                continue  # e.g. the screener's "Sorry—what?" before the handoff
+            reply = _next_agent_reply(transcript, i)
+            purpose = _strip_fixed_opener(reply, task.customer_name)
+            told_person_why = bool(purpose and WHY_RE.search(purpose))
+            told_person_who = bool(
+                re.search(r"\bassistant\b", reply, re.I)
+                and _contains(reply, [task.customer_name.split()[0], task.customer_name])
+            )
+            if not told_person_why:
+                issues.append("connected person was not told why we are calling")
+            if not told_person_who:
+                issues.append("connected person was not told who is calling")
+            break
+        screener_person_told_why = told_person_why
+        screener_person_told_who = told_person_who
+    else:
+        screener_person_told_why = None
+        screener_person_told_who = None
+
+    reintroduced_after_silent_pickup = None
+    if "silent_pickup" in behaviors:
+        first_line = next(
+            (i for i, t in enumerate(transcript) if t.get("role") == "user" and not _is_marker(t.get("content", ""))),
+            None,
+        )
+        # Only a bare "Hello?" shows they didn't hear the opener; "We have 6:30, name?" means they did.
+        # If STT dropped it, the agent never heard it either.
+        dropped = first_line is not None and any(
+            t.get("content", "").startswith("[stt dropped") for t in transcript[first_line + 1 : first_line + 2]
+        )
+        if first_line is not None and not dropped and is_greeting(transcript[first_line]["content"], task.business_name):
+            reply = _next_agent_reply(transcript, first_line)
+            reintroduced_after_silent_pickup = bool(
+                re.search(r"\bassistant\b", reply, re.I)
+                and _contains(reply, [task.customer_name.split()[0], task.customer_name])
+            )
+            if not reintroduced_after_silent_pickup:
+                issues.append("no re-introduction when the person said hello after a silent pickup")
+
+    asked_for_closer = None
+    first_offer = str(case.persona.facts.get("first_offer") or "")
+    if "offers_far_alternative" in behaviors and first_offer:
+        hour = re.search(r"\d{1,2}", first_offer)
+        words = ["", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve"]
+        offer_re = None
+        if hour and 1 <= int(hour.group(0)) <= 12:
+            offer_re = re.compile(rf"\b(?:{int(hour.group(0))}|{words[int(hour.group(0))]})\b", re.I)
+        for i, turn in enumerate(transcript):
+            text = turn.get("content", "")
+            if turn.get("role") != "user" or _is_marker(text) or not offer_re:
+                continue
+            if offer_re.search(text):
+                reply = _next_agent_reply(transcript, i)
+                asked_for_closer = "?" in reply
+                if not asked_for_closer:
+                    issues.append("agent turned down the offered time without asking for something closer")
+                break
 
     return {
         "issues": issues,
@@ -490,6 +600,10 @@ def conversation_metrics(
         "never_ended_call": any("never ended" in issue for issue in issues),
         "pressed_digits": pressed_digits,
         "answered_screener_who_why": answered_screener,
+        "screener_person_told_why": screener_person_told_why,
+        "screener_person_told_who": screener_person_told_who,
+        "reintroduced_after_silent_pickup": reintroduced_after_silent_pickup,
+        "asked_for_closer_time": asked_for_closer,
     }
 
 
@@ -632,13 +746,24 @@ def deterministic_checks(
     elif outcome.outcome not in case.expectations.allowed_outcomes:
         issues.append(f"outcome {outcome.outcome!r} not in allowed {case.expectations.allowed_outcomes}")
 
+    # A phone menu gets digits, not an introduction: the intro is owed to the first person instead.
+    intro_from = 0
+    if business_texts and classify_line(business_texts[0]) == "menu":
+        first_person = next(
+            (i for i, t in enumerate(transcript)
+             if t.get("role") == "user" and not _is_marker(t.get("content", ""))
+             and classify_line(t["content"]) == "person"),
+            None,
+        )
+        intro_from = len(transcript) if first_person is None else first_person
+    intro_turns = _agent_spoken_turns(transcript[intro_from:])
     if not agent_texts:
         issues.append("agent never spoke")
-    else:
+    elif intro_turns:
         opener_was_cut = any(t.get("content") == "[interrupted: opener cut off]" for t in transcript)
-        first = agent_texts[0].lower()
+        first = intro_turns[0].lower()
         first_name = case.brief.task().customer_name.split()[0].lower()
-        intro_text = "\n".join(agent_texts[:3]).lower() if opener_was_cut else first
+        intro_text = "\n".join(intro_turns[:3]).lower() if opener_was_cut else first
         if first_name not in intro_text or not re.search(r"behalf|assistant", intro_text):
             issues.append("first agent utterance did not say it is calling on behalf of the customer")
 

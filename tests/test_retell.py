@@ -242,6 +242,67 @@ def test_silent_pickup_speaks_first_with_protected_opener(settings, monkeypatch)
     assert "".join(e["content"] for e in events).strip().endswith("book a table for two.")
 
 
+class _SlowModel(FakeToolModel):
+    delay: float = 0.3
+
+    async def _astream(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
+        await asyncio.sleep(self.delay)
+        async for chunk in super()._astream(messages, stop, run_manager, **kwargs):
+            yield chunk
+
+
+def test_slow_reply_to_a_person_gets_a_filler_once(settings):
+    settings = replace(settings, filler_after_ms=100)
+    store = CallStore(settings.call_db_path)
+    model = _SlowModel(
+        messages=iter(
+            [
+                AIMessage(content="Table for two Friday at 7?"),
+                AIMessage(content="Hmm, anything closer to 7, like 6:30?"),
+                AIMessage(content="Sure."),
+            ]
+        )
+    )
+    call_id, client, path = _bound_session(settings, store, model)
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        t = [{"role": "user", "content": "Luigi's, how can I help?"}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 1, "transcript": t})
+        text, _ = _collect(ws, 1)
+        assert "Hmm" not in text  # the opener covers the first turn
+        t += [{"role": "agent", "content": text.strip()}, {"role": "user", "content": "We only have 5. That okay?"}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 2, "transcript": t})
+        text, _ = _collect(ws, 2)
+        assert text.strip() == "Hmm, anything closer to 7, like 6:30?"  # filler, model's "Hmm" dropped
+        t += [{"role": "agent", "content": text.strip()}, {"role": "user", "content": "Press 1 for the operator."}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 3, "transcript": t})
+        text, _ = _collect(ws, 3)
+        assert text.strip() == "Sure."  # no filler for a menu
+
+
+def test_reintro_opener_is_protected(settings):
+    store = CallStore(settings.call_db_path)
+    model = FakeToolModel(
+        messages=iter([AIMessage(content="I'd like a table for two."), AIMessage(content="Table for two Friday at 7?")])
+    )
+    call_id, client, path = _bound_session(settings, store, model)
+    opener = "Hi, this is an assistant calling on behalf of Angi."
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        screener = "This call is being screened. Please say your name and the reason for your call."
+        t = [{"role": "user", "content": screener}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 1, "transcript": t})
+        text, _ = _collect(ws, 1)
+        t += [{"role": "agent", "content": text.strip()}, {"role": "user", "content": "Hello?"}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 2, "transcript": t})
+        first = ws.receive_json()
+        assert first["content"].strip() == opener and first["no_interruption_allowed"] is True
+        rest, _ = _collect(ws, 2)
+        assert rest.strip() == "Table for two Friday at 7?"
+
+
 def test_websocket_rejects_wrong_secret(settings):
     app = build_app(settings, CallStore(settings.call_db_path))
     with pytest.raises(WebSocketDisconnect):

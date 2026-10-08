@@ -58,11 +58,12 @@ def llm_model_init_args(
     raw: str,
     *,
     temperature: float | None = 0.3,
+    service_tier: str | None = None,
 ) -> tuple[str, dict[str, Any]]:
     """Return the model name and ``init_chat_model`` kwargs for a production model spec.
 
     Reasoning-effort specs intentionally omit temperature because OpenAI reasoning models reject
-    non-default temperature.
+    non-default temperature. ``service_tier`` (e.g. "priority") only applies to OpenAI models.
     """
     spec = parse_llm_model_spec(raw)
     kwargs: dict[str, Any] = {}
@@ -74,6 +75,9 @@ def llm_model_init_args(
             kwargs["use_responses_api"] = True
     elif temperature is not None:
         kwargs["temperature"] = temperature
+    tier = (service_tier or "").strip().lower()
+    if tier and tier != "default" and spec.model.startswith("openai:"):
+        kwargs["service_tier"] = tier
     return spec.model, kwargs
 
 
@@ -100,6 +104,9 @@ class Settings:
 
     # Models
     llm_model: str = field(default_factory=lambda: _str("LLM_MODEL", "openai:gpt-5.4@low"))
+    # OpenAI processing tier. "default" (standard processing) is used for live calls and evals;
+    # "priority" answers a little faster at about 2x the token price and is opt-in only.
+    llm_service_tier: str = field(default_factory=lambda: _str("LLM_SERVICE_TIER", "default"))
     stt_model: str = field(default_factory=lambda: _str("STT_MODEL", "assemblyai/universal-3-5-pro"))
     tts_model: str = field(default_factory=lambda: _str("TTS_MODEL", "fishaudio/s2.1-pro"))
     tts_voice: str = field(
@@ -122,6 +129,9 @@ class Settings:
     max_concurrent_calls: int = field(default_factory=lambda: _int("MAX_CONCURRENT_CALLS", 3))
     # Retell: speak first if the line is silent this long after pickup (0 disables).
     silent_pickup_ms: int = field(default_factory=lambda: _int("SILENT_PICKUP_MS", 3000))
+    # Retell: if a reply to a person has no words yet after this long, say "Hmm," so the line
+    # doesn't go dead while the model thinks (0 disables).
+    filler_after_ms: int = field(default_factory=lambda: _int("FILLER_AFTER_MS", 1500))
     default_customer_name: str = field(default_factory=lambda: _str("DEFAULT_CUSTOMER_NAME"))
     default_callback_number: str = field(default_factory=lambda: _str("DEFAULT_CALLBACK_NUMBER"))
 

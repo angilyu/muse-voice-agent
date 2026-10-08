@@ -1,8 +1,8 @@
 {
   "counts": {
-    "dev": 50,
+    "dev": 52,
     "heldout": 21,
-    "total": 71
+    "total": 73
   },
   "dev": [
     "rest-sf-busy-alt",
@@ -54,13 +54,15 @@
     "hold-out-of-range-offer",
     "closing-callback-after-goodbye-no-number",
     "order-heytea-milk-tea",
-    "reschedule-dental-cleaning"
+    "reschedule-dental-cleaning",
+    "rest-no-flex-far-offer",
+    "rest-far-offer-then-closer"
   ],
   "difficulty_counts": {
     "dev": {
       "easy": 13,
       "hard": 11,
-      "medium": 26
+      "medium": 28
     },
     "heldout": {
       "easy": 5,
@@ -118,7 +120,7 @@
       "pet": 2,
       "pharmacy": 1,
       "repair": 1,
-      "restaurant": 10,
+      "restaurant": 12,
       "retail": 3,
       "salon": 1,
       "spa": 1,

@@ -37,7 +37,7 @@ def test_eval_splits_are_disjoint_and_keep_regressions_separate():
     dev = select_cases("split:dev")
     heldout = select_cases("split:heldout")
     regression = select_cases("tag:regression")
-    assert 45 <= len(dev) <= 52
+    assert 45 <= len(dev) <= 55
     assert 19 <= len(heldout) <= 23
     assert {c.id for c in dev}.isdisjoint({c.id for c in heldout})
     assert not ({c.id for c in regression} & ({c.id for c in dev} | {c.id for c in heldout}))
@@ -552,3 +552,140 @@ def test_ai_question_after_disclosure_or_before_hangup_is_not_flagged():
     assert flagged not in _ai_honesty_issues(already_said)
     assert flagged not in _ai_honesty_issues(hung_up)
     assert flagged in _ai_honesty_issues(dodged)
+
+
+def test_reintroduction_to_first_person_after_silent_pickup_or_screener_is_expected():
+    silent = select_cases("silent-pickup-sushi-booking")[0]
+    opener = "Hi, this is an assistant calling on behalf of Priya Shah."
+    transcript = [
+        {"role": "user", "content": "[silent pickup]"},
+        {"role": "agent", "content": opener + " I'd like to book a table."},
+        {"role": "user", "content": "Hello?"},
+        {"role": "agent", "content": opener + " I'd like to book a table for three on Saturday at 6:30."},
+    ]
+    metrics = conversation_metrics(silent, transcript)
+    assert not metrics["opener_repeated"]
+    assert metrics["reintroduced_after_silent_pickup"] is True
+
+    no_reintro = transcript[:3] + [{"role": "agent", "content": "Hi! Do you have a table Saturday at 6:30?"}]
+    metrics = conversation_metrics(silent, no_reintro)
+    assert metrics["reintroduced_after_silent_pickup"] is False
+    assert "no re-introduction when the person said hello after a silent pickup" in metrics["issues"]
+
+    screen = select_cases("screen-google-restaurant-booking")[0]
+    opener = "Hi, this is an assistant calling on behalf of Wenjing Li."
+    screened = [
+        {"role": "user", "content": "The person you're calling is using a screening service. Say your name and why you're calling."},
+        {"role": "agent", "content": "I'm an AI assistant calling for Wenjing Li to book a table Friday at 7:30."},
+        {"role": "user", "content": "Thanks, please stay on the line while I connect you."},
+        {"role": "agent", "content": "[on hold]"},
+        {"role": "user", "content": "Hello?"},
+        {"role": "agent", "content": opener + " I'd like to book a table for two Friday at 7:30."},
+    ]
+    metrics = conversation_metrics(screen, screened)
+    assert not metrics["opener_repeated"]
+    assert metrics["answered_screener_who_why"] is True
+    assert metrics["screener_person_told_why"] is True
+    assert metrics["screener_person_told_who"] is True
+
+    why_only = screened[:5] + [{"role": "agent", "content": "I'd like to book a table for two Friday at 7:30."}]
+    metrics = conversation_metrics(screen, why_only)
+    assert metrics["screener_person_told_who"] is False
+    assert "connected person was not told who is calling" in metrics["issues"]
+
+    silent_to_person = screened[:5] + [{"role": "agent", "content": opener}]
+    metrics = conversation_metrics(screen, silent_to_person)
+    assert metrics["screener_person_told_why"] is False
+    assert "connected person was not told why we are calling" in metrics["issues"]
+
+
+def test_far_offer_needs_a_closer_time_question_not_a_flat_no():
+    case = select_cases("rest-no-flex-far-offer")[0]
+    opener = "Hi, this is an assistant calling on behalf of Alex Chen. I'd like a table for two tomorrow at 7."
+    base = [
+        {"role": "user", "content": "Nopalito."},
+        {"role": "agent", "content": opener},
+        {"role": "user", "content": "Seven's full. How about five PM?"},
+    ]
+    asked = base + [{"role": "agent", "content": "Anything closer to 7, like 6:30 or 7:30?"}]
+    flat = base + [{"role": "agent", "content": "No, 5 doesn't work. Thanks, bye!"}]
+    assert conversation_metrics(case, asked)["asked_for_closer_time"] is True
+    metrics = conversation_metrics(case, flat)
+    assert metrics["asked_for_closer_time"] is False
+    assert "agent turned down the offered time without asking for something closer" in metrics["issues"]
+
+
+def test_menu_first_call_owes_the_intro_to_the_first_person_and_heard_opener_needs_no_reintro():
+    ivr = select_cases("ivr-phone-tree-hours")[0]
+    name = ivr.brief.task().customer_name
+    menu_only = [
+        {"role": "user", "content": "Thanks for calling. Press 1 for hours, press 2 for appointments."},
+        {"role": "agent", "content": "[pressed 1]"},
+        {"role": "user", "content": "We are open 8 to 5. Press 9 to repeat."},
+        {"role": "agent", "content": "Thanks, bye!"},
+    ]
+    intro = "first agent utterance did not say it is calling on behalf of the customer"
+    assert intro not in deterministic_checks(ivr, menu_only, None)["issues"]
+    to_person = menu_only[:2] + [
+        {"role": "user", "content": "Front desk, this is Sam."},
+        {"role": "agent", "content": "Hi, what are your hours today?"},
+    ]
+    assert intro in deterministic_checks(ivr, to_person, None)["issues"]
+    to_person[-1] = {"role": "agent", "content": f"Hi, this is an assistant calling on behalf of {name}."}
+    assert intro not in deterministic_checks(ivr, to_person, None)["issues"]
+
+    silent = select_cases("silent-pickup-sushi-booking")[0]
+    heard = [
+        {"role": "user", "content": "[silent pickup]"},
+        {"role": "agent", "content": "Hi, this is an assistant calling on behalf of Priya Shah. A table for three?"},
+        {"role": "user", "content": "Alright, we have 6:30 Saturday for three. Name?"},
+        {"role": "agent", "content": "Priya Shah."},
+    ]
+    assert conversation_metrics(silent, heard)["reintroduced_after_silent_pickup"] is None
+
+
+def test_voicemail_recording_cannot_barge_in_or_owe_a_goodbye():
+    case = select_cases("voicemail-greeting")[0]
+    state = make_channel_state(case, channel="phone", seed=1)
+    long_message = "Hi, this is an assistant calling on behalf of Angi. " + "word " * 30
+    assert state.agent_speech(long_message)["markers"] == []
+    transcript = [
+        {"role": "user", "content": "You've reached North Beach Tailors. Please leave a message."},
+        {"role": "agent", "content": "Hi, this is an assistant calling on behalf of Angi. She'll call back."},
+        {"role": "agent", "content": "[agent hung up]"},
+    ]
+    outcome = CallOutcome(outcome="voicemail", summary="Left a message.")
+    assert not any("before the business said bye" in i for i in conversation_metrics(case, transcript, outcome)["issues"])
+
+
+def test_screener_asking_name_and_reason_counts_as_answered():
+    case = next(c for c in select_cases("split:dev") if "call_screener" in c.persona.behaviors)
+    name = case.brief.task().customer_name
+    transcript = [
+        {"role": "user", "content": "Hi, welcome. May I have your name and the reason for your call?"},
+        {"role": "agent", "content": f"Hi, this is an assistant calling on behalf of {name}. I'd like to book a table."},
+    ]
+    outcome = CallOutcome(outcome="booked", summary="Booked.")
+    assert conversation_metrics(case, transcript, outcome)["answered_screener_who_why"] is True
+
+
+def test_opener_repeat_after_repair_or_dropped_greeting_is_not_flagged():
+    case = next(c for c in select_cases("split:dev") if "call_screener" in c.persona.behaviors)
+    opener = f"Hi, this is an assistant calling on behalf of {case.brief.task().customer_name}."
+    transcript = [
+        {"role": "user", "content": "Hi, who's calling and what's this regarding?"},
+        {"role": "agent", "content": opener + " I'd like…"},
+        {"role": "user", "content": "Sorry—what?"},
+        {"role": "agent", "content": opener + " I'd like to book a table."},
+        {"role": "user", "content": "Thanks, please stay on the line while I connect you."},
+        {"role": "user", "content": "Hello?"},
+        {"role": "user", "content": '[stt dropped: "Hello?"]'},
+        {"role": "user", "content": "Hello? Can you hear me?"},
+        {"role": "agent", "content": opener + " I'd like to book a table."},
+    ]
+    outcome = CallOutcome(outcome="booked", summary="Booked.")
+    issues = conversation_metrics(case, transcript, outcome)["issues"]
+    assert not any("opener repeated" in i for i in issues)
+    transcript.append({"role": "user", "content": "Sure, what time?"})
+    transcript.append({"role": "agent", "content": opener + " 7 PM please."})
+    assert any("opener repeated" in i for i in conversation_metrics(case, transcript, outcome)["issues"])

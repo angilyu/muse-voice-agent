@@ -301,8 +301,128 @@ async def test_cut_off_intro_is_flagged_to_the_model():
     SlowRecordingModel.seen = []
     model = SlowRecordingModel(messages=iter([AIMessage(content="Sorry, I'm calling for Angi.")]))
     graph = build_call_graph(_task(), lambda o: None, model=model, control=CallControl(opener_spoken=True))
-    await _run(graph, [AIMessage(content="Hi,"), HumanMessage(content="Hello? Who is this?")])
-    assert "introduction got cut off" in SlowRecordingModel.seen[0][0].content
+    await _run(graph, [AIMessage(content="Hi,"), HumanMessage(content="Sorry, what was that about?")])
+    assert "introduction got cut off" in _all_text(SlowRecordingModel.seen[0])
+
+
+def _all_text(messages) -> str:
+    return "\n".join(m.content if isinstance(m.content, str) else str(m.content) for m in messages)
+
+
+OPENER = "Hi, this is an assistant calling on behalf of Angi."
+
+
+@pytest.mark.asyncio
+async def test_person_greeting_after_silent_pickup_hears_opener_again():
+    from muse_voice_agent.graph import CallControl
+
+    SlowRecordingModel.seen = []
+    model = SlowRecordingModel(messages=iter([AIMessage(content="I'd like a table for two Friday at 7.")]))
+    control = CallControl(opener_spoken=True)
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+    history = [AIMessage(content=OPENER + " I'd like a table for two Friday at 7."), HumanMessage(content="Hello?")]
+    spoken = "".join(await _run(graph, history))
+    assert spoken.startswith(OPENER)
+    assert "table for two" in spoken
+    seen = SlowRecordingModel.seen[0]
+    assert seen[-2].content == OPENER  # opener already said in this turn
+    assert "just picked up" in seen[-1].content and seen[0].content.endswith("(Pacific time).\n")
+
+
+@pytest.mark.asyncio
+async def test_second_hello_from_a_person_does_not_repeat_the_opener():
+    from muse_voice_agent.graph import CallControl
+
+    model = FakeToolModel(messages=iter([AIMessage(content="Hi! Table for two Friday at 7?")]))
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=CallControl(opener_spoken=True))
+    history = [
+        HumanMessage(content="Luigi's, how can I help?"),
+        AIMessage(content=OPENER + " Table for two Friday at 7?"),
+        HumanMessage(content="Hello?"),
+    ]
+    assert not "".join(await _run(graph, history)).startswith(OPENER)
+
+
+@pytest.mark.asyncio
+async def test_screener_flow_answers_waits_quietly_then_reintroduces():
+    from muse_voice_agent.graph import CallControl
+
+    SlowRecordingModel.seen = []
+    model = SlowRecordingModel(
+        messages=iter(
+            [AIMessage(content="I'd like to book a table for Friday."), AIMessage(content="Table for two Friday at 7?")]
+        )
+    )
+    control = CallControl()
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+    screener = "Hi, the person you're calling is using a screening service. Go ahead and say your name and why you're calling."
+    history = [HumanMessage(content=screener)]
+    first = "".join(await _run(graph, history))
+    assert first.startswith(OPENER) and "call screener" in SlowRecordingModel.seen[0][-1].content
+
+    history += [AIMessage(content=first), HumanMessage(content="Thanks, please stay on the line.")]
+    assert "".join(await _run(graph, history)) == ""
+    assert control.on_hold and len(SlowRecordingModel.seen) == 1  # no model call
+
+    history += [HumanMessage(content="Hi, this is Luigi's.")]
+    third = "".join(await _run(graph, history))
+    assert third.startswith(OPENER) and third.strip().endswith("Friday at 7?")
+
+
+@pytest.mark.asyncio
+async def test_phone_menu_skips_opener_then_person_gets_it():
+    from muse_voice_agent.graph import CallControl
+
+    press = {"name": "press_digits", "args": {"digits": "2"}, "id": "p"}
+    model = FakeToolModel(
+        messages=iter([AIMessage(content="", tool_calls=[press]), AIMessage(content="Table for two Friday at 7?")])
+    )
+    control = CallControl()
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
+    menu = "Thank you for calling Luigi's. For hours, press 1. For reservations, press 2."
+    assert "".join(await _run(graph, [HumanMessage(content=menu)])).strip() == ""
+    assert control.pending_digits == "2" and not control.opener_spoken
+    spoken = "".join(await _run(graph, [HumanMessage(content=menu), HumanMessage(content="Reservations, this is Tom.")]))
+    assert spoken.startswith(OPENER)
+
+
+@pytest.mark.asyncio
+async def test_record_outcome_say_is_spoken_when_model_emits_no_text():
+    from muse_voice_agent.graph import CallControl
+
+    call = {
+        "name": "record_outcome",
+        "args": {"say": "No worries, Angi will call back. Thanks, bye!", "outcome": "needs_followup", "summary": "Only 5 PM"},
+        "id": "r",
+    }
+    outcomes: list[CallOutcome] = []
+    control = CallControl(opener_spoken=True)
+    model = FakeToolModel(messages=iter([AIMessage(content="", tool_calls=[call])]))  # a 2nd call would raise
+    graph = build_call_graph(_task(), outcomes.append, model=model, control=control)
+    history = [AIMessage(content=OPENER + " Table for two Friday at 7?"), HumanMessage(content="We only have 5. That okay?")]
+    assert "".join(await _run(graph, history)).strip() == "No worries, Angi will call back. Thanks, bye!"
+    assert outcomes[0].outcome == "needs_followup" and control.closing
+
+
+@pytest.mark.asyncio
+async def test_record_outcome_say_is_not_repeated_after_text():
+    call = {"name": "record_outcome", "args": {"say": "Perfect, bye!", "outcome": "booked", "summary": "x"}, "id": "r"}
+    model = FakeToolModel(messages=iter([AIMessage(content="Perfect, thanks. Bye!", tool_calls=[call])]))
+    graph = build_call_graph(_task(), lambda o: None, model=model)
+    spoken = "".join(await _run(graph, [HumanMessage(content="Luigi's."), AIMessage(content=OPENER), HumanMessage(content="You're booked.")]))
+    assert spoken.strip() == "Perfect, thanks. Bye!"
+
+
+def test_say_streamer_handles_partial_json_and_escapes():
+    from muse_voice_agent.graph import _SayStreamer
+
+    streamer = _SayStreamer()
+    out = []
+    for piece in ['{"sa', 'y": "No wor', 'ries, \\', '"5\\" is too early', '. Bye!", "outcome": "unav']:
+        chunk = AIMessageChunk(content="", tool_call_chunks=[{"name": "record_outcome" if not out else None, "args": piece, "id": "r", "index": 0}])
+        out.append(streamer.feed(chunk))
+    assert "".join(out) == 'No worries, "5" is too early. Bye!'
+    assert streamer.done
 
 
 @pytest.mark.asyncio
@@ -393,3 +513,49 @@ def test_silent_hangup_fallback_matches_their_last_line():
     assert "say that again" in _silent_hangup_fallback("Can you spell the name?", done=True)
     assert "say that again" in _silent_hangup_fallback("Okay, what day?", done=False)
     assert _silent_hangup_fallback("Great, you're booked.", done=True) == "Thanks so much. Bye!"
+
+
+def test_voicemail_note_skips_the_intro_only_when_the_opener_was_just_spoken():
+    from muse_voice_agent.graph import _line_notes
+
+    fresh = _line_notes(_task(), "voicemail", intro_now=True, reintro=False)[0]
+    later = _line_notes(_task(), "voicemail", intro_now=False, reintro=False)[0]
+    assert "don't introduce yourself again" in fresh
+    assert "don't introduce yourself again" not in later
+
+
+@pytest.mark.asyncio
+async def test_screener_repair_line_does_not_block_reintroduction_to_the_connected_person():
+    from muse_voice_agent.graph import CallControl
+
+    model = FakeToolModel(messages=iter([AIMessage(content="Table for two Friday at 7?")]))
+    graph = build_call_graph(_task(), lambda o: None, model=model, control=CallControl(opener_spoken=True))
+    history = [
+        HumanMessage(content="Hi, who's calling and what's this regarding?"),
+        AIMessage(content=OPENER + " I'd like a table…"),
+        HumanMessage(content="Sorry—what?"),
+        AIMessage(content=OPENER + " I'd like to book a table for Friday."),
+        HumanMessage(content="Thanks, please stay on the line while I connect you."),
+        HumanMessage(content="Hello?"),
+    ]
+    assert "".join(await _run(graph, history)).startswith(OPENER)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("chunked", [False, True])
+async def test_model_repeating_the_opener_is_not_spoken_twice(chunked):
+    from muse_voice_agent.graph import _OpenerDropper
+
+    if chunked:
+        dropper = _OpenerDropper(OPENER)
+        parts = [OPENER[:10], OPENER[10:30], OPENER[30:] + " Calling", " about jeans."]
+        assert "".join(dropper.feed(p) for p in parts) + dropper.flush() == "Calling about jeans."
+        other = _OpenerDropper(OPENER)
+        assert other.feed("Hi") == "" and other.feed(" there!") == "Hi there!"
+        partial = _OpenerDropper(OPENER)
+        assert partial.feed("Hi, this") == "" and partial.flush() == "Hi, this"
+        return
+    model = FakeToolModel(messages=iter([AIMessage(content=OPENER + " I'm calling about hemming jeans. Bye!")]))
+    graph = build_call_graph(_task(), lambda o: None, model=model)
+    spoken = "".join(await _run(graph, [HumanMessage(content="You've reached Luigi's. Please leave a message.")]))
+    assert spoken.count("on behalf of") == 1 and spoken.strip().endswith("hemming jeans. Bye!")

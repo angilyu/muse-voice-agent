@@ -1,6 +1,6 @@
 import pytest
 
-from muse_voice_agent.config import llm_model_init_args, parse_llm_model_spec
+from muse_voice_agent.config import Settings, llm_model_init_args, parse_llm_model_spec
 
 
 def test_parse_llm_model_spec_with_reasoning_effort():
@@ -28,3 +28,17 @@ def test_llm_model_init_args_keeps_temperature_for_non_reasoning_model():
 def test_parse_llm_model_spec_rejects_invalid_values(value):
     with pytest.raises(ValueError):
         parse_llm_model_spec(value)
+
+
+def test_llm_model_init_args_service_tier_only_for_openai():
+    _, kwargs = llm_model_init_args("openai:gpt-5.4@low", service_tier="priority")
+    assert kwargs["service_tier"] == "priority"
+    assert "service_tier" not in llm_model_init_args("openai:gpt-5.4@low", service_tier="default")[1]
+    assert "service_tier" not in llm_model_init_args("anthropic:claude-x", service_tier="priority")[1]
+
+
+def test_service_tier_defaults_to_standard_processing(monkeypatch):
+    monkeypatch.delenv("LLM_SERVICE_TIER", raising=False)
+    tier = Settings().llm_service_tier
+    assert tier == "default"
+    assert "service_tier" not in llm_model_init_args("openai:gpt-5.4@low", service_tier=tier)[1]

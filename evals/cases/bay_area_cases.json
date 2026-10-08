@@ -5132,5 +5132,142 @@
       "forbidden_phrases": [],
       "max_turns": 12
     }
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Nopalito",
+        "customer_name": "Alex Chen",
+        "date": "tomorrow",
+        "flexibility": null,
+        "party_size": 2,
+        "phone_number": "+14155550361",
+        "special_requests": null,
+        "time": "7:00 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "unavailable",
+        "needs_followup"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 8,
+      "required_facts": [
+        {
+          "any_of": [
+            "5 PM",
+            "5:00",
+            "5pm",
+            "five"
+          ],
+          "name": "first_offer",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "8:45"
+          ],
+          "name": "closest_offer",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "rest-no-flex-far-offer",
+    "persona": {
+      "answers_as": "host",
+      "behaviors": [
+        "offers_far_alternative"
+      ],
+      "facts": {
+        "requested_time": "7:00 PM is fully booked",
+        "first_offer": "5:00 PM",
+        "closest_offer": "8:45 PM",
+        "name": "Alex Chen"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "booking",
+      "alternatives",
+      "naturalness"
+    ],
+    "title": "Only far times offered and no flexibility given: ask for closer, then report every offer",
+    "vertical": "restaurant"
+  },
+  {
+    "brief": {
+      "args": {
+        "business_name": "Zuni Cafe",
+        "customer_name": "Maria Lopez",
+        "date": "Thursday",
+        "flexibility": "Thursday 6:30 PM to 8:30 PM",
+        "party_size": 4,
+        "phone_number": "+14155550362",
+        "special_requests": null,
+        "time": "7:30 PM"
+      },
+      "tool": "book_restaurant_reservation"
+    },
+    "difficulty": "medium",
+    "expectations": {
+      "allowed_outcomes": [
+        "booked"
+      ],
+      "forbidden_behaviors": [
+        "failed_ai_disclosure",
+        "markdown_or_lists_or_emoji"
+      ],
+      "forbidden_phrases": [],
+      "max_turns": 9,
+      "required_facts": [
+        {
+          "any_of": [
+            "8:15"
+          ],
+          "name": "time",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "ZC815",
+            "ZC 815"
+          ],
+          "name": "confirmation",
+          "where": "outcome"
+        }
+      ]
+    },
+    "id": "rest-far-offer-then-closer",
+    "persona": {
+      "answers_as": "host",
+      "behaviors": [
+        "offers_far_alternative"
+      ],
+      "facts": {
+        "requested_time": "7:30 PM is fully booked",
+        "first_offer": "5:00 PM",
+        "closest_offer": "8:15 PM",
+        "confirmation": "ZC815",
+        "name": "Maria Lopez"
+      },
+      "private_facts": {},
+      "will_not_reveal": []
+    },
+    "tags": [
+      "restaurant",
+      "booking",
+      "alternatives"
+    ],
+    "title": "First offer outside the window; a closer time exists only if asked",
+    "vertical": "restaurant"
   }
 ]
