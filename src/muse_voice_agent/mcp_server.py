@@ -29,6 +29,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from .config import Settings, get_settings
 from .dispatcher import CallRejected, start_call
 from .keepalive import KeepAliveMiddleware
+from .report import build_report, speaker_transcript
 from .retell import RetellWebsocketRouter, sync_agent_websocket_url
 from .store import FINAL_STATUSES, CallStore
 from .tasks import Authority, GeneralCall, HandymanQuote, RestaurantReservation
@@ -54,7 +55,12 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   returns needs_followup.
 - Only put details the user is comfortable sharing in shareable_details.
 - Every call tool returns a call_id immediately; the call itself takes 1-5 minutes. Poll
-  get_call_status(call_id) every ~20 seconds until `done` is true, then report the summary and answers.
+  get_call_status(call_id) every ~20 seconds until `done` is true.
+- When done, get_call_status adds a `report`: answers to each requested question,
+  unanswered_questions, whether the agent committed on the user's behalf, how the call ended,
+  duration, and suggested next_steps, plus the speaker-labeled transcript. Tell the user the
+  summary, key details (date/time, total, quote), any unanswered questions, and offer the next
+  steps (e.g. add a booking to their calendar, retry, or call another business).
 - Always pass customer_name: the full name of the user you're calling for. The agent introduces
   itself as their assistant. If you don't know the user's name, ask them before calling.
 - Always confirm the business, phone number, and the brief with the user before calling.
@@ -62,22 +68,27 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
 """
 
 
-def _public_view(record: dict[str, Any], include_transcript: bool = False) -> dict[str, Any]:
+def _public_view(
+    record: dict[str, Any], include_transcript: bool = False, include_report: bool = False
+) -> dict[str, Any]:
+    done = record["status"] in FINAL_STATUSES
     view = {
         "call_id": record["id"],
         "kind": record["kind"],
         "business_name": record["business_name"],
         "phone_number": record["phone_number"],
         "status": record["status"],
-        "done": record["status"] in FINAL_STATUSES,
+        "done": done,
         "outcome": record["outcome"],
         "summary": record["summary"],
         "details": record["details"],
         "error": record["error"],
         "simulated": record["dry_run"],
     }
+    if include_report and done:
+        view["report"] = build_report(record)
     if include_transcript:
-        view["transcript"] = record["transcript"]
+        view["transcript"] = speaker_transcript(record["transcript"])
     return view
 
 
@@ -246,17 +257,29 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         )
 
     @mcp.tool(annotations=ToolAnnotations(title="Get call status", readOnlyHint=True))
-    async def get_call_status(call_id: str, include_transcript: bool = False) -> dict[str, Any]:
+    async def get_call_status(
+        call_id: str, include_transcript: bool | None = None
+    ) -> dict[str, Any]:
         """Get the status and result of a call started by this server.
+
+        Once `done` is true the response also has a `report` with: request (the brief you sent),
+        reached (person/voicemail/phone_menu/no_answer/not_connected), started_at, ended_at,
+        duration_seconds, end_reason, ended_by, outcome_source (agent = recorded live,
+        transcript = inferred afterwards, call_system = no result recorded),
+        committed_on_users_behalf, answers (one per requested question), unanswered_questions,
+        and next_steps to offer the user.
 
         Args:
             call_id: The call_id returned when the call was started.
-            include_transcript: Include the turn-by-turn transcript.
+            include_transcript: Include the speaker-labeled transcript (business/assistant).
+                Defaults to only once the call is done.
         """
         record = store.get_call(call_id)
         if record is None:
             return {"error": "not_found", "message": f"No call with id {call_id}"}
-        return _public_view(record, include_transcript=include_transcript)
+        if include_transcript is None:
+            include_transcript = record["status"] in FINAL_STATUSES
+        return _public_view(record, include_transcript=include_transcript, include_report=True)
 
     @mcp.tool(annotations=ToolAnnotations(title="List recent calls", readOnlyHint=True))
     async def list_calls(limit: int = 10) -> dict[str, Any]:

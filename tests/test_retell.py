@@ -345,6 +345,54 @@ def test_finalize_maps_disconnection_reasons(settings, reason, status, outcome):
     assert record["transcript"] == [{"role": "user", "text": "Hello?"}]
 
 
+def test_finalize_records_timing_and_end_reason(settings):
+    store = CallStore(settings.call_db_path)
+    call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
+    store.update_call(call_id, status="completed", outcome="booked", summary="ok", outcome_source="agent")
+    retell.finalize_from_retell(
+        store,
+        call_id,
+        {
+            "call_status": "ended",
+            "disconnection_reason": "agent_hangup",
+            "start_timestamp": 1_700_000_000_000,
+            "end_timestamp": 1_700_000_075_500,
+        },
+    )
+    record = store.get_call(call_id)
+    assert (record["started_at"], record["ended_at"]) == (1_700_000_000.0, 1_700_000_075.5)
+    assert record["end_reason"] == "agent_hangup"
+    assert (record["outcome"], record["outcome_source"]) == ("booked", "agent")
+
+
+def test_finalize_fallback_marks_call_system_source(settings):
+    store = CallStore(settings.call_db_path)
+    call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
+    retell.finalize_from_retell(
+        store, call_id, {"call_status": "ended", "disconnection_reason": "user_hangup"}
+    )
+    assert store.get_call(call_id)["outcome_source"] == "call_system"
+
+
+def test_store_migrates_old_database(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    with sqlite3.connect(path) as c:
+        c.execute(
+            "CREATE TABLE calls (id TEXT PRIMARY KEY, kind TEXT NOT NULL, business_name TEXT NOT NULL,"
+            " phone_number TEXT NOT NULL, task_json TEXT NOT NULL, status TEXT NOT NULL,"
+            " outcome TEXT, summary TEXT, details_json TEXT, transcript_json TEXT NOT NULL DEFAULT '[]',"
+            " error TEXT, dry_run INTEGER NOT NULL DEFAULT 0, created_at REAL NOT NULL,"
+            " updated_at REAL NOT NULL)"
+        )
+    store = CallStore(path)
+    call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
+    store.update_call(call_id, provider_call_id="rc_1", started_at=1.0, end_reason="agent_hangup")
+    record = store.get_call(call_id)
+    assert (record["provider_call_id"], record["started_at"], record["outcome_source"]) == ("rc_1", 1.0, None)
+
+
 def test_finalize_keeps_recorded_outcome(settings):
     store = CallStore(settings.call_db_path)
     call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]

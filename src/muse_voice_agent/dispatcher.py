@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from typing import Any
 
 from .config import Settings
@@ -114,7 +115,7 @@ async def _simulate_call(
 ) -> None:
     """Fake a call end-to-end so the Muse <-> MCP wiring can be tested without a phone line."""
     await asyncio.sleep(delay / 2)
-    store.update_call(call_id, status="in_progress")
+    store.update_call(call_id, status="in_progress", started_at=time.time())
     store.append_transcript(call_id, "user", f"Hello, {task.business_name}, how can I help?")
     store.append_transcript(
         call_id,
@@ -156,4 +157,7 @@ async def _simulate_call(
         outcome=details["outcome"],
         summary=details["summary"],
         details=details,
+        outcome_source="agent",
+        ended_at=time.time(),
+        end_reason="agent_hangup",
     )

@@ -13,6 +13,15 @@ from typing import Any, Iterator
 ACTIVE_STATUSES = ("queued", "dispatched", "dialing", "in_progress")
 FINAL_STATUSES = ("completed", "failed", "no_answer")
 
+# Columns added after the first release; created on startup for older databases.
+_ADDED_COLUMNS = {
+    "provider_call_id": "TEXT",
+    "started_at": "REAL",  # when the business picked up (unix seconds)
+    "ended_at": "REAL",
+    "end_reason": "TEXT",  # e.g. Retell's disconnection_reason: user_hangup, agent_hangup...
+    "outcome_source": "TEXT",  # agent | transcript | call_system
+}
+
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS calls (
     id TEXT PRIMARY KEY,
@@ -28,6 +37,10 @@ CREATE TABLE IF NOT EXISTS calls (
     error TEXT,
     dry_run INTEGER NOT NULL DEFAULT 0,
     provider_call_id TEXT,
+    started_at REAL,
+    ended_at REAL,
+    end_reason TEXT,
+    outcome_source TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -42,8 +55,9 @@ class CallStore:
             c.execute("PRAGMA journal_mode=WAL")
             c.executescript(_SCHEMA)
             cols = {r["name"] for r in c.execute("PRAGMA table_info(calls)")}
-            if "provider_call_id" not in cols:
-                c.execute("ALTER TABLE calls ADD COLUMN provider_call_id TEXT")
+            for name, sql_type in _ADDED_COLUMNS.items():
+                if name not in cols:
+                    c.execute(f"ALTER TABLE calls ADD COLUMN {name} {sql_type}")
 
     @contextmanager
     def _conn(self) -> Iterator[sqlite3.Connection]:

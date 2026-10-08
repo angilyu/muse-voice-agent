@@ -75,6 +75,7 @@ async def entrypoint(ctx: JobContext) -> None:
                 outcome=outcome.outcome,
                 summary=outcome.summary,
                 details=outcome.model_dump(exclude_none=True),
+                outcome_source="agent",
             )
 
     graph = build_call_graph(task, on_outcome, control=control)
@@ -105,7 +106,7 @@ async def entrypoint(ctx: JobContext) -> None:
             ctx.shutdown("dial failed")
             return
         await ctx.wait_for_participant(identity=sip_identity)
-        store.update_call(call_id, status="in_progress")
+        store.update_call(call_id, status="in_progress", started_at=time.time())
 
     session = AgentSession(
         stt=inference.STT(model=settings.stt_model, language="en"),
@@ -167,18 +168,22 @@ async def entrypoint(ctx: JobContext) -> None:
             break  # they went quiet after our goodbye
         await asyncio.sleep(0.25)
 
+    if hung_up.is_set():
+        end_reason = "user_hangup"
+    elif control.end_requested:
+        end_reason = "agent_hangup"
+    else:
+        end_reason = "max_duration_reached"
+    if call_id:
+        store.update_call(call_id, ended_at=time.time(), end_reason=end_reason)
     if call_id and "outcome" not in result:
-        if hung_up.is_set():
-            reason = "callee hung up"
-        elif control.end_requested:
-            reason = "agent hung up"
-        else:
-            reason = "max call duration reached"
+        reason = end_reason.replace("_", " ")
         store.update_call(
             call_id,
             status="completed",
             outcome="needs_followup",
             summary=f"Call ended without a recorded result ({reason}). See transcript.",
+            outcome_source="call_system",
         )
 
     if call_id:
