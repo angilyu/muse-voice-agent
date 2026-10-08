@@ -28,6 +28,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .config import Settings, get_settings
 from .dispatcher import CallRejected, start_call
+from .followups import FollowUpError, resolve_follow_up
 from .keepalive import KeepAliveMiddleware
 from .report import build_report, speaker_transcript
 from .retell import RetellWebsocketRouter, sync_agent_websocket_url
@@ -56,6 +57,13 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
 - Only put details the user is comfortable sharing in shareable_details.
 - Every call tool returns a call_id immediately; the call itself takes 1-5 minutes. Poll
   get_call_status(call_id) every ~20 seconds until `done` is true.
+- To call back about a previous call, pass follow_up_of: <call_id> to place_call,
+  book_restaurant_reservation, or request_handyman_quote. Use this when the business said "call
+  back later", there were unanswered questions, you need to confirm, change, or cancel something
+  from an earlier call, or you are continuing with a person previously reached. The server carries
+  a compact previous-call summary into the new call. The previous call must be done; otherwise wait
+  for get_call_status first. business_name and phone_number inherit from the previous call unless
+  you override them.
 - When done, get_call_status adds a `report`: answers to each requested question,
   unanswered_questions, whether the agent committed on the user's behalf, how the call ended,
   duration, and suggested next_steps, plus the speaker-labeled transcript. Tell the user the
@@ -86,6 +94,7 @@ def _public_view(
         "details": record["details"],
         "error": record["error"],
         "simulated": record["dry_run"],
+        "follow_up_of": record.get("follow_up_of") or (record.get("task") or {}).get("follow_up_of"),
     }
     if include_report and done:
         view["report"] = build_report(record)
@@ -101,10 +110,20 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
 
     async def _start(task_cls: type, **kwargs: Any) -> dict[str, Any]:
         try:
+            follow_up_of = kwargs.get("follow_up_of")
+            if follow_up_of:
+                kwargs = resolve_follow_up(store, follow_up_of, kwargs)
+            elif not kwargs.get("business_name") or not kwargs.get("phone_number"):
+                return {
+                    "error": "invalid_request",
+                    "message": "business_name and phone_number are required unless follow_up_of is provided",
+                }
             task = task_cls(**kwargs)
             record = await start_call(task, settings, store)
         except ValidationError as e:
             return {"error": "invalid_request", "message": str(e)}
+        except FollowUpError as e:
+            return {"error": e.code, "message": str(e)}
         except CallRejected as e:
             return {"error": "rejected", "message": str(e)}
         view = _public_view(record)
@@ -120,16 +139,17 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         )
     )
     async def place_call(
-        business_name: str,
-        phone_number: str,
         customer_name: str,
         goal: str,
+        business_name: str | None = None,
+        phone_number: str | None = None,
         questions: list[str] | None = None,
         shareable_details: dict[str, str] | None = None,
         authority: Authority = "info_only",
         limits: str | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
+        follow_up_of: str | None = None,
     ) -> dict[str, Any]:
         """Phone any business for any errand Muse can brief.
 
@@ -139,8 +159,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         call_id right away.
 
         Args:
-            business_name: Name of the business.
-            phone_number: Business phone number, E.164 (e.g. +14155550123).
+            business_name: Name of the business. Required unless follow_up_of is provided; when
+                following up, defaults to the previous call's business.
+            phone_number: Business phone number, E.164 (e.g. +14155550123). Required unless
+                follow_up_of is provided; when following up, defaults to the previous call's number.
             customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
                 The agent introduces itself as their assistant. Ask the user if you don't know it.
             goal: One or two sentences on what the call should accomplish, including exact order
@@ -158,6 +180,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             callback_number: Number the business may call back (shared only if asked).
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
+            follow_up_of: Previous call_id to continue. The earlier call must be done; its compact
+                report is added to the prompt, and business_name/phone_number inherit unless set.
         """
         return await _start(
             GeneralCall,
@@ -171,6 +195,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             limits=limits,
             callback_number=callback_number or settings.default_callback_number or None,
             assistant_name=assistant_name,
+            follow_up_of=follow_up_of,
         )
 
     @mcp.tool(
@@ -182,22 +207,24 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         )
     )
     async def book_restaurant_reservation(
-        restaurant_name: str,
-        phone_number: str,
         customer_name: str,
         party_size: int,
         date: str,
         time: str,
+        restaurant_name: str | None = None,
+        phone_number: str | None = None,
         flexibility: str | None = None,
         special_requests: str | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
+        follow_up_of: str | None = None,
     ) -> dict[str, Any]:
         """Phone a restaurant and try to book a table. Returns a call_id right away.
 
         Args:
-            restaurant_name: Name of the restaurant.
-            phone_number: Restaurant phone number, E.164 (e.g. +14155550123).
+            restaurant_name: Name of the restaurant. Required unless follow_up_of is provided.
+            phone_number: Restaurant phone number, E.164 (e.g. +14155550123). Required unless
+                follow_up_of is provided.
             customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
                 The agent introduces itself as their assistant. Ask the user if you don't know it.
             party_size: Number of guests.
@@ -210,6 +237,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             callback_number: Number the restaurant may call back (shared only if asked).
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
+            follow_up_of: Previous call_id to continue. The earlier call must be done; its compact
+                report is added to the prompt, and restaurant_name/phone_number inherit unless set.
         """
         return await _start(
             RestaurantReservation,
@@ -223,6 +252,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             special_requests=special_requests,
             callback_number=callback_number or settings.default_callback_number or None,
             assistant_name=assistant_name,
+            follow_up_of=follow_up_of,
         )
 
     @mcp.tool(
@@ -234,21 +264,23 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         )
     )
     async def request_handyman_quote(
-        business_name: str,
-        phone_number: str,
         customer_name: str,
         job_description: str,
         location: str,
+        business_name: str | None = None,
+        phone_number: str | None = None,
         preferred_timing: str | None = None,
         budget: str | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
+        follow_up_of: str | None = None,
     ) -> dict[str, Any]:
         """Phone a handyman/contractor and ask for a price quote and availability (does not book).
 
         Args:
-            business_name: Name of the business or person.
-            phone_number: Business phone number, E.164 (e.g. +14155550123).
+            business_name: Name of the business or person. Required unless follow_up_of is provided.
+            phone_number: Business phone number, E.164 (e.g. +14155550123). Required unless
+                follow_up_of is provided.
             customer_name: Required. Full name of the user you're calling for, e.g. "Wenjing Yu".
                 The agent introduces itself as their assistant. Ask the user if you don't know it.
             job_description: What needs doing, e.g. "replace a leaking kitchen faucet".
@@ -258,6 +290,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             callback_number: Number the business may call back (shared only if asked).
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
+            follow_up_of: Previous call_id to continue. The earlier call must be done; its compact
+                report is added to the prompt, and business_name/phone_number inherit unless set.
         """
         return await _start(
             HandymanQuote,
@@ -270,6 +304,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             budget=budget,
             callback_number=callback_number or settings.default_callback_number or None,
             assistant_name=assistant_name,
+            follow_up_of=follow_up_of,
         )
 
     @mcp.tool(annotations=ToolAnnotations(title="Get call status", readOnlyHint=True))

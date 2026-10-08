@@ -31,7 +31,7 @@ _UNANSWERED = re.compile(
     re.IGNORECASE,
 )
 
-_REQUEST_SKIP = {"kind", "business_name", "phone_number"}
+_REQUEST_SKIP = {"kind", "business_name", "phone_number", "previous_call_context"}
 
 
 def _iso(ts: float | None) -> str | None:
@@ -175,6 +175,7 @@ def build_report(record: dict[str, Any]) -> dict[str, Any]:
         words, ended_by = f"Call ended ({reason.replace('_', ' ')}).", "system"
     source = record.get("outcome_source")
     return {
+        "follow_up_of": record.get("follow_up_of") or task.get("follow_up_of"),
         "request": {k: v for k, v in task.items() if k not in _REQUEST_SKIP and v not in (None, [], {})},
         "reached": _reached(record),
         "started_at": _iso(started),
