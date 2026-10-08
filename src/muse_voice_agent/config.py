@@ -104,9 +104,9 @@ class Settings:
 
     # Models
     llm_model: str = field(default_factory=lambda: _str("LLM_MODEL", "openai:gpt-5.4@low"))
-    # OpenAI processing tier for live calls: "priority" answers faster at a higher token price;
-    # "default" (or empty) uses standard processing.
-    llm_service_tier: str = field(default_factory=lambda: _str("LLM_SERVICE_TIER", "priority"))
+    # OpenAI processing tier. "default" (standard processing) is used for live calls and evals;
+    # "priority" answers a little faster at about 2x the token price and is opt-in only.
+    llm_service_tier: str = field(default_factory=lambda: _str("LLM_SERVICE_TIER", "default"))
     stt_model: str = field(default_factory=lambda: _str("STT_MODEL", "assemblyai/universal-3-5-pro"))
     tts_model: str = field(default_factory=lambda: _str("TTS_MODEL", "fishaudio/s2.1-pro"))
     tts_voice: str = field(

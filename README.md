@@ -300,7 +300,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `PUBLIC_BASE_URL` | — | Public https URL; the Retell websocket is synced to it |
 | `ALLOWED_DIAL_PREFIXES` | `+1` | Comma-separated E.164 prefixes the agent may dial |
 | `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `300` / `3` | Limits on call length and simultaneous calls |
-| `LLM_SERVICE_TIER` | `priority` | OpenAI service tier. Priority cuts about 0.1 to 0.9 s per turn and costs about 2x per token; `default` opts out |
+| `LLM_SERVICE_TIER` | `default` | OpenAI service tier. `default` is standard processing. `priority` cuts about 0.1 to 0.9 s per turn but costs about 2x per token, so it's opt-in only |
 | `FILLER_AFTER_MS` | `1500` | Retell: say "Hmm," if the model hasn't started speaking a reply to a person by then; `0` disables |
 | `SILENT_PICKUP_MS` | `3000` | Retell: if nobody speaks this long after pickup (e.g. a call screener), the agent speaks first; `0` disables |
 | `RETELL_VOICE_ID` | `cartesia-Cleo` | Retell voice |
@@ -363,7 +363,7 @@ the hill-climbing workflow.
 
 ## Roadmap
 
-- [x] Lower turn latency: one model call per decision turn, cache-friendly prompts, priority tier, filler
+- [x] Lower turn latency: one model call per decision turn, cache-friendly prompts, filler
 - [ ] Lower latency further with a faster model that keeps quality
 - [ ] Persistent call log (Postgres or a mounted disk) for hosted deployments
 - [ ] Callback handling when a business calls the number back

@@ -535,7 +535,8 @@ A real test call showed three problems the evals had missed:
 - **Latency:**
   - `say` is the first `record_outcome` argument and is streamed, so decision turns take one
     model call instead of two;
-  - `LLM_SERVICE_TIER=priority` by default;
+  - `LLM_SERVICE_TIER` stays `default` (standard processing) for live calls and eval runs;
+    priority is opt-in only because it costs about 2x per token;
   - a "Hmm," filler is spoken if the model is slower than `FILLER_AFTER_MS`.
 
 **Harness and grader changes**
@@ -562,13 +563,14 @@ A real test call showed three problems the evals had missed:
 | Connected person told who and why after a screener | 0/1 | **7/7** |
 | Asked for a closer time (new cases) | — | **8/8** |
 | Targeted pickup set, prod model (8 cases ×2) | 0.688 (first run) | **0.875** |
-| Agent latency, prod model, targeted set | p50 2.4 s on the real call | **p50 1.8 s, p90 2.9 s** |
+| Agent latency, prod model, targeted set | p50 2.4 s on the real call | **p50 1.8 s, p90 2.9 s** (measured on the priority tier) |
 
 - **Phone pass→fail:** the 17 phone pass→fail cases (14 fail→pass) are almost all "missing
   required fact" where the simulated business gave different facts (for example "ready in 50
   minutes" instead of 15). None is a pickup, screener or latency failure.
 - **Real-model latency check** (`gpt-5.4@low`, time to first word): priority tier p50 0.8–1.2 s,
-  default tier 1.0–1.3 s.
+  default tier 1.0–1.3 s. The 1.8 s full-reply p50 above was measured on priority; production and
+  evals now use the default tier, so expect roughly 0.1–0.3 s more per turn.
 - **Known risk:** a receptionist who asks "who's calling and what's this regarding?" is treated
   as a screener. If they then greet us again, the agent re-introduces itself.
 

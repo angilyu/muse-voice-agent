@@ -188,7 +188,7 @@ def make_chat_model(name: str, *, temperature: float | None = None, json_mode: b
     from langchain.chat_models import init_chat_model
     from muse_voice_agent.config import get_settings, llm_model_init_args
 
-    # Same processing tier as live calls, so --latency numbers match production.
+    # Same processing tier as live calls (default, not priority), so --latency numbers match production.
     model_name, kwargs = llm_model_init_args(
         name, temperature=temperature, service_tier=get_settings().llm_service_tier
     )
