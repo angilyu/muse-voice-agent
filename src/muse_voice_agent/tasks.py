@@ -34,6 +34,13 @@ _PLACEHOLDER_NAMES = {
 }
 
 
+_PLACEHOLDER_ASSISTANT_NAMES = {
+    "assistant", "an assistant", "the assistant", "ai", "ai assistant", "an ai assistant", "bot",
+    "agent", "none", "null", "n/a", "na", "unknown", "name", "tbd",
+}
+_ASSISTANT_NAME = re.compile(r"[^\W\d_](?:[^\W\d_]|[' .-]){0,39}")  # letters, spaces, ' . -
+
+
 class _BaseTask(BaseModel):
     business_name: str = Field(min_length=1, max_length=120)
     phone_number: str = Field(description="Business phone number, E.164 preferred")
@@ -43,6 +50,22 @@ class _BaseTask(BaseModel):
     callback_number: str | None = Field(
         default=None, description="Number the business can call back. Shared only if asked."
     )
+    assistant_name: str | None = Field(
+        default=None,
+        max_length=40,
+        description="The calling assistant's own name, e.g. 'Eva'. The agent says it in the opener.",
+    )
+
+    @field_validator("assistant_name", mode="before")
+    @classmethod
+    def _assistant_name(cls, v: object) -> object:
+        if isinstance(v, str):
+            v = " ".join(v.split()).strip(" .,")
+            if not v or v.lower() in _PLACEHOLDER_ASSISTANT_NAMES:
+                return None
+            if not _ASSISTANT_NAME.fullmatch(v):
+                raise ValueError("assistant_name must be a short name like 'Eva'")
+        return v
 
     @field_validator("customer_name", mode="before")
     @classmethod
@@ -187,7 +210,7 @@ def parse_task(data: dict) -> AnyTask:
 
 _COMMON_RULES = """
 How to talk:
-- You are an AI assistant calling on behalf of {customer_name}. Your opener, "{opening_line}", is
+- You are {self_intro} calling on behalf of {customer_name}. Your opener, "{opening_line}", is
   spoken for you automatically the first time you talk, and again when a person picks up after a
   screener, a phone menu or silence. Don't repeat it yourself unless they didn't hear it or ask
   who's calling.
@@ -213,7 +236,7 @@ How to talk:
 Screeners, menus, holds and voicemail:
 - Call screeners (e.g. Google or iPhone call screening: "say your name and why you're calling",
   "this call is being screened") are recordings that pass your answer on before anyone picks up.
-  Answer in ONE sentence with who and why, e.g. "I'm an AI assistant calling for {customer_name} to
+  Answer in ONE sentence with who and why, e.g. "I'm {self_intro} calling for {customer_name} to
   book a table for two this Friday at 7." If your opener was just spoken, only add why ("I'd like to
   book a table for two this Friday at 7."). No apology, no question, no small talk. Then stop and
   wait. When a person picks up, just say why you're calling; the opener is spoken for you.
@@ -271,9 +294,15 @@ def _today() -> str:
     return f"{now:%A}, {now:%B} {now.day}, {now.year}"
 
 
+def self_intro(task: AnyTask, *, ai: bool = True) -> str:
+    """How the agent names itself: "Eva, an AI assistant" or just "an AI assistant"."""
+    role = "an AI assistant" if ai else "an assistant"
+    return f"{task.assistant_name}, {role}" if task.assistant_name else role
+
+
 def opening_line(task: AnyTask) -> str:
     """Fixed first sentence, spoken before the LLM runs so the callee hears us immediately."""
-    return f"Hi, this is an assistant calling on behalf of {task.customer_name}."
+    return f"Hi, this is {self_intro(task, ai=False)} calling on behalf of {task.customer_name}."
 
 
 def build_system_prompt(task: AnyTask) -> str:
@@ -286,6 +315,7 @@ def build_system_prompt(task: AnyTask) -> str:
         customer_name=task.customer_name,
         callback_clause=callback_clause,
         opening_line=opening_line(task),
+        self_intro=self_intro(task),
         today=_today(),
     )
 

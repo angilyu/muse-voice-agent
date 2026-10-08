@@ -184,6 +184,34 @@ async def test_general_call_dry_run_returns_answers(settings):
     }
 
 
+async def test_assistant_name_is_spoken_in_opener(settings):
+    async with Client(build_server(settings)) as client:
+        tools = {t.name: t for t in (await client.list_tools()).tools}
+        for name in ("place_call", "book_restaurant_reservation", "request_handyman_quote"):
+            assert "assistant_name" in tools[name].input_schema["properties"]
+        started = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    "business_name": "Hotel Zed",
+                    "phone_number": "+14155550100",
+                    "customer_name": "Wenjing Yu",
+                    "assistant_name": "Eva",
+                    "goal": "Check rooms",
+                },
+            )
+        )
+        for _ in range(50):
+            status = _data(await client.call_tool("get_call_status", {"call_id": started["call_id"]}))
+            if status["done"]:
+                break
+            await asyncio.sleep(0.02)
+    assert status["transcript"][1]["text"].startswith(
+        "Hi, this is Eva, an assistant calling on behalf of Wenjing Yu."
+    )
+    assert status["report"]["request"]["assistant_name"] == "Eva"
+
+
 async def test_place_call_schema_is_general_purpose(settings):
     async with Client(build_server(settings)) as client:
         tools = {t.name: t for t in (await client.list_tools()).tools}

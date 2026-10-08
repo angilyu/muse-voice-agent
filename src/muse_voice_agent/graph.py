@@ -41,7 +41,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field, create_model
 
 from .pickup import classify_line, is_greeting, is_note
-from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line
+from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line, self_intro
 
 _TOOL_MARKER = "<function="
 _TOOL_MARKUP = re.compile(r"<function=.*?/>", re.S)
@@ -201,7 +201,7 @@ def _line_notes(task: AnyTask, kind: str | None, *, intro_now: bool, reintro: bo
     if kind == "screener":
         return [
             "This line is an automated call screener, not a person. Answer it in one sentence: who "
-            f"you are (an AI assistant calling for {name}) and why you're calling"
+            f"you are ({self_intro(task)} calling for {name}) and why you're calling"
             + (" (your opener just covered who, so only add why)" if intro_now else "")
             + ". No apology and no question. Then stop and wait for a person."
         ]
@@ -243,7 +243,9 @@ def _status_notes(
         if not heard:
             notes.append(
                 "Your introduction got cut off, so they don't know who you are. Start this reply "
-                f'without apologizing, e.g. "I\'m the assistant for {task.customer_name}."'
+                "without apologizing, e.g. \"I'm "
+                + (f"{task.assistant_name}, " if task.assistant_name else "")
+                + f'the assistant for {task.customer_name}."'
             )
     return notes
 
