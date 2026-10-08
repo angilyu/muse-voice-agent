@@ -24,6 +24,87 @@ Agent  → { "outcome": "info_received",
 Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus tax."
 ```
 
+## 🎧 Hear the first real call
+
+<table>
+<tr>
+<td width="52%" valign="top">
+
+<a href="https://github.com/angilyu/MuseVoiceAgent/releases/download/demo-first-call/first-real-call.mp4">
+  <img src="docs/media/first-real-call.png" alt="Play the first real call placed by MuseVoiceAgent (1:47)">
+</a>
+
+<sub>▶ <a href="https://github.com/angilyu/MuseVoiceAgent/releases/download/demo-first-call/first-real-call.mp4">Video with captions</a>
+· 🎧 <a href="https://github.com/angilyu/MuseVoiceAgent/releases/download/demo-first-call/first-real-call.mp3">Audio only</a>
+· 1:47 · Oct 7, 2026 · unedited, except the employee's name is bleeped</sub>
+
+</td>
+<td valign="top">
+
+**The errand.** A parent planning a family trip asks Muse: *"Does San Diego Mission Bay Resort
+offer childcare so we can go out for a few hours?"* Muse turns that into a brief and calls
+`place_call`. Everything after that is the agent, live on the public phone network, with no human
+in the loop.
+
+**What happens on the call**
+
+1. **Gets through the phone menu.** It listens to a 30-second recorded menu, picks *"all other
+   inquiries"* and presses **4** for the operator. Its opening line is held back, since nobody is
+   listening to a recording.
+2. **Waits on the line.** It stays silent for about 20 seconds while the front desk rings, then gives
+   who it is calling for and why in one sentence.
+3. **Can be interrupted.** The clerk cuts in mid-sentence. The agent stops talking at once, listens,
+   and carries on.
+4. **Doesn't stop at "no".** It moves straight to the brief's fallback (*"do you partner with
+   or recommend a local babysitter?"*), then confirms there's no kids' club either. It skips
+   the hours and pricing questions, which no longer apply.
+5. **Hangs up cleanly and reports back.** It wraps up in under two minutes and returns a
+   structured report: all 4 questions answered, nothing committed on the user's behalf, and a
+   next step for Muse.
+
+</td>
+</tr>
+</table>
+
+<details>
+<summary><b>What Muse got back</b> (trimmed from the real <code>get_call_status</code> response)</summary>
+
+```jsonc
+{
+  "status": "completed",
+  "summary": "Spoke with [name] at the front desk. The resort does not offer in-house childcare, babysitting, or a supervised kids club, and they do not partner with or recommend a local babysitter service for hotel guests.",
+  "report": {
+    "reached": "person",
+    "duration_seconds": 107,
+    "ended_by": "business",
+    "committed_on_users_behalf": false,
+    "answers": [
+      { "question": "Does the resort offer childcare, babysitter service, or a supervised kids club …?",
+        "answer": "No. They do not offer daytime childcare, babysitting, or a supervised kids club on property." },
+      { "question": "What are the hours and pricing?",
+        "answer": "Not applicable because no childcare service is offered." },
+      { "question": "Will it be available Nov 6-10?",
+        "answer": "No childcare service is offered, so there is no availability for Nov 6-10." },
+      { "question": "If they have no in-house service, do they partner with or recommend a local babysitter service …?",
+        "answer": "No. They do not partner with or recommend a babysitter service; they only partner for baby equipment." }
+    ],
+    "unanswered_questions": [],
+    "next_steps": ["… would need to arrange childcare independently off property if needed for Nov 6-10."]
+  }
+}
+```
+
+Response times on this call, as measured by Retell:
+
+| Stage | p50 | p90 |
+|---|---|---|
+| Business stops talking → agent starts talking (end to end) | **1.7 s** | 2.3 s |
+| LLM (LangGraph turn, first audio chunk) | 1.4 s | 1.9 s |
+| Speech recognition | 158 ms | 287 ms |
+| Text to speech | 58 ms | 75 ms |
+
+</details>
+
 ## Why it's interesting
 
 - **One tool, many errands.** `place_call` takes a *brief* (goal, questions, details it may share,
