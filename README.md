@@ -11,7 +11,7 @@ reports back a structured result.
 ![LangGraph](https://img.shields.io/badge/agent-LangGraph-1c3c3c)
 ![Retell AI](https://img.shields.io/badge/voice-Retell%20AI-ff6b35)
 ![Deploy: Docker](https://img.shields.io/badge/deploy-Docker-2496ed)
-![License: proprietary](https://img.shields.io/badge/license-proprietary-lightgrey)
+![License: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
 
 ```text
 You    → Muse:  "Call Hotel Zed and ask if they have a king room Oct 10–12 and the rate. Don't book."
@@ -236,7 +236,7 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
 ```jsonc
 {
   "business_name": "HeyTea",
-  "phone_number": "+12138805023",
+  "phone_number": "+14155550142",
   "customer_name": "Wenjing Yu",
   "goal": "Place a pickup order for two Jasmine green milk teas, 25% sugar, less ice. Use defaults for anything else.",
   "shareable_details": { "pickup name": "Wenjing Yu" },
@@ -472,5 +472,8 @@ the hill-climbing workflow.
 
 ## License
 
-Copyright © 2026 Wenjing Yu. All rights reserved. This is proprietary software; see [LICENSE](LICENSE).
-For licensing or commercial use, contact [@angilyu](https://github.com/angilyu).
+Copyright © 2026 Wenjing Yu. All rights reserved. The source is published for reference only; see
+[LICENSE](LICENSE). For licensing or commercial use, contact [@angilyu](https://github.com/angilyu).
+
+MuseVoiceAgent is an independent project. It is not affiliated with, endorsed by, or sponsored by
+Meta. Muse is referenced only to describe compatibility.

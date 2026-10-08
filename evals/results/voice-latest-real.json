@@ -1,0 +1,634 @@
+{
+  "aggregate": {
+    "agent_latency_seconds": {
+      "max": null,
+      "mean": null,
+      "p50": null
+    },
+    "by_difficulty": {
+      "real_call": {
+        "count": 3,
+        "mean_overall_score": null,
+        "pass_rate": 1.0
+      }
+    },
+    "by_tag": {
+      "retell": {
+        "count": 3,
+        "mean_overall_score": null,
+        "pass_rate": 1.0
+      },
+      "voice": {
+        "count": 3,
+        "mean_overall_score": null,
+        "pass_rate": 1.0
+      }
+    },
+    "by_vertical": {
+      "voice": {
+        "count": 3,
+        "mean_overall_score": null,
+        "pass_rate": 1.0
+      }
+    },
+    "count": 3,
+    "deterministic_pass_rate": 1.0,
+    "estimated_cost_usd": 0,
+    "mean_overall_score": null,
+    "mean_rubric_scores": {}
+  },
+  "kind": "voice",
+  "prompt_versions": {
+    "audio_judge": null
+  },
+  "results": [
+    {
+      "case_id": "call_a5bfaf8c18b9b1f84b5a961dafe",
+      "deterministic": {
+        "issues": [],
+        "passed": true
+      },
+      "difficulty": "real_call",
+      "overall_score": null,
+      "tags": [
+        "voice",
+        "retell"
+      ],
+      "title": "Retell call call_a5bfaf8c18b9b1f84b5a961dafe",
+      "vertical": "voice",
+      "voice_metrics": {
+        "agent_hung_up_cleanly": true,
+        "agent_id": "agent_9d63522dcd7094db78634855a6",
+        "agent_response_latency_seconds": {
+          "max": 8.307,
+          "p50": 2.796,
+          "p90": 6.93,
+          "values": [
+            8.307,
+            1.77,
+            3.716,
+            1.876
+          ]
+        },
+        "call_analysis": {
+          "call_successful": true,
+          "call_summary": "The agent called Denny's on behalf of Wenjing to reserve a table for 6 on Tuesday, October 6 at 6:00 PM. The restaurant only had availability at 7:00 PM, which did not work, so no reservation was made and the agent ended the call.",
+          "custom_analysis_data": {},
+          "in_voicemail": false,
+          "user_sentiment": "Neutral"
+        },
+        "call_id": "call_a5bfaf8c18b9b1f84b5a961dafe",
+        "call_status": "ended",
+        "dead_air_gaps_seconds": {
+          "count": 4,
+          "max": 8.307,
+          "values": [
+            8.307,
+            5.302,
+            3.716,
+            4.43
+          ]
+        },
+        "disconnection_reason": "agent_hangup",
+        "duration_seconds": 63.846,
+        "overlaps": {
+          "agent_interrupts_user": 0,
+          "total": 0,
+          "user_barges_in": 0
+        },
+        "retell_latency_stats": {
+          "asr": {
+            "max": 111,
+            "min": 0,
+            "num": 4,
+            "p50": 16,
+            "p90": 84.60000000000002,
+            "p95": 97.79999999999997,
+            "p99": 108.35999999999999,
+            "sum": 143,
+            "values": [
+              0,
+              23,
+              111,
+              9
+            ]
+          },
+          "e2e": {
+            "max": 8002,
+            "min": 1655.0009765625,
+            "num": 4,
+            "p50": 2678.5009765625,
+            "p90": 6681.4000000000015,
+            "p95": 7341.699999999999,
+            "p99": 7869.939999999999,
+            "sum": 15014.0029296875,
+            "values": [
+              8002,
+              1655.0009765625,
+              3600,
+              1757.001953125
+            ]
+          },
+          "llm": {
+            "max": 7887,
+            "min": 437,
+            "num": 4,
+            "p50": 1094.5,
+            "p90": 6005.100000000001,
+            "p95": 6946.049999999997,
+            "p99": 7698.809999999999,
+            "sum": 10513,
+            "values": [
+              7887,
+              575,
+              437,
+              1614
+            ]
+          },
+          "llm_websocket_network_rtt": {
+            "max": 14,
+            "min": 11,
+            "num": 25,
+            "p50": 12,
+            "p90": 13,
+            "p95": 13,
+            "p99": 13.759999999999998,
+            "sum": 306,
+            "values": [
+              12,
+              13,
+              12,
+              13,
+              11,
+              13,
+              12,
+              12,
+              13,
+              12,
+              12,
+              12,
+              12,
+              13,
+              14,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12,
+              12
+            ]
+          },
+          "tts": {
+            "max": 107,
+            "min": 80,
+            "num": 4,
+            "p50": 89.5,
+            "p90": 104.3,
+            "p95": 105.64999999999999,
+            "p99": 106.72999999999999,
+            "sum": 366,
+            "values": [
+              98,
+              80,
+              81,
+              107
+            ]
+          }
+        },
+        "talk_ratio": {
+          "agent": 0.63,
+          "user": 0.37
+        },
+        "time_to_first_agent_seconds": 13.538,
+        "turn_count": 8,
+        "words_per_minute": {
+          "agent": 195.2,
+          "user": 181.4
+        }
+      }
+    },
+    {
+      "case_id": "call_a80a7ae4b3eaed1fa48e0ab1228",
+      "deterministic": {
+        "issues": [],
+        "passed": true
+      },
+      "difficulty": "real_call",
+      "overall_score": null,
+      "tags": [
+        "voice",
+        "retell"
+      ],
+      "title": "Retell call call_a80a7ae4b3eaed1fa48e0ab1228",
+      "vertical": "voice",
+      "voice_metrics": {
+        "agent_hung_up_cleanly": true,
+        "agent_id": "agent_9d63522dcd7094db78634855a6",
+        "agent_response_latency_seconds": {
+          "max": 4.098,
+          "p50": 2.154,
+          "p90": 3.475,
+          "values": [
+            2.204,
+            1.955,
+            3.059,
+            2.154,
+            4.098,
+            1.502,
+            1.168
+          ]
+        },
+        "call_analysis": {
+          "call_successful": true,
+          "call_summary": "The agent contacted the restaurant to request a table for two on Tuesday, October 6 between 6:30 and 8:30 PM. The restaurant only had 5 PM available and said they could check again later; the agent said Wenjing would follow up directly.",
+          "custom_analysis_data": {},
+          "in_voicemail": false,
+          "user_sentiment": "Neutral"
+        },
+        "call_id": "call_a80a7ae4b3eaed1fa48e0ab1228",
+        "call_status": "ended",
+        "dead_air_gaps_seconds": {
+          "count": 3,
+          "max": 5.525,
+          "values": [
+            5.525,
+            3.059,
+            4.098
+          ]
+        },
+        "disconnection_reason": "agent_hangup",
+        "duration_seconds": 90.709,
+        "overlaps": {
+          "agent_interrupts_user": 0,
+          "total": 1,
+          "user_barges_in": 1
+        },
+        "retell_latency_stats": {
+          "asr": {
+            "max": 406,
+            "min": 4,
+            "num": 7,
+            "p50": 151,
+            "p90": 329.20000000000005,
+            "p95": 367.5999999999999,
+            "p99": 398.31999999999994,
+            "sum": 1261,
+            "values": [
+              278,
+              4,
+              264,
+              21,
+              137,
+              151,
+              406
+            ]
+          },
+          "e2e": {
+            "max": 3985,
+            "min": 1091,
+            "num": 7,
+            "p50": 2035.372314453125,
+            "p90": 3357.4000000000005,
+            "p95": 3671.1999999999994,
+            "p99": 3922.2399999999993,
+            "sum": 15381.372314453125,
+            "values": [
+              2085,
+              1846,
+              2939,
+              2035.372314453125,
+              3985,
+              1400,
+              1091
+            ]
+          },
+          "llm": {
+            "max": 1707,
+            "min": 584,
+            "num": 13,
+            "p50": 956,
+            "p90": 1614.2,
+            "p95": 1668.6,
+            "p99": 1699.32,
+            "sum": 13079,
+            "values": [
+              1047,
+              1707,
+              941,
+              960,
+              956,
+              691,
+              681,
+              632,
+              622,
+              1116,
+              1643,
+              1499,
+              584
+            ]
+          },
+          "llm_websocket_network_rtt": {
+            "max": 166,
+            "min": 28,
+            "num": 46,
+            "p50": 32,
+            "p90": 86.5,
+            "p95": 114.25,
+            "p99": 143.94999999999987,
+            "sum": 2096,
+            "values": [
+              30,
+              30,
+              69,
+              31,
+              37,
+              33,
+              30,
+              35,
+              117,
+              32,
+              32,
+              32,
+              31,
+              84,
+              34,
+              31,
+              30,
+              33,
+              47,
+              31,
+              31,
+              35,
+              30,
+              35,
+              106,
+              32,
+              34,
+              31,
+              30,
+              71,
+              166,
+              31,
+              28,
+              32,
+              31,
+              117,
+              31,
+              30,
+              64,
+              29,
+              89,
+              29,
+              32,
+              44,
+              34,
+              45
+            ]
+          },
+          "tts": {
+            "max": 117,
+            "min": 74,
+            "num": 11,
+            "p50": 85,
+            "p90": 115,
+            "p95": 116,
+            "p99": 116.8,
+            "sum": 1003,
+            "values": [
+              85,
+              86,
+              82,
+              93,
+              78,
+              107,
+              84,
+              117,
+              74,
+              115,
+              82
+            ]
+          }
+        },
+        "talk_ratio": {
+          "agent": 0.646,
+          "user": 0.354
+        },
+        "time_to_first_agent_seconds": 7.631,
+        "turn_count": 15,
+        "words_per_minute": {
+          "agent": 197.9,
+          "user": 191.0
+        }
+      }
+    },
+    {
+      "case_id": "call_0b941b077172fc49be2e09ea403",
+      "deterministic": {
+        "issues": [],
+        "passed": true
+      },
+      "difficulty": "real_call",
+      "overall_score": null,
+      "tags": [
+        "voice",
+        "retell"
+      ],
+      "title": "Retell call call_0b941b077172fc49be2e09ea403",
+      "vertical": "voice",
+      "voice_metrics": {
+        "agent_hung_up_cleanly": true,
+        "agent_id": "agent_9d63522dcd7094db78634855a6",
+        "agent_response_latency_seconds": {
+          "max": 3.419,
+          "p50": 1.817,
+          "p90": 2.847,
+          "values": [
+            1.719,
+            1.108,
+            1.389,
+            1.915,
+            3.419,
+            2.275
+          ]
+        },
+        "call_analysis": {
+          "call_successful": true,
+          "call_summary": "The agent called to book a table for 2 under Test User's name for tomorrow at 7 PM. The restaurant had no 7 PM availability and offered 6 PM; the agent declined and said Test User would follow up.",
+          "custom_analysis_data": {},
+          "in_voicemail": false,
+          "user_sentiment": "Neutral"
+        },
+        "call_id": "call_0b941b077172fc49be2e09ea403",
+        "call_status": "ended",
+        "dead_air_gaps_seconds": {
+          "count": 2,
+          "max": 4.07,
+          "values": [
+            4.07,
+            3.419
+          ]
+        },
+        "disconnection_reason": "agent_hangup",
+        "duration_seconds": 68.121,
+        "overlaps": {
+          "agent_interrupts_user": 0,
+          "total": 2,
+          "user_barges_in": 2
+        },
+        "retell_latency_stats": {
+          "asr": {
+            "max": 437,
+            "min": 25,
+            "num": 7,
+            "p50": 160,
+            "p90": 278.0000000000001,
+            "p95": 357.4999999999998,
+            "p99": 421.0999999999999,
+            "sum": 1157,
+            "values": [
+              160,
+              103,
+              437,
+              172,
+              25,
+              98,
+              162
+            ]
+          },
+          "e2e": {
+            "max": 3300.998046875,
+            "min": 990,
+            "num": 7,
+            "p50": 1646.00390625,
+            "p90": 2613.99921875,
+            "p95": 2957.498632812499,
+            "p99": 3232.2981640624994,
+            "sum": 12597,
+            "values": [
+              1600,
+              990,
+              1109,
+              1646.00390625,
+              1794.998046875,
+              3300.998046875,
+              2156
+            ]
+          },
+          "llm": {
+            "max": 1866,
+            "min": 515,
+            "num": 11,
+            "p50": 790,
+            "p90": 1730,
+            "p95": 1798,
+            "p99": 1852.4,
+            "sum": 10155,
+            "values": [
+              1730,
+              1301,
+              803,
+              816,
+              526,
+              640,
+              790,
+              515,
+              524,
+              644,
+              1866
+            ]
+          },
+          "llm_websocket_network_rtt": {
+            "max": 132,
+            "min": 27,
+            "num": 35,
+            "p50": 32,
+            "p90": 77.80000000000003,
+            "p95": 93.19999999999993,
+            "p99": 124.51999999999992,
+            "sum": 1454,
+            "values": [
+              30,
+              29,
+              28,
+              67,
+              32,
+              29,
+              29,
+              31,
+              32,
+              30,
+              28,
+              35,
+              33,
+              33,
+              85,
+              32,
+              28,
+              34,
+              33,
+              34,
+              132,
+              41,
+              110,
+              28,
+              32,
+              86,
+              35,
+              34,
+              30,
+              33,
+              67,
+              27,
+              31,
+              28,
+              28
+            ]
+          },
+          "tts": {
+            "max": 109,
+            "min": 76,
+            "num": 10,
+            "p50": 84.5,
+            "p90": 101.8,
+            "p95": 105.39999999999999,
+            "p99": 108.28,
+            "sum": 870,
+            "values": [
+              109,
+              76,
+              78,
+              87,
+              94,
+              101,
+              80,
+              76,
+              83,
+              86
+            ]
+          }
+        },
+        "talk_ratio": {
+          "agent": 0.61,
+          "user": 0.39
+        },
+        "time_to_first_agent_seconds": 7.307,
+        "turn_count": 14,
+        "words_per_minute": {
+          "agent": 226.6,
+          "user": 170.8
+        }
+      }
+    }
+  ],
+  "run_id": "cc179a50fb",
+  "selection": {
+    "agent_id": "agent_9d63522dcd7094db78634855a6",
+    "latest": 3,
+    "retell_call_ids": null,
+    "store_call_ids": null
+  }
+}

@@ -170,7 +170,7 @@ async def test_info_only_call_cannot_report_an_order():
 
     task = GeneralCall(
         business_name="HeyTea",
-        phone_number="+12138805023",
+        phone_number="+14155550142",
         customer_name="Wenjing Yu",
         goal="Ask whether jasmine green milk tea is available",
         questions=["Is it available?"],
@@ -199,7 +199,7 @@ def test_general_order_prompt_allows_commitments_and_defaults():
 
     task = GeneralCall(
         business_name="HeyTea",
-        phone_number="+12138805023",
+        phone_number="+14155550142",
         customer_name="Wenjing Yu",
         goal="Order two jasmine green milk teas.",
         authority="may_commit_within_limits",
