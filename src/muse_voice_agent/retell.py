@@ -369,6 +369,7 @@ class RetellLLMSession:
                 outcome=outcome.outcome,
                 summary=outcome.summary,
                 details=outcome.model_dump(exclude_none=True),
+                outcome_source="agent",
             )
 
     def _save_transcript(self, transcript: list[dict[str, Any]] | None) -> None:
@@ -548,6 +549,13 @@ def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -
     """Apply Retell's final call object to our record (status, transcript) if not already final."""
     if call.get("transcript_object"):
         store.set_transcript(call_id, _store_transcript(call["transcript_object"]))
+    timing: dict[str, Any] = {}
+    for key, column in (("start_timestamp", "started_at"), ("end_timestamp", "ended_at")):
+        if isinstance(call.get(key), (int, float)):
+            timing[column] = call[key] / 1000
+    if call.get("disconnection_reason"):
+        timing["end_reason"] = call["disconnection_reason"]
+    store.update_call(call_id, **timing)
     record = store.get_call(call_id)
     if record is None or (record["status"] in FINAL_STATUSES and record["outcome"]):
         return
@@ -561,6 +569,7 @@ def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -
             status="completed",
             outcome="voicemail",
             summary="Reached voicemail; no message was left.",
+            outcome_source="call_system",
         )
     elif reason == "ivr_reached":
         store.update_call(
@@ -568,6 +577,7 @@ def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -
             status="completed",
             outcome="needs_followup",
             summary="Reached an automated phone menu and could not get through to a person.",
+            outcome_source="call_system",
         )
     elif reason in INCOMPLETE_REASONS:
         store.update_call(
@@ -575,6 +585,7 @@ def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -
             status="completed",
             outcome="needs_followup",
             summary=f"Call ended without a recorded result ({reason}). See transcript.",
+            outcome_source="call_system",
         )
     else:
         store.update_call(call_id, status="failed", error=f"retell: {reason}")
@@ -620,6 +631,7 @@ async def recover_outcome(
         outcome=outcome.outcome,
         summary=outcome.summary,
         details=outcome.model_dump(exclude_none=True),
+        outcome_source="transcript",
     )
     return True
 

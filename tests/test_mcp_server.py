@@ -89,6 +89,45 @@ async def test_restaurant_booking_dry_run_end_to_end(settings):
     assert status["details"]["party_size"] == 4
     assert status["simulated"] is True
     assert len(status["transcript"]) >= 2
+    assert set(status["transcript"][0]) == {"speaker", "text"}
+    report = status["report"]
+    assert report["request"]["party_size"] == 4
+    assert report["committed_on_users_behalf"] is True
+    assert report["outcome_source"] == "agent"
+    assert report["reached"] == "person"
+    assert report["duration_seconds"] is not None
+    assert report["ended_by"] == "assistant"
+    assert "calendar" in report["next_steps"][0]
+
+
+async def test_report_and_transcript_only_once_done(settings):
+    async with Client(build_server(settings)) as client:
+        started = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    "business_name": "Hotel Zed",
+                    "phone_number": "+14155550100",
+                    "customer_name": "Angi",
+                    "goal": "Check rooms",
+                },
+            )
+        )
+        early = _data(await client.call_tool("get_call_status", {"call_id": started["call_id"]}))
+        assert early["done"] is False
+        assert "report" not in early and "transcript" not in early
+        for _ in range(50):
+            status = _data(
+                await client.call_tool(
+                    "get_call_status", {"call_id": started["call_id"], "include_transcript": False}
+                )
+            )
+            if status["done"]:
+                break
+            await asyncio.sleep(0.02)
+        listed = _data(await client.call_tool("list_calls", {}))
+    assert "report" in status and "transcript" not in status
+    assert "report" not in listed["calls"][0]
 
 
 async def test_handyman_quote_dry_run(settings):
@@ -135,6 +174,14 @@ async def test_general_call_dry_run_returns_answers(settings):
         "Is a king room available?",
         "Nightly rate incl. tax?",
     ]
+    assert [a["question"] for a in status["report"]["answers"]] == [
+        "Is a king room available?",
+        "Nightly rate incl. tax?",
+    ]
+    assert status["report"]["request"]["shareable_details"] == {
+        "dates": "Oct 10-12",
+        "guests": "2 adults",
+    }
 
 
 async def test_place_call_schema_is_general_purpose(settings):

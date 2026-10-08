@@ -127,7 +127,7 @@ starts a simulated call and polls it until it's done.
 | `place_call` | Phone **any** business with a brief: orders, appointments, cancellations, reschedules, questions, bookings, quotes, availability/status checks |
 | `book_restaurant_reservation` | Restaurant shortcut (party size, date, time, flexibility) |
 | `request_handyman_quote` | Contractor shortcut: price and earliest availability. **Never books.** |
-| `get_call_status` | Status, outcome, structured details, optional transcript |
+| `get_call_status` | Status, outcome and structured details; once done, a post-call `report` and the transcript |
 | `list_calls` | Most recent calls |
 
 All three call tools **require `customer_name`**, the person the call is made for. The agent opens
@@ -189,9 +189,35 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
     "reference": null,
     "follow_up": null
   },
-  "simulated": false
+  "simulated": false,
+  "report": {                       // only once done
+    "request": { "customer_name": "Wenjing Yu", "goal": "…", "questions": ["…"], "authority": "info_only" },
+    "reached": "person",            // person | voicemail | phone_menu | no_answer | not_connected | unknown
+    "started_at": "2026-10-05T18:02:11+00:00",
+    "ended_at": "2026-10-05T18:03:40+00:00",
+    "duration_seconds": 89,
+    "end_reason": "The assistant ended the call.",
+    "ended_by": "assistant",        // assistant | business | timeout | no_answer | system
+    "outcome_source": "agent",      // agent (recorded live) | transcript (inferred after) | call_system
+    "committed_on_users_behalf": false,
+    "answers": [                    // one per requested question, in order
+      { "question": "Is a king room available Oct 10–12?", "answer": "Yes" },
+      { "question": "What's the nightly rate?", "answer": "$289 plus tax" }
+    ],
+    "unanswered_questions": [],
+    "next_steps": ["Share the answers with the user."]
+  },
+  "transcript": [                   // included by default once done
+    { "speaker": "business", "text": "Hotel Zed, this is Dana." },
+    { "speaker": "assistant", "text": "Hi, this is an assistant calling on behalf of Wenjing Yu…" }
+  ]
 }
 ```
+
+The `report` lets the assistant answer follow-ups in the chat ("what time did they say?", "did they
+answer the parking question?", "add it to my calendar") without placing another call. Pass
+`include_transcript: false` to skip the transcript, or `true` to get it while the call is still in
+progress. `list_calls` stays compact and never includes reports or transcripts.
 
 Depending on the call type, `details` can also include `confirmed_date`, `confirmed_time`,
 `party_size`, `booked_under`, `order_total`, `pickup_time`, `quote`, and `availability`.

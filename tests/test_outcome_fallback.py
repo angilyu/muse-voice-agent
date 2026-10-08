@@ -90,6 +90,8 @@ async def test_recover_outcome_stores_inferred_result_before_finalize(store):
     record = store.get_call(call_id)
     assert (record["status"], record["outcome"]) == ("completed", "booked")
     assert record["details"]["follow_up"] == INFERRED_NOTE
+    assert record["outcome_source"] == "transcript"
+    assert record["end_reason"] == "user_hangup"
 
 
 async def test_recover_outcome_leaves_recorded_and_unconnected_calls_alone(store):
