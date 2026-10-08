@@ -1,8 +1,8 @@
 {
   "counts": {
-    "dev": 52,
-    "heldout": 21,
-    "total": 73
+    "dev": 86,
+    "heldout": 36,
+    "total": 122
   },
   "dev": [
     "rest-sf-busy-alt",
@@ -56,18 +56,52 @@
     "order-heytea-milk-tea",
     "reschedule-dental-cleaning",
     "rest-no-flex-far-offer",
-    "rest-far-offer-then-closer"
+    "rest-far-offer-then-closer",
+    "coverage-clinic-change-or-cancel-hold-music",
+    "coverage-clinic-check-info-or-stock-voicemail",
+    "coverage-clinic-return-or-complaint-asks-card-or-personal-details",
+    "coverage-clinic-follow-up-nothing-available",
+    "coverage-vet-book-hold-music",
+    "coverage-vet-get-quote-voicemail",
+    "coverage-vet-place-order-asks-card-or-personal-details",
+    "coverage-vet-return-or-complaint-nothing-available",
+    "coverage-vet-follow-up-phone-menu",
+    "coverage-dentist-book-transfer",
+    "coverage-dentist-change-or-cancel-voicemail",
+    "coverage-dentist-check-info-or-stock-asks-card-or-personal-details",
+    "coverage-dentist-return-or-complaint-phone-menu",
+    "coverage-dentist-follow-up-hold-music",
+    "coverage-salon-book-voicemail",
+    "coverage-salon-change-or-cancel-call-back-later",
+    "coverage-salon-get-quote-asks-card-or-personal-details",
+    "coverage-salon-place-order-phone-menu",
+    "coverage-salon-follow-up-transfer",
+    "coverage-garage-book-call-back-later",
+    "coverage-garage-change-or-cancel-asks-card-or-personal-details",
+    "coverage-garage-get-quote-nothing-available",
+    "coverage-garage-check-info-or-stock-phone-menu",
+    "coverage-garage-return-or-complaint-transfer",
+    "coverage-shop-change-or-cancel-nothing-available",
+    "coverage-shop-get-quote-phone-menu",
+    "coverage-shop-check-info-or-stock-hold-music",
+    "coverage-shop-place-order-transfer",
+    "coverage-shop-follow-up-call-back-later",
+    "coverage-government-office-book-nothing-available",
+    "coverage-government-office-get-quote-hold-music",
+    "coverage-government-office-check-info-or-stock-transfer",
+    "coverage-government-office-place-order-voicemail",
+    "coverage-government-office-return-or-complaint-call-back-later"
   ],
   "difficulty_counts": {
     "dev": {
       "easy": 13,
-      "hard": 11,
-      "medium": 28
+      "hard": 26,
+      "medium": 47
     },
     "heldout": {
       "easy": 5,
-      "hard": 5,
-      "medium": 11
+      "hard": 11,
+      "medium": 20
     }
   },
   "heldout": [
@@ -91,21 +125,39 @@
     "massage-deposit-followup",
     "silent-pickup-sushi-booking",
     "closing-callback-after-goodbye-with-number",
-    "order-pizza-card-followup"
+    "order-pizza-card-followup",
+    "coverage-clinic-book-phone-menu",
+    "coverage-clinic-get-quote-transfer",
+    "coverage-vet-change-or-cancel-transfer",
+    "coverage-vet-check-info-or-stock-call-back-later",
+    "coverage-dentist-get-quote-call-back-later",
+    "coverage-dentist-place-order-nothing-available",
+    "coverage-salon-check-info-or-stock-nothing-available",
+    "coverage-salon-return-or-complaint-hold-music",
+    "coverage-garage-place-order-hold-music",
+    "coverage-garage-follow-up-voicemail",
+    "coverage-shop-book-asks-card-or-personal-details",
+    "coverage-shop-return-or-complaint-voicemail",
+    "coverage-government-office-change-or-cancel-phone-menu",
+    "coverage-government-office-follow-up-asks-card-or-personal-details",
+    "coverage-clinic-place-order-call-back-later"
   ],
   "seed": 20261006,
-  "source": "bay_area_cases.json only; regression_cases.json stays separate and is run with dev as a must-pass set",
-  "strategy": "deterministic greedy approximate stratification by vertical and difficulty to a 70/30 dev/held-out split",
-  "version": 1,
+  "source": "bay_area_cases.json plus coverage_matrix_cases.json; regression_cases.json stays separate and is run with dev as a must-pass set",
+  "strategy": "existing deterministic Bay Area split plus coverage-matrix split: 34/49 coverage cases in dev and 15/49 held out; held-out uses shifted diagonals so every business, call type, and problem value appears at least once",
+  "version": 2,
   "vertical_counts": {
     "dev": {
-      "auto": 3,
+      "auto": 8,
       "bakery": 1,
       "catering": 1,
+      "clinic": 4,
+      "dentist": 5,
       "events": 1,
       "florist": 1,
       "food_ordering": 1,
       "golf": 1,
+      "government": 5,
       "health": 1,
       "healthcare": 2,
       "home_services": 9,
@@ -121,26 +173,32 @@
       "pharmacy": 1,
       "repair": 1,
       "restaurant": 12,
-      "retail": 3,
-      "salon": 1,
+      "retail": 8,
+      "salon": 6,
       "spa": 1,
+      "vet": 5,
       "voicemail": 1,
       "winery": 1
     },
     "heldout": {
-      "auto": 2,
+      "auto": 4,
       "automation": 1,
       "barber": 1,
       "catering": 1,
+      "clinic": 3,
+      "dentist": 2,
       "food_ordering": 1,
+      "government": 2,
       "healthcare": 1,
       "home_services": 4,
       "kids": 1,
       "pet": 1,
       "restaurant": 4,
-      "retail": 2,
+      "retail": 4,
+      "salon": 2,
       "spa": 1,
-      "travel": 1
+      "travel": 1,
+      "vet": 2
     }
   }
 }

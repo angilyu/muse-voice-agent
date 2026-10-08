@@ -9,7 +9,7 @@ There are two complementary eval types:
 | | Text eval (`evals.text`) | Voice eval (`evals.voice`) |
 | --- | --- | --- |
 | **Judges** | *What* the agent says | *How* the call sounds |
-| **Input** | 68 simulated Bay Area phone calls | Real Retell calls you've already placed |
+| **Input** | 122 simulated small-business phone calls | Real Retell calls you've already placed |
 | **Runs the real agent?** | Yes: the production LangGraph graph, prompt and tools | Scores recordings and timing |
 | **Cost** | Copilot premium requests (no OpenAI spend by default) | Free, plus optional OpenAI audio judge |
 | **Use it for** | Prompt, model and graph changes | Latency, barge-in, TTS and pacing changes |
@@ -83,9 +83,11 @@ uv run --offline python -m evals.compare \
 
 ## The test cases
 
-The suite has **73 base cases** in [`cases/bay_area_cases.json`](cases/bay_area_cases.json), plus
-optional real-call regressions in [`cases/regression_cases.json`](cases/regression_cases.json).
-They cover the errands someone in the San Francisco Bay Area actually phones businesses for.
+The suite has **73 Bay Area cases** in [`cases/bay_area_cases.json`](cases/bay_area_cases.json),
+plus **49 pairwise coverage cases** in
+[`cases/coverage_matrix_cases.json`](cases/coverage_matrix_cases.json), and optional real-call
+regressions in [`cases/regression_cases.json`](cases/regression_cases.json). They cover the errands
+someone actually phones small businesses and offices for.
 
 | Category | Cases | Examples |
 | --- | ---: | --- |
@@ -100,8 +102,31 @@ They cover the errands someone in the San Francisco Bay Area actually phones bus
 New call-quality stress cases are tagged `screening`, `closing`, and/or `naturalness`. You can run
 them with either `--cases tag:screening` or the shorthand `--cases screening`.
 
-The base suite has 18 easy, 35 medium and 15 hard cases. 44 use the generic `place_call` tool, 12 use
-`request_handyman_quote` and 12 use `book_restaurant_reservation`.
+The Bay Area suite has 18 easy, 35 medium and 15 hard cases. 44 use the generic `place_call` tool,
+12 use `request_handyman_quote` and 12 use `book_restaurant_reservation`.
+
+### Pairwise coverage matrix
+
+[`cases/coverage_matrix_cases.json`](cases/coverage_matrix_cases.json) adds 49 cases tagged
+`coverage_matrix`. They use an orthogonal 7×7 design: for each business/call cell, the problem is
+assigned as `(business_index + call_index) mod 7`. The test suite verifies full pairwise coverage
+for:
+
+- business: `clinic`, `vet`, `dentist`, `salon`, `garage`, `shop`, `government_office`;
+- call type: `book`, `change_or_cancel`, `get_quote`, `check_info_or_stock`, `place_order`,
+  `return_or_complaint`, `follow_up`;
+- problem: `phone_menu`, `hold_music`, `transfer`, `voicemail`, `call_back_later`,
+  `asks_card_or_personal_details`, `nothing_available`.
+
+Each case also has dimension tags such as `biz:clinic`, `call:book`, and `problem:phone_menu`, so
+you can run a slice directly:
+
+```bash
+LLM_SERVICE_TIER=default uv run --offline python -m evals.text \
+  --cases tag:coverage_matrix --limit 5 --seed 20261008 --out evals/results/coverage-smoke.json
+LLM_SERVICE_TIER=default uv run --offline python -m evals.text \
+  --cases problem:voicemail --out evals/results/coverage-voicemail.json
+```
 
 ### Anatomy of a case
 
@@ -643,11 +668,29 @@ words.
 
 | Set | Selector | Cases | Use |
 | --- | --- | ---: | --- |
-| Dev | `split:dev` | 52 | Iterate on it; read its failures freely. |
-| Held-out | `split:heldout` | 21 | Run only on the baseline and the final candidate. Don't read its transcripts while iterating. |
+| Dev | `split:dev` | 86 | Iterate on it; read its failures freely. |
+| Held-out | `split:heldout` | 36 | Run only on the baseline and the final candidate. Don't read its transcripts while iterating. |
 | Real-call regressions | `tag:regression` | 4 | Must pass; included with dev on every run. |
 
-`cases/splits.json` holds a seeded split, stratified by vertical and difficulty (seed 20261006).
+`cases/splits.json` holds a seeded split, stratified by vertical and difficulty for the Bay Area
+cases (seed 20261006), plus a 34/15 dev/held-out split of the coverage matrix. The coverage
+held-out cases are shifted diagonals, so they still span all seven businesses, all seven call types,
+and all seven problem types.
+
+For normal iteration, run train/dev plus regressions:
+
+```bash
+LLM_SERVICE_TIER=default uv run --offline python -m evals.text \
+  --cases split:dev,tag:regression --channel clean --out evals/results/dev-clean.json
+```
+
+For final validation only, run the held-out split without inspecting failures while tuning:
+
+```bash
+LLM_SERVICE_TIER=default uv run --offline python -m evals.text \
+  --cases split:heldout --channel clean --out evals/results/heldout-clean.json
+```
+
 Cases added later go to dev until the split is regenerated on purpose.
 
 ### Main metric
@@ -713,7 +756,8 @@ outnumbers pass→fail; for one-shot decisions, use a two-sided sign test on the
 ```text
 evals/
 ├── cases/
-│   ├── bay_area_cases.json   # the 68 cases
+│   ├── bay_area_cases.json   # the 73 Bay Area cases
+│   ├── coverage_matrix_cases.json # the 49 pairwise coverage cases
 │   ├── regression_cases.json # imported real-call regressions
 │   ├── splits.json           # seeded dev/held-out split
 │   └── schema.py             # pydantic schema, validated against production task models

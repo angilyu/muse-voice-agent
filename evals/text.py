@@ -95,7 +95,8 @@ Behavior cues to enact naturally:
 - garbled: make one important answer partially garbled, e.g. "we have [inaudible] thirty"; if the
   caller asks you to repeat, clarify it.
 - hold: put the caller on a brief hold, then return with the facts.
-- voicemail, IVR, rude, hangup, deposit, push_to_book, asks_robot: enact the behavior directly.
+- voicemail, IVR, rude, hangup, deposit, push_to_book, asks_robot, asks_for_card_or_personal_details:
+  enact the behavior directly; for private details, ask for only the card/personal detail named in facts.
 - If the transcript says [interrupted: business barged in], react as if you cut the caller off:
   say "Sorry—what?" or ask for the one key point you missed.
 - If the transcript includes [agent heard: "..."], remember that only the agent heard the noisy
