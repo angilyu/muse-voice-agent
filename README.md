@@ -30,12 +30,12 @@ Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus
 <tr>
 <td width="52%" valign="top">
 
-<a href="https://github.com/angilyu/MuseVoiceAgent/releases/download/demo-first-call/first-real-call.mp4">
+<a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp4">
   <img src="docs/media/first-real-call.png" alt="Play the first real call placed by MuseVoiceAgent (1:47)">
 </a>
 
-<sub>▶ <a href="https://github.com/angilyu/MuseVoiceAgent/releases/download/demo-first-call/first-real-call.mp4">Video with captions</a>
-· 🎧 <a href="https://github.com/angilyu/MuseVoiceAgent/releases/download/demo-first-call/first-real-call.mp3">Audio only</a>
+<sub>▶ <a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp4">Video with captions</a>
+· 🎧 <a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp3">Audio only</a>
 · 1:47 · Oct 7, 2026 · unedited, except the employee's name is bleeped</sub>
 
 </td>
@@ -188,7 +188,7 @@ sequenceDiagram
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/angilyu/MuseVoiceAgent && cd MuseVoiceAgent
+git clone https://github.com/angilyu/muse-voice-agent && cd muse-voice-agent
 uv sync
 cp .env.example .env
 echo "MCP_AUTH_TOKEN=$(python -c 'import secrets;print(secrets.token_urlsafe(32))')" >> .env
