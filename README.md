@@ -26,20 +26,10 @@ Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus
 
 ## 🎧 Hear the first real call
 
-<table>
-<tr>
-<td width="52%" valign="top">
+https://github.com/user-attachments/assets/dccc1823-c725-4932-9cc3-eee79d3f62e8
 
-<a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp4">
-  <img src="docs/media/first-real-call.png" alt="Play the first real call placed by MuseVoiceAgent (1:47)">
-</a>
-
-<sub>▶ <a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp4">Video with captions</a>
-· 🎧 <a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp3">Audio only</a>
-· 1:47 · Oct 7, 2026 · unedited, except the employee's name is bleeped</sub>
-
-</td>
-<td valign="top">
+<sub>1:47 · Oct 7, 2026 · captioned, unedited except the employee's name is bleeped ·
+🎧 <a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp3">Audio only</a></sub>
 
 **The errand.** A parent planning a family trip asks Muse: *"Does San Diego Mission Bay Resort
 offer childcare so we can go out for a few hours?"* Muse turns that into a brief and calls
@@ -61,10 +51,6 @@ in the loop.
 5. **Hangs up cleanly and reports back.** It wraps up in under two minutes and returns a
    structured report: all 4 questions answered, nothing committed on the user's behalf, and a
    next step for Muse.
-
-</td>
-</tr>
-</table>
 
 <details>
 <summary><b>What Muse got back</b> (trimmed from the real <code>get_call_status</code> response)</summary>
