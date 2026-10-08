@@ -4,7 +4,7 @@ Idempotent: re-running updates what already exists. Reads RETELL_API_KEY, the Tw
 TWILIO_SIP_USERNAME/PASSWORD from .env (created by setup_twilio_trunk.py), then writes back
 RETELL_AGENT_ID, RETELL_FROM_NUMBER, RETELL_WS_SECRET, PUBLIC_BASE_URL and VOICE_BACKEND=retell.
 
-    uv run python scripts/setup_retell.py +16282779475 --public-url https://<tunnel-host>
+    uv run python scripts/setup_retell.py +1XXXXXXXXXX --public-url https://<tunnel-host>
 """
 
 from __future__ import annotations
@@ -122,7 +122,7 @@ async def main_async(number: str, public_url: str | None, termination_uri: str |
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("number", help="Caller ID, e.g. +16282779475 (must be on the Twilio trunk)")
+    parser.add_argument("number", help="Caller ID, e.g. +1XXXXXXXXXX (must be on the Twilio trunk)")
     parser.add_argument("--public-url", help="Public https base URL of muse-voice-mcp (tunnel)")
     parser.add_argument("--termination-uri", help="Twilio trunk domain (default: looked up)")
     args = parser.parse_args()

@@ -30,7 +30,7 @@ def settings(tmp_path) -> Settings:
         allowed_dial_prefixes=["+1"],
         retell_api_key="key_test",
         retell_agent_id="agent_test",
-        retell_from_number="+16282779475",
+        retell_from_number="+14155550100",
         retell_ws_secret=SECRET,
         public_base_url="https://example.trycloudflare.com",
         silent_pickup_ms=0,
@@ -364,7 +364,7 @@ async def test_dispatcher_places_retell_call_and_finalizes(settings, monkeypatch
 
     body = json.loads(requests[0].content)
     assert body == {
-        "from_number": "+16282779475",
+        "from_number": "+14155550100",
         "to_number": "+14155550123",
         "override_agent_id": "agent_test",
         "metadata": {"muse_call_id": record["id"]},

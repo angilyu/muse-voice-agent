@@ -4,7 +4,7 @@ Idempotent: re-running reuses what already exists. Reads TWILIO_ACCOUNT_SID,
 TWILIO_AUTH_TOKEN and the LIVEKIT_* keys from .env, then writes back
 SIP_OUTBOUND_TRUNK_ID (plus the generated SIP credentials) to .env.
 
-    uv run python scripts/setup_twilio_trunk.py +16282779475
+    uv run python scripts/setup_twilio_trunk.py +1XXXXXXXXXX
 """
 
 from __future__ import annotations
@@ -174,7 +174,7 @@ async def provision_livekit(domain: str, number: str, username: str, password: s
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument("number", help="Twilio number to use as caller ID, e.g. +16282779475")
+    parser.add_argument("number", help="Twilio number to use as caller ID, e.g. +1XXXXXXXXXX")
     args = parser.parse_args()
 
     number = normalize_phone(args.number)
