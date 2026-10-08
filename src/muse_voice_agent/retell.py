@@ -32,7 +32,7 @@ from .graph import CallControl, CallOutcome, build_call_graph
 from .outcome_fallback import has_business_speech, infer_outcome
 from .pickup import classify_line, is_note
 from .store import FINAL_STATUSES, CallStore
-from .tasks import parse_task
+from .tasks import AnyTask, build_voicemail_message, parse_task
 
 logger = logging.getLogger("muse_voice_agent.retell")
 
@@ -53,6 +53,12 @@ CLOSING_REMINDER_MS = 4000
 # Said when a reply to a person is slow to start, so the line doesn't go dead while the model thinks.
 FILLER = "Hmm, "
 _LEADING_FILLER = re.compile(r"^\s*(?:hmm+|um+|uh+)\b[,.!]?\s*", re.I)
+VOICEMAIL_DETECTION_PROMPT = (
+    "Detect voicemail or answering machines, including greetings that say the person is not "
+    "available, to leave a message, after the tone/beep, or that a mailbox is full or not accepting "
+    "messages. Do not treat live call screeners asking for the caller's name/reason, or IVR phone "
+    "menus asking to press digits, as voicemail."
+)
 
 
 class RetellError(Exception):
@@ -103,12 +109,15 @@ class RetellClient:
         to_number: str,
         agent_id: str | None = None,
         metadata: dict[str, Any] | None = None,
+        agent_override: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         body: dict[str, Any] = {"from_number": from_number, "to_number": to_number}
         if agent_id:
             body["override_agent_id"] = agent_id
         if metadata:
             body["metadata"] = metadata
+        if agent_override:
+            body["agent_override"] = agent_override
         return await self._req("POST", "/v2/create-phone-call", body)
 
     async def get_call(self, retell_call_id: str) -> dict[str, Any]:
@@ -198,6 +207,26 @@ def _store_transcript(transcript: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for u in transcript or []
         if (u.get("content") or "").strip()
     ]
+
+
+def voicemail_agent_override(task: AnyTask) -> dict[str, Any]:
+    """Per-call Retell voicemail behavior.
+
+    Retell waits for the answering-machine greeting to finish before speaking a static_text
+    voicemail, which is more reliable than trying to time the beep from the custom-LLM websocket.
+    """
+    if task.leave_voicemail and task.callback_number:
+        action = {"type": "static_text", "text": build_voicemail_message(task)}
+    else:
+        action = {"type": "hangup"}
+    return {
+        "agent": {
+            "voicemail_option": {
+                "action": action,
+                "detection_prompt": VOICEMAIL_DETECTION_PROMPT,
+            }
+        }
+    }
 
 
 class RetellLLMSession:
@@ -545,6 +574,35 @@ INCOMPLETE_REASONS = {
 }
 
 
+def _voicemail_details(record: dict[str, Any], call: dict[str, Any]) -> dict[str, Any]:
+    task = parse_task(record["task"])
+    turns = _store_transcript(call.get("transcript_object") or [])
+    no_message = any(
+        t.get("role") == "user" and classify_line(t.get("text", "")) == "voicemail_no_message"
+        for t in turns
+    )
+    if task.leave_voicemail and task.callback_number and not no_message:
+        message = build_voicemail_message(task)
+        return {
+            "outcome": "voicemail",
+            "summary": f"Left a voicemail for {task.customer_name} with callback number {task.callback_number}.",
+            "follow_up": "Wait for a callback or try again later.",
+            "voicemail_message": message,
+            "callback_number": task.callback_number,
+        }
+    summary = (
+        "Reached voicemail, but the mailbox could not take a message."
+        if no_message
+        else "Reached voicemail; no message was left."
+    )
+    return {
+        "outcome": "voicemail",
+        "summary": summary,
+        "follow_up": "Try calling again later or try another business.",
+        "callback_number": task.callback_number,
+    }
+
+
 def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -> None:
     """Apply Retell's final call object to our record (status, transcript) if not already final."""
     if call.get("transcript_object"):
@@ -563,12 +621,14 @@ def finalize_from_retell(store: CallStore, call_id: str, call: dict[str, Any]) -
     reason = call.get("disconnection_reason") or call.get("call_status") or "unknown"
     if reason in NO_ANSWER_REASONS:
         store.update_call(call_id, status="no_answer", error=reason)
-    elif reason == "voicemail_reached":
+    elif reason == "voicemail_reached" or call.get("in_voicemail") is True:
+        details = _voicemail_details(record, call)
         store.update_call(
             call_id,
             status="completed",
             outcome="voicemail",
-            summary="Reached voicemail; no message was left.",
+            summary=details["summary"],
+            details=details,
             outcome_source="call_system",
         )
     elif reason == "ivr_reached":

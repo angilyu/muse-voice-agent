@@ -48,7 +48,14 @@ class _BaseTask(BaseModel):
         min_length=1, max_length=80, description="Full name of the person the call is made for"
     )
     callback_number: str | None = Field(
-        default=None, description="Number the business can call back. Shared only if asked."
+        default=None,
+        description=(
+            "Number the business can call back. Included in voicemail messages and shared if asked."
+        ),
+    )
+    leave_voicemail: bool = Field(
+        default=True,
+        description="Leave a concise callback message if the call reaches voicemail.",
     )
     assistant_name: str | None = Field(
         default=None,
@@ -248,10 +255,13 @@ Screeners, menus, holds and voicemail:
   back.
 - If someone other than the right person answers, briefly say why you're calling and ask them to
   help or connect you.
-- If you reach voicemail, leave one short message saying who you're calling for, why, and that
-  they'll call back, then record outcome "voicemail" and call end_call. If an automated system
-  can't get you to a person, record "needs_followup" and call end_call. Don't use "info_received"
-  for a menu or recording unless it answered everything requested.
+- If you reach voicemail, wait for the greeting to finish. If leaving voicemail is enabled and you
+  have a callback number, leave one short message saying who you're calling for, why, the callback
+  number digit by digit twice, and goodbye; then record outcome "voicemail" and call end_call. If
+  voicemail is disabled, the mailbox is full, or there is no way to leave a message, record
+  outcome "voicemail" without a message and call end_call. If an automated system can't get you to
+  a person, record "needs_followup" and call end_call. Don't use "info_received" for a menu or
+  recording unless it answered everything requested.
 
 Confirming and wrapping up:
 - Before recording a booking, order, appointment, cancellation, reschedule, or other commitment,
@@ -298,6 +308,68 @@ def self_intro(task: AnyTask, *, ai: bool = True) -> str:
     """How the agent names itself: "Eva, an AI assistant" or just "an AI assistant"."""
     role = "an AI assistant" if ai else "an assistant"
     return f"{task.assistant_name}, {role}" if task.assistant_name else role
+
+
+_DIGIT_WORDS = {
+    "0": "zero",
+    "1": "one",
+    "2": "two",
+    "3": "three",
+    "4": "four",
+    "5": "five",
+    "6": "six",
+    "7": "seven",
+    "8": "eight",
+    "9": "nine",
+}
+
+
+def speak_phone_number(number: str) -> str:
+    """Say an E.164 phone number clearly, digit by digit."""
+    digits = re.sub(r"\D", "", number or "")
+    return ", ".join(_DIGIT_WORDS[d] for d in digits)
+
+
+def _short(text: str, limit: int) -> str:
+    text = " ".join((text or "").split())
+    if len(text) <= limit:
+        return text
+    cut = text[: limit - 1].rsplit(" ", 1)[0].rstrip(" ,.;:")
+    return cut + "…"
+
+
+def _voicemail_purpose(task: AnyTask) -> str:
+    if isinstance(task, RestaurantReservation):
+        bits = [
+            f"a table for {task.party_size}",
+            f"on {task.date}",
+            f"at {task.time}",
+        ]
+        if task.flexibility:
+            bits.append(f"with flexibility around {task.flexibility}")
+        return "I'm calling to book " + " ".join(bits) + "."
+    if isinstance(task, HandymanQuote):
+        timing = f", preferably {task.preferred_timing}" if task.preferred_timing else ""
+        return (
+            "I'm calling about a handyman quote for "
+            f"{_short(task.job_description, 120)} in {task.location}{timing}."
+        )
+    details = "; ".join(f"{k}: {v}" for k, v in list(task.shareable_details.items())[:3])
+    suffix = f" Details: {_short(details, 140)}." if details else ""
+    return f"I'm calling about {_short(task.goal, 160)}.{suffix}"
+
+
+def build_voicemail_message(task: AnyTask) -> str:
+    """A short, deterministic voicemail script with a repeated callback number."""
+    if not task.callback_number:
+        raise ValueError("callback_number is required to leave a voicemail message")
+    spoken = speak_phone_number(task.callback_number)
+    return (
+        f"Hi, this is {self_intro(task)} calling on behalf of {task.customer_name}. "
+        f"{_voicemail_purpose(task)} "
+        f"Please call {task.customer_name} back at {spoken}. "
+        f"Again, that's {spoken}. Thank you, goodbye."
+    )
 
 
 def opening_line(task: AnyTask) -> str:

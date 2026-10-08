@@ -72,6 +72,10 @@ flowchart LR
    and why in one sentence, stays silent while it "connects", and skips the opener on a phone menu.
    When the first person finally says "Hello?" after the agent already spoke into silence, to a
    screener or to a menu, it introduces itself again, since that person never heard it.
+   Voicemail is handled separately from screeners and menus: Retell's per-call voicemail detection
+   waits for the greeting/beep before delivering the exact callback message, while the graph has a
+   fallback classifier for "leave a message", "after the tone", "not available", and mailbox-full
+   cues.
 3. When the agent has what it needs, it calls `record_outcome`. The goodbye is the tool's first
    argument (`say`), and it is streamed to speech while the rest of the arguments are still arriving,
    so a decision turn needs one model call instead of two. It then stays on the line so it can answer follow-ups (e.g. "how do you spell that?")
@@ -141,6 +145,16 @@ assistant calling for …". Without it, the opener stays "Hi, this is an assista
 of {customer_name}". Placeholders ("assistant", "AI", "unknown") are ignored; names must be letters
 only, up to 40 characters.
 
+They also take **`callback_number`** and **`leave_voicemail`**. `callback_number` must be E.164 and
+is used in voicemail messages (and in live conversation only if the business asks for a callback
+number). If it is omitted, the server uses `VOICEMAIL_CALLBACK_NUMBER`, then
+`DEFAULT_CALLBACK_NUMBER`, then `RETELL_FROM_NUMBER`. `leave_voicemail` defaults to `true`; set it
+to `false` when the user does not want a message left. Voicemail messages are deterministic and
+short: the assistant introduces itself as an AI assistant on behalf of the customer, states the
+purpose and key specifics, says the callback number digit-by-digit twice, says goodbye, and hangs
+up. If the mailbox is full or cannot record a message, the agent hangs up and reports that no
+message was left.
+
 ### `place_call`: the general-purpose call
 
 ```jsonc
@@ -149,6 +163,8 @@ only, up to 40 characters.
   "phone_number": "+15105550123",
   "customer_name": "Wenjing Yu",                           // required: who the call is for
   "assistant_name": "Eva",                                 // optional: the assistant's own name
+  "callback_number": "+14155550123",                       // optional: voicemail callback number
+  "leave_voicemail": true,                                 // default: leave a concise message
   "goal": "Find out if they have a king room for Oct 10–12 and the nightly rate",
   "questions": ["Is a king room available Oct 10–12?", "What's the nightly rate?"],
   "shareable_details": { "guests": "2 adults" },          // what the agent may say if asked
@@ -208,6 +224,8 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
     "ended_by": "assistant",        // assistant | business | timeout | no_answer | system
     "outcome_source": "agent",      // agent (recorded live) | transcript (inferred after) | call_system
     "committed_on_users_behalf": false,
+    "voicemail_message": null,       // exact message left, when outcome is voicemail and one was left
+    "callback_number": null,         // callback number used for voicemail, when applicable
     "answers": [                    // one per requested question, in order
       { "question": "Is a king room available Oct 10–12?", "answer": "Yes" },
       { "question": "What's the nightly rate?", "answer": "$289 plus tax" }

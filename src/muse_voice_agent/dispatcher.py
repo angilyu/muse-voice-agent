@@ -95,6 +95,7 @@ async def _start_retell_call(
                 to_number=task.phone_number,
                 agent_id=settings.retell_agent_id,
                 metadata={retell.METADATA_KEY: call_id},
+                agent_override=retell.voicemail_agent_override(task),
             )
     except Exception as e:  # noqa: BLE001
         logger.exception("retell create-phone-call failed")

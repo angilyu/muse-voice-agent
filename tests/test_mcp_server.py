@@ -20,6 +20,9 @@ def settings(tmp_path) -> Settings:
         call_db_path=tmp_path / "calls.db",
         allowed_dial_prefixes=["+1"],
         max_concurrent_calls=3,
+        retell_from_number="",
+        default_callback_number="",
+        voicemail_callback_number="",
     )
 
 
@@ -189,6 +192,8 @@ async def test_assistant_name_is_spoken_in_opener(settings):
         tools = {t.name: t for t in (await client.list_tools()).tools}
         for name in ("place_call", "book_restaurant_reservation", "request_handyman_quote"):
             assert "assistant_name" in tools[name].input_schema["properties"]
+            assert "callback_number" in tools[name].input_schema["properties"]
+            assert "leave_voicemail" in tools[name].input_schema["properties"]
         started = _data(
             await client.call_tool(
                 "place_call",
@@ -210,6 +215,55 @@ async def test_assistant_name_is_spoken_in_opener(settings):
         "Hi, this is Eva, an assistant calling on behalf of Wenjing Yu."
     )
     assert status["report"]["request"]["assistant_name"] == "Eva"
+
+
+async def test_callback_number_precedence_and_validation(settings):
+    explicit = replace(settings, default_callback_number="+14155550000", voicemail_callback_number="+14155550111")
+    async with Client(build_server(explicit)) as client:
+        started = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    "business_name": "Hotel Zed",
+                    "phone_number": "+14155550100",
+                    "customer_name": "Angi",
+                    "goal": "Check rooms",
+                    "callback_number": "+14155550222",
+                    "leave_voicemail": False,
+                },
+            )
+        )
+        invalid = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    "business_name": "Hotel Zed",
+                    "phone_number": "+14155550100",
+                    "customer_name": "Angi",
+                    "goal": "Check rooms",
+                    "callback_number": "12",
+                },
+            )
+        )
+    stored = CallStore(explicit.call_db_path).get_call(started["call_id"])["task"]
+    assert stored["callback_number"] == "+14155550222"
+    assert stored["leave_voicemail"] is False
+    assert invalid["error"] == "invalid_request"
+
+    fallback = replace(settings, voicemail_callback_number="+14155550111", default_callback_number="+14155550000")
+    async with Client(build_server(fallback)) as client:
+        started = _data(
+            await client.call_tool(
+                "place_call",
+                {
+                    "business_name": "Hotel Zed",
+                    "phone_number": "+14155550100",
+                    "customer_name": "Angi",
+                    "goal": "Check rooms",
+                },
+            )
+        )
+    assert CallStore(fallback.call_db_path).get_call(started["call_id"])["task"]["callback_number"] == "+14155550111"
 
 
 async def test_place_call_schema_is_general_purpose(settings):

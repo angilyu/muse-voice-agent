@@ -2937,6 +2937,7 @@
       "args": {
         "authority": "info_only",
         "business_name": "North Beach Tailors",
+        "callback_number": "+14155550123",
         "customer_name": "Angi",
         "goal": "Ask if they can hem jeans by Friday.",
         "phone_number": "+14155550242",
@@ -2967,6 +2968,14 @@
             "leave a message"
           ],
           "name": "voicemail",
+          "where": "outcome"
+        },
+        {
+          "any_of": [
+            "+14155550123",
+            "one, four, one, five"
+          ],
+          "name": "callback number",
           "where": "outcome"
         }
       ]

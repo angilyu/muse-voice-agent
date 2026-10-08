@@ -133,6 +133,16 @@ def test_report_for_voicemail_and_unknown_reason():
     voicemail = build_report(_record(outcome="voicemail", end_reason="voicemail_reached", transcript=[]))
     assert voicemail["reached"] == "voicemail"
     assert voicemail["next_steps"][0].startswith("Reached voicemail")
+    left = build_report(
+        _record(
+            outcome="voicemail",
+            end_reason="voicemail_reached",
+            details={"voicemail_message": "Hi, please call back.", "callback_number": "+14155550123"},
+        )
+    )
+    assert left["voicemail_message"] == "Hi, please call back."
+    assert left["callback_number"] == "+14155550123"
+    assert left["next_steps"][0].startswith("Left voicemail")
     odd = build_report(_record(status="failed", outcome=None, end_reason="error_llm_websocket_open"))
     assert odd["reached"] == "not_connected"
     assert odd["end_reason"] == "Call ended (error llm websocket open)."

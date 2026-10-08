@@ -557,5 +557,5 @@ async def test_model_repeating_the_opener_is_not_spoken_twice(chunked):
         return
     model = FakeToolModel(messages=iter([AIMessage(content=OPENER + " I'm calling about hemming jeans. Bye!")]))
     graph = build_call_graph(_task(), lambda o: None, model=model)
-    spoken = "".join(await _run(graph, [HumanMessage(content="You've reached Luigi's. Please leave a message.")]))
+    spoken = "".join(await _run(graph, [HumanMessage(content="Hello, Luigi's.")]))
     assert spoken.count("on behalf of") == 1 and spoken.strip().endswith("hemming jeans. Bye!")

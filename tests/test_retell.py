@@ -42,6 +42,7 @@ def _task() -> RestaurantReservation:
         business_name="Luigi's",
         phone_number="+14155550123",
         customer_name="Angi",
+        callback_number="+14155550111",
         party_size=2,
         date="Friday",
         time="7pm",
@@ -63,6 +64,17 @@ def test_websocket_url_is_derived_from_public_base_url(settings):
     assert settings.retell_llm_websocket_url() == (
         f"wss://example.trycloudflare.com/retell/llm/{SECRET}"
     )
+
+
+def test_retell_voicemail_agent_override_message_and_hangup():
+    message_override = retell.voicemail_agent_override(_task())
+    action = message_override["agent"]["voicemail_option"]["action"]
+    assert action["type"] == "static_text"
+    assert "one, four, one, five" in action["text"]
+    assert "call screeners" in message_override["agent"]["voicemail_option"]["detection_prompt"]
+
+    disabled = _task().model_copy(update={"leave_voicemail": False})
+    assert retell.voicemail_agent_override(disabled)["agent"]["voicemail_option"]["action"] == {"type": "hangup"}
 
 
 def test_custom_llm_websocket_conversation(settings):
@@ -363,12 +375,12 @@ async def test_dispatcher_places_retell_call_and_finalizes(settings, monkeypatch
     assert record["provider_call_id"] == "rc_9"
 
     body = json.loads(requests[0].content)
-    assert body == {
-        "from_number": "+16282779475",
-        "to_number": "+14155550123",
-        "override_agent_id": "agent_test",
-        "metadata": {"muse_call_id": record["id"]},
-    }
+    assert body["from_number"] == "+16282779475"
+    assert body["to_number"] == "+14155550123"
+    assert body["override_agent_id"] == "agent_test"
+    assert body["metadata"] == {"muse_call_id": record["id"]}
+    assert body["agent_override"]["agent"]["voicemail_option"]["action"]["type"] == "static_text"
+    assert "one, four, one, five" in body["agent_override"]["agent"]["voicemail_option"]["action"]["text"]
     assert requests[0].headers["authorization"] == "Bearer key_test"
 
     for _ in range(200):
@@ -404,6 +416,41 @@ def test_finalize_maps_disconnection_reasons(settings, reason, status, outcome):
     record = store.get_call(call_id)
     assert (record["status"], record["outcome"]) == (status, outcome)
     assert record["transcript"] == [{"role": "user", "text": "Hello?"}]
+
+
+def test_finalize_voicemail_records_message_details(settings):
+    store = CallStore(settings.call_db_path)
+    call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
+    retell.finalize_from_retell(
+        store,
+        call_id,
+        {
+            "call_status": "ended",
+            "disconnection_reason": "voicemail_reached",
+            "transcript_object": [{"role": "user", "content": "Leave a message after the tone."}],
+        },
+    )
+    record = store.get_call(call_id)
+    assert record["summary"].startswith("Left a voicemail")
+    assert record["details"]["callback_number"] == "+14155550111"
+    assert record["details"]["voicemail_message"].count("one, four, one, five") == 2
+
+
+def test_finalize_voicemail_full_records_no_message(settings):
+    store = CallStore(settings.call_db_path)
+    call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
+    retell.finalize_from_retell(
+        store,
+        call_id,
+        {
+            "call_status": "ended",
+            "disconnection_reason": "voicemail_reached",
+            "transcript_object": [{"role": "user", "content": "This mailbox is full and cannot accept messages."}],
+        },
+    )
+    record = store.get_call(call_id)
+    assert "could not take a message" in record["summary"]
+    assert "voicemail_message" not in record["details"]
 
 
 def test_finalize_records_timing_and_end_reason(settings):
