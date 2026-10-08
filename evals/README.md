@@ -300,8 +300,7 @@ Merge prompt/model changes only when all of these hold:
 
    ```bash
    set -a && source .env && set +a
-   COPILOT_GITHUB_TOKEN=$COPILOT_GH_ACCOUNT_github_2E_com_angilyu \
-     PYTHONPATH=$PWD/src .venv/bin/python -m evals.import_call <retell_call_id> \
+   PYTHONPATH=$PWD/src .venv/bin/python -m evals.import_call <retell_call_id> \
      --case-id regression-<short-id>
    ```
 
