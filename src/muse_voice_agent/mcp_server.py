@@ -63,6 +63,8 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   steps (e.g. add a booking to their calendar, retry, or call another business).
 - Always pass customer_name: the full name of the user you're calling for. The agent introduces
   itself as their assistant. If you don't know the user's name, ask them before calling.
+- Always pass assistant_name: your own name, the one the user knows you by (e.g. "Eva"). The agent
+  opens with "Hi, this is {assistant_name}, an assistant calling on behalf of {customer_name}."
 - Always confirm the business, phone number, and the brief with the user before calling.
 - Phone numbers should be E.164 (e.g. +14155550123).
 """
@@ -127,6 +129,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         authority: Authority = "info_only",
         limits: str | None = None,
         callback_number: str | None = None,
+        assistant_name: str | None = None,
     ) -> dict[str, Any]:
         """Phone any business for any errand Muse can brief.
 
@@ -153,6 +156,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 jasmine green milk teas, 25% sugar, less ice, defaults otherwise, pickup order,
                 pay at pickup, no card over phone" or "Oct 10-12 only, max $250/night, no deposit".
             callback_number: Number the business may call back (shared only if asked).
+            assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
+                "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
         """
         return await _start(
             GeneralCall,
@@ -165,6 +170,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             authority=authority,
             limits=limits,
             callback_number=callback_number or settings.default_callback_number or None,
+            assistant_name=assistant_name,
         )
 
     @mcp.tool(
@@ -185,6 +191,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         flexibility: str | None = None,
         special_requests: str | None = None,
         callback_number: str | None = None,
+        assistant_name: str | None = None,
     ) -> dict[str, Any]:
         """Phone a restaurant and try to book a table. Returns a call_id right away.
 
@@ -201,6 +208,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 if the exact time is taken it only collects the closest times for the user.
             special_requests: Seating preferences, allergies, occasion.
             callback_number: Number the restaurant may call back (shared only if asked).
+            assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
+                "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
         """
         return await _start(
             RestaurantReservation,
@@ -213,6 +222,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             flexibility=flexibility,
             special_requests=special_requests,
             callback_number=callback_number or settings.default_callback_number or None,
+            assistant_name=assistant_name,
         )
 
     @mcp.tool(
@@ -232,6 +242,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         preferred_timing: str | None = None,
         budget: str | None = None,
         callback_number: str | None = None,
+        assistant_name: str | None = None,
     ) -> dict[str, Any]:
         """Phone a handyman/contractor and ask for a price quote and availability (does not book).
 
@@ -245,6 +256,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             preferred_timing: e.g. "weekday mornings next week".
             budget: Optional budget, only mentioned if asked.
             callback_number: Number the business may call back (shared only if asked).
+            assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
+                "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
         """
         return await _start(
             HandymanQuote,
@@ -256,6 +269,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             preferred_timing=preferred_timing,
             budget=budget,
             callback_number=callback_number or settings.default_callback_number or None,
+            assistant_name=assistant_name,
         )
 
     @mcp.tool(annotations=ToolAnnotations(title="Get call status", readOnlyHint=True))

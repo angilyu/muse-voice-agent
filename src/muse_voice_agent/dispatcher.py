@@ -10,7 +10,7 @@ from typing import Any
 
 from .config import Settings
 from .store import CallStore
-from .tasks import AnyTask, GeneralCall, RestaurantReservation
+from .tasks import AnyTask, GeneralCall, RestaurantReservation, opening_line
 
 logger = logging.getLogger("muse_voice_agent.dispatcher")
 
@@ -120,7 +120,7 @@ async def _simulate_call(
     store.append_transcript(
         call_id,
         "assistant",
-        f"Hi, this is an assistant calling on behalf of {task.customer_name}. [simulated]",
+        f"{opening_line(task)} [simulated]",
     )
     await asyncio.sleep(delay / 2)
 

@@ -15,8 +15,8 @@ reports back a structured result.
 
 ```text
 You    → Muse:  "Call Hotel Zed and ask if they have a king room Oct 10–12 and the rate. Don't book."
-Muse   → place_call(business_name="Hotel Zed", goal=..., questions=[...], authority="info_only")
-Agent  ☎  "Hi, this is an assistant calling on behalf of Alex. Do you have a king room…"
+Muse   → place_call(business_name="Hotel Zed", assistant_name="Eva", goal=..., questions=[...], authority="info_only")
+Agent  ☎  "Hi, this is Eva, an assistant calling on behalf of Alex. Do you have a king room…"
 Hotel  ☎  "We do, $289 a night plus tax."
 Agent  → { "outcome": "info_received",
            "answers": [{ "question": "King room Oct 10–12?", "answer": "Yes" },
@@ -134,6 +134,13 @@ All three call tools **require `customer_name`**, the person the call is made fo
 with "Hi, this is an assistant calling on behalf of {customer_name}". Blank or placeholder names
 ("user", "unknown", …) are rejected with `invalid_request` so the client asks the user first.
 
+They also take an optional **`assistant_name`**: the calling assistant's own name, e.g. Muse passes
+the name the user knows it by. With `"assistant_name": "Eva"` the agent opens with "Hi, this is
+Eva, an assistant calling on behalf of {customer_name}" and answers screeners as "I'm Eva, an AI
+assistant calling for …". Without it, the opener stays "Hi, this is an assistant calling on behalf
+of {customer_name}". Placeholders ("assistant", "AI", "unknown") are ignored; names must be letters
+only, up to 40 characters.
+
 ### `place_call`: the general-purpose call
 
 ```jsonc
@@ -141,6 +148,7 @@ with "Hi, this is an assistant calling on behalf of {customer_name}". Blank or p
   "business_name": "Hotel Zed",
   "phone_number": "+15105550123",
   "customer_name": "Wenjing Yu",                           // required: who the call is for
+  "assistant_name": "Eva",                                 // optional: the assistant's own name
   "goal": "Find out if they have a king room for Oct 10–12 and the nightly rate",
   "questions": ["Is a king room available Oct 10–12?", "What's the nightly rate?"],
   "shareable_details": { "guests": "2 adults" },          // what the agent may say if asked
@@ -240,8 +248,8 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
   unguessable path secret (`RETELL_WS_SECRET`), and it only attaches to calls this server started.
 - **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3) and
   `MAX_CALL_SECONDS` (default 300).
-- **Honest.** Every call opens with a fixed line, "Hi, this is an assistant calling on behalf of
-  {name}." It's streamed to text-to-speech before the LLM runs, so the business hears it at once.
+- **Honest.** Every call opens with a fixed line, "Hi, this is [Eva, ]an assistant calling on
+  behalf of {name}." It's streamed to text-to-speech before the LLM runs, so the business hears it at once.
   If asked, it always says it's an AI, and it never claims to be human.
 - **Discreet.** It never shares payment details or addresses, and never agrees to deposits or fees.
   Those cases come back as `needs_followup` for a human to handle.
