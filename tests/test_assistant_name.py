@@ -18,7 +18,9 @@ def _task(**kw) -> GeneralCall:
 def test_opener_uses_assistant_name():
     task = _task(assistant_name="  Eva ")
     assert task.assistant_name == "Eva"
-    assert opening_line(task) == "Hi, this is Eva, an assistant calling on behalf of Wenjing Yu."
+    assert opening_line(task) == (
+        "Hi, this is Eva, an AI assistant calling on behalf of Wenjing Yu. This call may be recorded."
+    )
     prompt = build_system_prompt(task)
     assert "You are Eva, an AI assistant calling on behalf of Wenjing Yu." in prompt
     assert "I'm Eva, an AI assistant calling for Wenjing Yu" in prompt
@@ -26,7 +28,9 @@ def test_opener_uses_assistant_name():
 
 def test_opener_without_name_is_unchanged():
     task = _task()
-    assert opening_line(task) == "Hi, this is an assistant calling on behalf of Wenjing Yu."
+    assert opening_line(task) == (
+        "Hi, this is an AI assistant calling on behalf of Wenjing Yu. This call may be recorded."
+    )
     assert "You are an AI assistant calling on behalf of Wenjing Yu." in build_system_prompt(task)
 
 
@@ -49,4 +53,4 @@ def test_screener_and_cut_off_notes_use_assistant_name():
     control = CallControl()
     control.opener_spoken = True
     notes = _status_notes(task, control, [])
-    assert any("I'm Eva, the assistant for Wenjing Yu." in n for n in notes)
+    assert any("I'm Eva, the AI assistant for Wenjing Yu." in n for n in notes)

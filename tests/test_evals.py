@@ -556,7 +556,7 @@ def test_ai_question_after_disclosure_or_before_hangup_is_not_flagged():
 
 def test_reintroduction_to_first_person_after_silent_pickup_or_screener_is_expected():
     silent = select_cases("silent-pickup-sushi-booking")[0]
-    opener = "Hi, this is an assistant calling on behalf of Priya Shah."
+    opener = "Hi, this is an AI assistant calling on behalf of Priya Shah. This call may be recorded."
     transcript = [
         {"role": "user", "content": "[silent pickup]"},
         {"role": "agent", "content": opener + " I'd like to book a table."},
@@ -573,7 +573,7 @@ def test_reintroduction_to_first_person_after_silent_pickup_or_screener_is_expec
     assert "no re-introduction when the person said hello after a silent pickup" in metrics["issues"]
 
     screen = select_cases("screen-google-restaurant-booking")[0]
-    opener = "Hi, this is an assistant calling on behalf of Wenjing Li."
+    opener = "Hi, this is an AI assistant calling on behalf of Wenjing Li. This call may be recorded."
     screened = [
         {"role": "user", "content": "The person you're calling is using a screening service. Say your name and why you're calling."},
         {"role": "agent", "content": "I'm an AI assistant calling for Wenjing Li to book a table Friday at 7:30."},

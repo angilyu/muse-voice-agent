@@ -31,6 +31,7 @@ from .dispatcher import CallRejected, start_call
 from .keepalive import KeepAliveMiddleware
 from .report import build_report, speaker_transcript
 from .retell import RetellWebsocketRouter, sync_agent_websocket_url
+from .safety import recording_disclosure_required, reject_sensitive_payload
 from .store import FINAL_STATUSES, CallStore
 from .tasks import Authority, GeneralCall, HandymanQuote, RestaurantReservation
 
@@ -47,13 +48,15 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   missing.
 - place_call defaults to authority="info_only" (the agent commits to nothing). Use
   "may_commit_within_limits" when the user explicitly asked it to book/order/schedule/cancel/etc.,
-  and put every limit they gave in `limits` (items, quantities, options, dates/times, price cap,
-  "pay at pickup", "defaults for anything else", "no deposit"). "may_book_within_limits" remains a
-  backward-compatible alias.
+  and pass every limit: structured fields such as max_spend, max_deposit,
+  max_cancellation_fee, allowed_date_time_window, party_size_min/party_size_max, plus any other
+  binding notes in `limits`. "may_book_within_limits" remains a backward-compatible alias.
 - Pickup orders with pay-at-pickup are allowed when within limits. Never include card numbers, SSNs,
-  passwords, or a full home address; if a business requires card prepayment over the phone, the call
-  returns needs_followup.
-- Only put details the user is comfortable sharing in shareable_details.
+  passwords, bank/routing details, CVV/expiry, or other secrets; the server rejects card-like/SSN
+  input and the agent will return needs_followup if a business requires card prepayment by phone.
+- Only put approved personal details in shareable_details. Default allow-list is customer name plus
+  callback number; emails, addresses, DOBs, insurance IDs and similar details are withheld unless
+  explicitly passed as shareable_details for this call.
 - Every call tool returns a call_id immediately; the call itself takes 1-5 minutes. Poll
   get_call_status(call_id) every ~20 seconds until `done` is true.
 - When done, get_call_status adds a `report`: answers to each requested question,
@@ -64,7 +67,7 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
 - Always pass customer_name: the full name of the user you're calling for. The agent introduces
   itself as their assistant. If you don't know the user's name, ask them before calling.
 - Always pass assistant_name: your own name, the one the user knows you by (e.g. "Eva"). The agent
-  opens with "Hi, this is {assistant_name}, an assistant calling on behalf of {customer_name}."
+  opens with "Hi, this is {assistant_name}, an AI assistant calling on behalf of {customer_name}."
 - Always confirm the business, phone number, and the brief with the user before calling.
 - Phone numbers should be E.164 (e.g. +14155550123).
 """
@@ -101,9 +104,21 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
 
     async def _start(task_cls: type, **kwargs: Any) -> dict[str, Any]:
         try:
+            reject_sensitive_payload(kwargs, "tool_input", exclude_fields={"phone_number", "callback_number"})
+            disclose, state = recording_disclosure_required(
+                kwargs.get("phone_number", ""),
+                recording_enabled=settings.call_recording_enabled,
+                scope=settings.recording_disclosure_scope,
+            )
+            kwargs["recording_disclosure_required"] = disclose or bool(
+                kwargs.get("recording_disclosure_required")
+            )
+            kwargs["recording_disclosure_state"] = state
             task = task_cls(**kwargs)
             record = await start_call(task, settings, store)
         except ValidationError as e:
+            return {"error": "invalid_request", "message": str(e)}
+        except ValueError as e:
             return {"error": "invalid_request", "message": str(e)}
         except CallRejected as e:
             return {"error": "rejected", "message": str(e)}
@@ -128,6 +143,12 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         shareable_details: dict[str, str] | None = None,
         authority: Authority = "info_only",
         limits: str | None = None,
+        max_spend: float | None = None,
+        max_deposit: float | None = None,
+        max_cancellation_fee: float | None = None,
+        allowed_date_time_window: str | None = None,
+        party_size_min: int | None = None,
+        party_size_max: int | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
     ) -> dict[str, Any]:
@@ -146,15 +167,22 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             goal: One or two sentences on what the call should accomplish, including exact order
                 items and options when ordering.
             questions: Specific questions to get answered (up to 10), answered back in `answers`.
-            shareable_details: Facts the agent may share if relevant, e.g. {"dates": "Oct 10-12",
-                "guests": "2 adults", "order number": "A1234", "pickup name": "Wenjing"}.
-                No card numbers or SSNs.
+            shareable_details: Approved personal/details allow-list the agent may share if relevant,
+                e.g. {"email": "alex@example.com", "pickup name": "Wenjing", "pet name": "Mochi"}.
+                Customer name and callback number are included by default. No card numbers or SSNs.
             authority: "info_only" (default; commit to nothing), "may_commit_within_limits"
                 (book/order/schedule/cancel/etc. within limits), or the backward-compatible alias
                 "may_book_within_limits".
             limits: Required for may_commit_within_limits/may_book_within_limits, e.g. "two
                 jasmine green milk teas, 25% sugar, less ice, defaults otherwise, pickup order,
                 pay at pickup, no card over phone" or "Oct 10-12 only, max $250/night, no deposit".
+            max_spend: Optional structured maximum total spend the agent may accept.
+            max_deposit: Optional structured maximum deposit/prepayment/hold fee. Defaults to no
+                deposit when authority permits commitments.
+            max_cancellation_fee: Optional structured maximum cancellation/no-show fee. Defaults to
+                none when authority permits commitments.
+            allowed_date_time_window: Optional structured allowed date/time window.
+            party_size_min/party_size_max: Optional structured party size bounds.
             callback_number: Number the business may call back (shared only if asked).
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
@@ -169,6 +197,12 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             shareable_details=shareable_details or {},
             authority=authority,
             limits=limits,
+            max_spend=max_spend,
+            max_deposit=max_deposit,
+            max_cancellation_fee=max_cancellation_fee,
+            allowed_date_time_window=allowed_date_time_window,
+            party_size_min=party_size_min,
+            party_size_max=party_size_max,
             callback_number=callback_number or settings.default_callback_number or None,
             assistant_name=assistant_name,
         )
@@ -190,6 +224,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         time: str,
         flexibility: str | None = None,
         special_requests: str | None = None,
+        shareable_details: dict[str, str] | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
     ) -> dict[str, Any]:
@@ -207,6 +242,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 pass it when they're flexible: without it the agent can't book a nearby time, so
                 if the exact time is taken it only collects the closest times for the user.
             special_requests: Seating preferences, allergies, occasion.
+            shareable_details: Approved extra personal details the agent may share if relevant.
             callback_number: Number the restaurant may call back (shared only if asked).
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
@@ -221,6 +257,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             time=time,
             flexibility=flexibility,
             special_requests=special_requests,
+            shareable_details=shareable_details or {},
             callback_number=callback_number or settings.default_callback_number or None,
             assistant_name=assistant_name,
         )
@@ -241,6 +278,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         location: str,
         preferred_timing: str | None = None,
         budget: str | None = None,
+        shareable_details: dict[str, str] | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
     ) -> dict[str, Any]:
@@ -255,6 +293,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             location: City / neighborhood / ZIP (avoid full street address).
             preferred_timing: e.g. "weekday mornings next week".
             budget: Optional budget, only mentioned if asked.
+            shareable_details: Approved extra personal details the agent may share if relevant.
             callback_number: Number the business may call back (shared only if asked).
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
                 "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
@@ -268,6 +307,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             location=location,
             preferred_timing=preferred_timing,
             budget=budget,
+            shareable_details=shareable_details or {},
             callback_number=callback_number or settings.default_callback_number or None,
             assistant_name=assistant_name,
         )
