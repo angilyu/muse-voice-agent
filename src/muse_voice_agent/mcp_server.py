@@ -19,7 +19,7 @@ import logging
 from typing import Any, Callable
 
 import uvicorn
-from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver import Context, MCPServer
 from mcp.server.transport_security import TransportSecuritySettings
 from mcp.types import ToolAnnotations
 from pydantic import ValidationError
@@ -64,6 +64,15 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   duration, and suggested next_steps, plus the speaker-labeled transcript. Tell the user the
   summary, key details (date/time, total, quote), any unanswered questions, and offer the next
   steps (e.g. add a booking to their calendar, retry, or call another business).
+- Businesses often call back later (after a voicemail, or "the manager will call you back"). The
+  agent answers those calls, links each one to the original call, and keeps it as an unread update.
+  Call get_updates to collect them; each update is returned once. Whenever a tool response has
+  unread_updates > 0, call get_updates and tell the user what happened.
+- After a call ends with voicemail, no_answer or needs_followup, or the business said it would call
+  back, offer the user a scheduled task (for example every 2 hours for the next 3 days) that calls
+  get_updates and messages them about anything new. This server cannot push to you.
+- get_call_status on the original call also lists its callbacks, and list_calls includes inbound
+  records with direction="inbound" and callback_of set.
 - Always pass customer_name: the full name of the user you're calling for. The agent introduces
   itself as their assistant. If you don't know the user's name, ask them before calling.
 - Always pass assistant_name: your own name, the one the user knows you by (e.g. "Eva"). The agent
@@ -74,7 +83,10 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
 
 
 def _public_view(
-    record: dict[str, Any], include_transcript: bool = False, include_report: bool = False
+    record: dict[str, Any],
+    include_transcript: bool = False,
+    include_report: bool = False,
+    callback_records: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     done = record["status"] in FINAL_STATUSES
     view = {
@@ -89,11 +101,18 @@ def _public_view(
         "details": record["details"],
         "error": record["error"],
         "simulated": record["dry_run"],
+        "direction": record.get("direction") or "outbound",
+        "callback_of": record.get("parent_call_id"),
     }
     if include_report and done:
         view["report"] = build_report(record)
     if include_transcript:
         view["transcript"] = speaker_transcript(record["transcript"])
+    if callback_records:
+        view["callbacks"] = [
+            _public_view(r, include_transcript=include_transcript, include_report=include_report)
+            for r in callback_records
+        ]
     return view
 
 
@@ -102,7 +121,13 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
     store = store or CallStore(settings.call_db_path)
     mcp = MCPServer(name="muse-voice-agent", instructions=INSTRUCTIONS, version="0.1.0")
 
-    async def _start(task_cls: type, **kwargs: Any) -> dict[str, Any]:
+    def _with_unread(view: dict[str, Any]) -> dict[str, Any]:
+        unread = store.count_unseen_inbound()
+        if unread:
+            view["unread_updates"] = unread
+        return view
+
+    async def _start(task_cls: type, ctx: Context | None = None, **kwargs: Any) -> dict[str, Any]:
         try:
             reject_sensitive_payload(kwargs, "tool_input", exclude_fields={"phone_number", "callback_number"})
             disclose, state = recording_disclosure_required(
@@ -122,9 +147,10 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             return {"error": "invalid_request", "message": str(e)}
         except CallRejected as e:
             return {"error": "rejected", "message": str(e)}
+        store.update_call(record["id"], origin=_origin(ctx))
         view = _public_view(record)
         view["next_step"] = "Poll get_call_status with this call_id until done is true."
-        return view
+        return _with_unread(view)
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -151,6 +177,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         party_size_max: int | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Phone any business for any errand Muse can brief.
 
@@ -183,12 +210,13 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 none when authority permits commitments.
             allowed_date_time_window: Optional structured allowed date/time window.
             party_size_min/party_size_max: Optional structured party size bounds.
-            callback_number: Number the business may call back (shared only if asked).
+            callback_number: The user's number for the business to reach them; the agent may share it.
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
-                "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
+                "Hi, this is Eva, an AI assistant calling on behalf of {customer_name}."
         """
         return await _start(
             GeneralCall,
+            ctx=ctx,
             business_name=business_name,
             phone_number=phone_number,
             customer_name=customer_name,
@@ -227,6 +255,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         shareable_details: dict[str, str] | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Phone a restaurant and try to book a table. Returns a call_id right away.
 
@@ -243,12 +272,13 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 if the exact time is taken it only collects the closest times for the user.
             special_requests: Seating preferences, allergies, occasion.
             shareable_details: Approved extra personal details the agent may share if relevant.
-            callback_number: Number the restaurant may call back (shared only if asked).
+            callback_number: The user's number for the restaurant to reach them; the agent may share it.
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
-                "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
+                "Hi, this is Eva, an AI assistant calling on behalf of {customer_name}."
         """
         return await _start(
             RestaurantReservation,
+            ctx=ctx,
             business_name=restaurant_name,
             phone_number=phone_number,
             customer_name=customer_name,
@@ -281,6 +311,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         shareable_details: dict[str, str] | None = None,
         callback_number: str | None = None,
         assistant_name: str | None = None,
+        ctx: Context | None = None,
     ) -> dict[str, Any]:
         """Phone a handyman/contractor and ask for a price quote and availability (does not book).
 
@@ -294,12 +325,13 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             preferred_timing: e.g. "weekday mornings next week".
             budget: Optional budget, only mentioned if asked.
             shareable_details: Approved extra personal details the agent may share if relevant.
-            callback_number: Number the business may call back (shared only if asked).
+            callback_number: The user's number for the business to reach them; the agent may share it.
             assistant_name: Your own name as the user's assistant, e.g. "Eva". The agent says
-                "Hi, this is Eva, an assistant calling on behalf of {customer_name}."
+                "Hi, this is Eva, an AI assistant calling on behalf of {customer_name}."
         """
         return await _start(
             HandymanQuote,
+            ctx=ctx,
             business_name=business_name,
             phone_number=phone_number,
             customer_name=customer_name,
@@ -335,7 +367,15 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             return {"error": "not_found", "message": f"No call with id {call_id}"}
         if include_transcript is None:
             include_transcript = record["status"] in FINAL_STATUSES
-        return _public_view(record, include_transcript=include_transcript, include_report=True)
+        callbacks = store.list_callbacks(call_id)
+        return _with_unread(
+            _public_view(
+                record,
+                include_transcript=include_transcript,
+                include_report=True,
+                callback_records=callbacks,
+            )
+        )
 
     @mcp.tool(annotations=ToolAnnotations(title="List recent calls", readOnlyHint=True))
     async def list_calls(limit: int = 10) -> dict[str, Any]:
@@ -345,9 +385,52 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             limit: Max number of calls to return (1-50).
         """
         limit = max(1, min(limit, 50))
-        return {"calls": [_public_view(r) for r in store.list_calls(limit)]}
+        return _with_unread({"calls": [_public_view(r) for r in store.list_calls(limit)]})
+
+    @mcp.tool(annotations=ToolAnnotations(title="Get callback updates", readOnlyHint=False))
+    async def get_updates(limit: int = 20) -> dict[str, Any]:
+        """Collect calls businesses made back to the agent that you haven't seen yet.
+
+        Each update is a finished inbound call. kind="callback" means a business called back about
+        a call you placed; original_call has that call's id, business, outcome and summary, and
+        callback has the new outcome, summary, details and report. kind="message" means an unknown
+        caller left a message. Updates are marked seen and not returned again; use get_call_status
+        on original_call.call_id to see them later.
+
+        Args:
+            limit: Max number of updates to return (1-50). Oldest first.
+        """
+        limit = max(1, min(limit, 50))
+        records = store.list_unseen_inbound(limit)
+        updates = []
+        for r in records:
+            update: dict[str, Any] = {
+                "kind": "callback" if r.get("parent_call_id") else "message",
+                "callback": _public_view(r, include_report=True),
+            }
+            parent = store.get_call(r["parent_call_id"]) if r.get("parent_call_id") else None
+            if parent:
+                update["original_call"] = {
+                    "call_id": parent["id"],
+                    "business_name": parent["business_name"],
+                    "outcome": parent["outcome"],
+                    "summary": parent["summary"],
+                }
+            updates.append(update)
+        store.mark_seen([r["id"] for r in records])
+        return {"updates": updates, "remaining": store.count_unseen_inbound()}
 
     return mcp
+
+
+def _origin(ctx: Context | None) -> str:
+    """Tag calls placed through MCP, with the client's name when it sent one (e.g. "mcp:muse")."""
+    try:
+        info = ctx.session.client_params.clientInfo if ctx else None
+    except Exception:  # noqa: BLE001 - no request context or client info (e.g. stateless request)
+        info = None
+    name = (getattr(info, "name", "") or "").strip()[:60]
+    return f"mcp:{name}" if name else "mcp"
 
 
 class BearerAuthMiddleware:
