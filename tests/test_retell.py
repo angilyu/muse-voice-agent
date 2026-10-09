@@ -6,6 +6,7 @@ from dataclasses import replace
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
+from mcp import Client
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 from test_graph import FakeToolModel
@@ -13,9 +14,9 @@ from test_graph import FakeToolModel
 from muse_voice_agent import retell
 from muse_voice_agent.config import Settings
 from muse_voice_agent.dispatcher import start_call
-from muse_voice_agent.mcp_server import build_app
+from muse_voice_agent.mcp_server import build_app, build_server
 from muse_voice_agent.store import CallStore
-from muse_voice_agent.tasks import RestaurantReservation
+from muse_voice_agent.tasks import GeneralCall, RestaurantReservation, build_system_prompt
 
 SECRET = "s3cret-path"
 
@@ -530,6 +531,7 @@ def test_store_migrates_old_database(tmp_path):
     record = store.get_call(call_id)
     assert (record["provider_call_id"], record["started_at"], record["outcome_source"]) == ("rc_1", 1.0, None)
     assert (record["direction"], record["parent_call_id"]) == ("outbound", None)
+    assert (record["origin"], record["seen_at"]) == (None, None)
 
 
 def test_callback_matching_prefers_recent_unfinished_call(settings):
@@ -554,3 +556,229 @@ def test_finalize_keeps_recorded_outcome(settings):
         store, call_id, {"call_status": "ended", "disconnection_reason": "agent_hangup"}
     )
     assert store.get_call(call_id)["outcome"] == "booked"
+
+
+def _outcome_call(outcome: str, summary: str, **extra) -> dict:
+    return {"name": "record_outcome", "args": {"outcome": outcome, "summary": summary, **extra}, "id": f"tc_{outcome}"}
+
+
+def _inbound_details(ws, from_number: str, settings: Settings) -> None:
+    ws.receive_json(), ws.receive_json()
+    ws.send_json(
+        {
+            "interaction_type": "call_details",
+            "call": {"from_number": from_number, "to_number": settings.retell_from_number},
+        }
+    )
+
+
+def _say(ws, response_id: int, *lines: str) -> str:
+    ws.send_json(
+        {
+            "interaction_type": "response_required",
+            "response_id": response_id,
+            "transcript": [{"role": "user", "content": line} for line in lines],
+        }
+    )
+    return _collect(ws, response_id)[0]
+
+
+async def _wait_for(predicate, tries: int = 300) -> None:
+    for _ in range(tries):
+        if predicate():
+            return
+        await asyncio.sleep(0.01)
+    raise AssertionError("condition not reached")
+
+
+async def test_end_to_end_outbound_call_then_business_calls_back(settings, monkeypatch):
+    """MCP place -> Retell dial -> outbound conversation -> finalize -> the business calls back
+    from the same number -> callback conversation -> finalize -> Muse sees it via get_updates."""
+    ended: set[str] = set()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/v2/create-phone-call":
+            return httpx.Response(201, json={"call_id": "rc_out", "call_status": "registered"})
+        retell_id = request.url.path.rsplit("/", 1)[-1]
+        if retell_id in ended:
+            return httpx.Response(
+                200,
+                json={"call_id": retell_id, "call_status": "ended", "disconnection_reason": "agent_hangup",
+                      "end_timestamp": 1_700_000_100_000},
+            )
+        return httpx.Response(200, json={"call_id": retell_id, "call_status": "ongoing"})
+
+    monkeypatch.setattr(
+        retell,
+        "client_factory",
+        lambda s: retell.RetellClient(s.retell_api_key, transport=httpx.MockTransport(handler)),
+    )
+    original_monitor = retell.monitor_call
+    monkeypatch.setattr(retell, "monitor_call", lambda *a, **kw: original_monitor(*a, poll_seconds=0.01, **kw))
+
+    models = iter(
+        [
+            FakeToolModel(
+                messages=iter(
+                    [
+                        AIMessage(content="I'd like a table for two on Friday at 7."),
+                        AIMessage(
+                            content="Sounds good, thanks. Bye!",
+                            tool_calls=[_outcome_call("needs_followup", "Manager will call back about Friday.")],
+                        ),
+                    ]
+                )
+            ),
+            FakeToolModel(
+                messages=iter(
+                    [
+                        AIMessage(
+                            content="Great, Friday at 7 for two works. Thank you!",
+                            tool_calls=[_outcome_call("booked", "Booked Friday 7pm for 2.", party_size=2)],
+                        ),
+                    ]
+                )
+            ),
+        ]
+    )
+    store = CallStore(settings.call_db_path)
+    app = build_app(settings, store, model_factory=lambda: next(models))
+
+    async with Client(build_server(settings, store)) as muse:
+        started = (
+            await muse.call_tool(
+                "book_restaurant_reservation",
+                {
+                    "restaurant_name": "Luigi's",
+                    "phone_number": "(415) 555-0123",
+                    "customer_name": "Angi",
+                    "party_size": 2,
+                    "date": "Friday",
+                    "time": "7pm",
+                },
+            )
+        ).structured_content
+        parent_id = started["call_id"]
+        assert store.get_call(parent_id)["origin"].startswith("mcp")
+
+        with TestClient(app) as tc:
+            with tc.websocket_connect(f"/retell/llm/{SECRET}/rc_out") as ws:
+                ws.receive_json(), ws.receive_json()
+                ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": parent_id}}})
+                assert "Angi" in _say(ws, 1, "Luigi's, how can I help?")
+                _say(ws, 2, "Luigi's, how can I help?", "We're full; the manager will call you back.")
+            ended.add("rc_out")
+            await _wait_for(lambda: store.get_call(parent_id)["end_reason"] == "agent_hangup")
+            assert store.get_call(parent_id)["outcome"] == "needs_followup"
+            assert (await muse.call_tool("get_updates", {})).structured_content["updates"] == []
+
+            with tc.websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+                _inbound_details(ws, "+1 (415) 555-0123", settings)
+                text = _say(ws, 1, "Hi, Luigi's calling back. Friday at 7 opened up.")
+                assert "Thanks for calling back" in text
+                callback = store.list_callbacks(parent_id)[0]
+                assert callback["status"] == "completed"
+                # Still on the line: not delivered until Retell reports the call ended.
+                assert (await muse.call_tool("get_updates", {})).structured_content["updates"] == []
+            ended.add("rc_in")
+            for _ in range(300):
+                if store.get_call(callback["id"])["end_reason"]:
+                    break
+                time.sleep(0.01)
+
+        status = (await muse.call_tool("get_call_status", {"call_id": parent_id})).structured_content
+        first = (await muse.call_tool("get_updates", {})).structured_content
+        second = (await muse.call_tool("get_updates", {})).structured_content
+
+    assert status["unread_updates"] == 1
+    assert status["callbacks"][0]["outcome"] == "booked"
+    [update] = first["updates"]
+    assert update["kind"] == "callback"
+    assert update["original_call"] == {
+        "call_id": parent_id,
+        "business_name": "Luigi's",
+        "outcome": "needs_followup",
+        "summary": "Manager will call back about Friday.",
+    }
+    assert update["callback"]["callback_of"] == parent_id
+    assert update["callback"]["outcome"] == "booked"
+    assert update["callback"]["report"]["outcome_source"] == "agent"
+    assert first["remaining"] == 0
+    assert second == {"updates": [], "remaining": 0}
+    record = store.get_call(callback["id"])
+    assert record["origin"] == store.get_call(parent_id)["origin"]
+    assert "We're full; the manager will call you back." in record["task"]["callback_context"]
+
+
+def test_callback_ignores_dry_run_calls(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    store = CallStore(settings.call_db_path)
+    store.create_call(_task().model_dump(), dry_run=True)
+    model = FakeToolModel(messages=iter([AIMessage(content="Could I take a message?")]))
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+        _inbound_details(ws, "+14155550123", settings)
+        text = _say(ws, 1, "Hi, you called us?")
+
+    inbound = [r for r in store.list_calls() if r["direction"] == "inbound"]
+    assert inbound[0]["kind"] == "inbound_message"
+    assert inbound[0]["parent_call_id"] is None
+    assert "I can take a message" in text
+
+
+def test_callback_after_lookback_window_only_takes_message(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(_task().model_dump(), dry_run=False)
+    old = time.time() - (settings.inbound_callback_lookback_days + 1) * 86400
+    store.update_call(parent["id"], status="completed", created_at=old)
+    model = FakeToolModel(messages=iter([AIMessage(content="Could I take a message?")]))
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+        _inbound_details(ws, "+14155550123", settings)
+        _say(ws, 1, "Hi, you called us last month?")
+
+    assert store.list_callbacks(parent["id"]) == []
+    assert any(r["kind"] == "inbound_message" for r in store.list_calls())
+
+
+def test_callback_for_info_only_call_cannot_commit(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    store = CallStore(settings.call_db_path)
+    task = GeneralCall(
+        business_name="Bob's Plumbing",
+        phone_number="+14155550123",
+        customer_name="Angi",
+        goal="Get a quote for a leaky faucet",
+    )
+    parent = store.create_call(task.model_dump(), dry_run=False)
+    store.update_call(parent["id"], status="completed", outcome="needs_followup", summary="Will call back.")
+    model = FakeToolModel(
+        messages=iter(
+            [AIMessage(content="Thanks, bye.", tool_calls=[_outcome_call("booked", "Booked Tuesday 9am.")])]
+        )
+    )
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+        _inbound_details(ws, "+14155550123", settings)
+        _say(ws, 1, "We can come Tuesday at 9, want it?")
+
+    [callback] = store.list_callbacks(parent["id"])
+    assert callback["outcome"] == "needs_followup"
+    assert "unauthorized_commitment" in callback["details"]["safety_flags"]
+
+
+def test_callback_prompt_includes_original_call(settings):
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(_task().model_dump(), dry_run=False)
+    store.update_call(parent["id"], status="completed", outcome="needs_followup", summary="Manager to call back.")
+    store.set_transcript(parent["id"], [{"role": "user", "text": "The manager will call you back."}])
+    context = retell._callback_context(store.get_call(parent["id"]))
+    task = RestaurantReservation(**{**_task().model_dump(), "callback_of": parent["id"], "callback_context": context})
+    prompt = build_system_prompt(task)
+    assert "Manager to call back." in prompt
+    assert "The manager will call you back." in prompt
+    assert "calling back" in prompt.lower()

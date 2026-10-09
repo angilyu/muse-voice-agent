@@ -12,6 +12,7 @@ from typing import Any, Iterator
 
 ACTIVE_STATUSES = ("queued", "dispatched", "dialing", "in_progress")
 FINAL_STATUSES = ("completed", "failed", "no_answer")
+UNENDED_CALL_GRACE_SECONDS = 15 * 60
 
 # Columns added after the first release; created on startup for older databases.
 _ADDED_COLUMNS = {
@@ -22,6 +23,8 @@ _ADDED_COLUMNS = {
     "outcome_source": "TEXT",  # agent | transcript | call_system
     "direction": "TEXT NOT NULL DEFAULT 'outbound'",
     "parent_call_id": "TEXT",
+    "origin": "TEXT",  # who placed the call, e.g. "mcp:<client name>"; inbound callbacks inherit it
+    "seen_at": "REAL",  # when get_updates delivered this inbound call to the MCP client
 }
 
 _SCHEMA = """
@@ -45,6 +48,8 @@ CREATE TABLE IF NOT EXISTS calls (
     outcome_source TEXT,
     direction TEXT NOT NULL DEFAULT 'outbound',
     parent_call_id TEXT,
+    origin TEXT,
+    seen_at REAL,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -82,14 +87,15 @@ class CallStore:
         parent_call_id: str | None = None,
         status: str = "queued",
         provider_call_id: str | None = None,
+        origin: str | None = None,
     ) -> dict[str, Any]:
         call_id = uuid.uuid4().hex[:12]
         now = time.time()
         with self._conn() as c:
             c.execute(
                 "INSERT INTO calls (id, kind, business_name, phone_number, task_json, status,"
-                " dry_run, provider_call_id, direction, parent_call_id, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " dry_run, provider_call_id, direction, parent_call_id, origin, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     task["kind"],
@@ -101,6 +107,7 @@ class CallStore:
                     provider_call_id,
                     direction,
                     parent_call_id,
+                    origin,
                     now,
                     now,
                 ),
@@ -152,6 +159,7 @@ class CallStore:
                 f"""
                 SELECT * FROM calls
                 WHERE direction = 'outbound'
+                  AND dry_run = 0
                   AND phone_number = ?
                   AND created_at >= ?
                 ORDER BY
@@ -170,6 +178,40 @@ class CallStore:
                 (parent_call_id,),
             ).fetchall()
         return [_row_to_dict(r) for r in rows]
+
+    def _unseen_where(self) -> tuple[str, tuple[Any, ...]]:
+        # Ended inbound calls not yet delivered: callbacks about calls an MCP client placed, plus
+        # messages from callers we couldn't match. record_outcome marks a call completed while it
+        # is still live, so wait for Retell's end (or a stale record) before delivering it.
+        marks = ",".join("?" * len(FINAL_STATUSES))
+        return (
+            f"direction = 'inbound' AND seen_at IS NULL AND status IN ({marks})"
+            " AND (parent_call_id IS NULL OR origin LIKE 'mcp%')"
+            " AND (status != 'completed' OR end_reason IS NOT NULL OR ended_at IS NOT NULL"
+            " OR updated_at < ?)",
+            (*FINAL_STATUSES, time.time() - UNENDED_CALL_GRACE_SECONDS),
+        )
+
+    def list_unseen_inbound(self, limit: int = 20) -> list[dict[str, Any]]:
+        where, params = self._unseen_where()
+        with self._conn() as c:
+            rows = c.execute(
+                f"SELECT * FROM calls WHERE {where} ORDER BY created_at ASC LIMIT ?", (*params, limit)
+            ).fetchall()
+        return [_row_to_dict(r) for r in rows]
+
+    def count_unseen_inbound(self) -> int:
+        where, params = self._unseen_where()
+        with self._conn() as c:
+            (n,) = c.execute(f"SELECT COUNT(*) FROM calls WHERE {where}", params).fetchone()
+        return int(n)
+
+    def mark_seen(self, call_ids: list[str]) -> None:
+        if not call_ids:
+            return
+        marks = ",".join("?" * len(call_ids))
+        with self._conn() as c:
+            c.execute(f"UPDATE calls SET seen_at = ? WHERE id IN ({marks})", (time.time(), *call_ids))
 
     def list_calls(self, limit: int = 10) -> list[dict[str, Any]]:
         with self._conn() as c:

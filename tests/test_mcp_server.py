@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from dataclasses import replace
 
 import httpx
@@ -53,6 +54,7 @@ async def test_lists_expected_tools(settings):
         "place_call",
         "get_call_status",
         "list_calls",
+        "get_updates",
     }
 
 
@@ -398,3 +400,80 @@ async def test_customer_name_is_required(settings):
             assert result["error"] == "invalid_request" and "ask the user" in result["message"]
         ok = _data(await client.call_tool("place_call", {**base, "customer_name": "  Wenjing   Yu "}))
     assert ok["error"] is None
+
+
+def _inbound(store: CallStore, *, parent: dict | None, status: str = "completed", **fields) -> dict:
+    record = store.create_call(
+        {"kind": "inbound_message", "business_name": "Unknown caller", "phone_number": "+14155550999",
+         "customer_name": None} if parent is None else {**parent["task"], "callback_of": parent["id"]},
+        dry_run=False,
+        direction="inbound",
+        parent_call_id=parent["id"] if parent else None,
+        status=status,
+        origin=parent.get("origin") if parent else None,
+    )
+    store.update_call(record["id"], **fields)
+    return store.get_call(record["id"])
+
+
+async def test_calls_placed_over_mcp_are_tagged_with_client(settings):
+    store = CallStore(settings.call_db_path)
+    async with Client(build_server(settings, store)) as client:
+        started = _data(
+            await client.call_tool(
+                "place_call",
+                {"business_name": "Hotel Zed", "phone_number": "+14155550100", "customer_name": "Angi",
+                 "goal": "Check rooms"},
+            )
+        )
+    assert store.get_call(started["call_id"])["origin"].startswith("mcp")
+
+
+async def test_get_updates_returns_each_finished_callback_once(settings):
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(
+        {"kind": "general", "business_name": "Hotel Zed", "phone_number": "+14155550100",
+         "customer_name": "Angi", "goal": "Check rooms"},
+        dry_run=False,
+        origin="mcp:muse",
+    )
+    store.update_call(parent["id"], status="completed", outcome="voicemail", summary="Left a voicemail.")
+    callback = _inbound(store, parent=parent, outcome="info_received", summary="Rooms available.",
+                        end_reason="user_hangup")
+    live = _inbound(store, parent=parent, outcome="info_received", summary="Still talking.")
+    message = _inbound(store, parent=None, outcome="needs_followup", summary="Caller left a message.",
+                       end_reason="user_hangup")
+    stale = _inbound(store, parent=parent, outcome="info_received", summary="Ended without a final event.")
+    with sqlite3.connect(settings.call_db_path) as c:
+        c.execute("UPDATE calls SET updated_at = 0 WHERE id = ?", (stale["id"],))
+    not_from_mcp = store.create_call({**parent["task"]}, dry_run=False)
+    _inbound(store, parent=not_from_mcp, outcome="info_received", end_reason="user_hangup")
+
+    async with Client(build_server(settings, store)) as client:
+        listed = _data(await client.call_tool("list_calls", {}))
+        first = _data(await client.call_tool("get_updates", {}))
+        again = _data(await client.call_tool("get_updates", {}))
+        listed_after = _data(await client.call_tool("list_calls", {}))
+
+    assert listed["unread_updates"] == 3
+    ids = [u["callback"]["call_id"] for u in first["updates"]]
+    assert ids == [callback["id"], message["id"], stale["id"]]
+    assert live["id"] not in ids
+    by_id = {u["callback"]["call_id"]: u for u in first["updates"]}
+    assert by_id[callback["id"]]["kind"] == "callback"
+    assert by_id[callback["id"]]["original_call"]["summary"] == "Left a voicemail."
+    assert by_id[message["id"]]["kind"] == "message"
+    assert "original_call" not in by_id[message["id"]]
+    assert again == {"updates": [], "remaining": 0}
+    assert "unread_updates" not in listed_after
+
+
+async def test_get_updates_respects_limit(settings):
+    store = CallStore(settings.call_db_path)
+    for _ in range(3):
+        _inbound(store, parent=None, outcome="needs_followup", end_reason="user_hangup")
+    async with Client(build_server(settings, store)) as client:
+        page = _data(await client.call_tool("get_updates", {"limit": 2}))
+        rest = _data(await client.call_tool("get_updates", {"limit": 2}))
+    assert (len(page["updates"]), page["remaining"]) == (2, 1)
+    assert (len(rest["updates"]), rest["remaining"]) == (1, 0)

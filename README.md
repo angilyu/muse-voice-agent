@@ -103,7 +103,8 @@ Response times on this call, as measured by Retell:
 - **Inbound callbacks.** If a business calls back the Retell number, the agent matches the caller to
   a recent outbound call, answers as the same assistant with the original brief and result as
   context, and links the callback report to the original call. Unknown callers are told this is an
-  AI assistant line and can only leave a message.
+  AI assistant line and can only leave a message. The assistant collects callbacks and messages with
+  `get_updates`, so it can tell you when the business got back to you.
 - **Your code decides what's said, Retell handles the phone audio.** Retell AI does dialing,
   speech-to-text, text-to-speech, barge-in and voicemail detection. A LangGraph graph you control
   writes each reply over Retell's custom-LLM websocket.
@@ -157,7 +158,8 @@ flowchart LR
 4. The assistant polls `get_call_status(call_id)` until `done` is true, then tells you the result.
    If the business calls back later, the inbound call is stored as `direction: "inbound"` with
    `callback_of` pointing to the original `call_id`; the original call's status response includes a
-   `callbacks` array with the callback result and report.
+   `callbacks` array with the callback result and report. The callback is also queued as an unread
+   update for the assistant (see [Callback updates](#callback-updates)).
 
 ```mermaid
 sequenceDiagram
@@ -206,6 +208,7 @@ starts a simulated call and polls it until it's done.
 | `request_handyman_quote` | Contractor shortcut: price and earliest availability. **Never books.** |
 | `get_call_status` | Status, outcome and structured details; once done, a post-call `report` and the transcript |
 | `list_calls` | Most recent calls |
+| `get_updates` | Callbacks and messages that came in since the last check; each is returned once |
 
 All three call tools **require `customer_name`**, the person the call is made for. The agent opens
 with "Hi, this is an AI assistant calling on behalf of {customer_name}. This call may be recorded."
@@ -342,7 +345,25 @@ uv run python scripts/setup_retell.py +1XXXXXXXXXX --public-url https://<your-ho
 To make the same Retell number answer inbound callbacks, run the setup script with
 `--enable-inbound` or set the phone number's `inbound_agent_id` to `RETELL_AGENT_ID` in the Retell
 dashboard. Do this only after the deployed server has `PUBLIC_BASE_URL`, `RETELL_WS_SECRET`, and the
-current code. Callback matching uses `INBOUND_CALLBACK_LOOKBACK_DAYS` (default 14).
+current code. Callback matching uses `INBOUND_CALLBACK_LOOKBACK_DAYS` (default 14). Simulated
+(`DRY_RUN`) calls are never matched.
+
+### Callback updates
+
+MCP is request/response: the server can't wake the assistant when a business calls back, and Muse
+has no inbound webhook. Callbacks are delivered by pull instead.
+
+- Calls placed through the MCP tools are tagged with the client's name (`origin`, e.g. `mcp:muse`).
+  A callback inherits the original call's origin.
+- When a callback ends, it becomes an unread update. Messages from unknown callers are also
+  unread updates. A call is only delivered after Retell reports it ended, so the result is final.
+- `get_updates` returns unread updates oldest first and marks them seen. Each callback includes
+  `original_call` (id, business, outcome, summary) and the callback's own outcome and report.
+- `place_call`, `get_call_status` and `list_calls` include `unread_updates: N` while any are
+  waiting, so the assistant notices them during any phone-related request.
+- After a call ends with voicemail, no answer or "we'll call you back", the server instructions
+  ask the assistant to offer a scheduled task (e.g. every 2 hours for 3 days) that calls
+  `get_updates` and messages you about anything new. In Muse this is a regular scheduled task.
 
 Depending on the call type, `details` can also include `confirmed_date`, `confirmed_time`,
 `party_size`, `booked_under`, `order_total`, `pickup_time`, `quote`, and `availability`.
@@ -435,6 +456,8 @@ Point any MCP client at `https://<your-host>/mcp` (streamable HTTP) with the bea
 > booking within limits I set.
 > Connect, list the tools, test `list_calls`, and save it as a reusable skill. Always confirm the
 > business, number, and details with me before starting a call, and require my approval for call tools.
+> Businesses may call the agent back: when a call ends in voicemail or "we'll call you back", offer
+> to schedule a task that runs `get_updates` every couple of hours and tells me what they said.
 
 Enter `MCP_AUTH_TOKEN` in Muse's secure credential prompt, never in the chat. Then try:
 

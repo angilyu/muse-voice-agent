@@ -412,6 +412,7 @@ class RetellLLMSession:
             parent_call_id=parent["id"] if parent else None,
             status="in_progress",
             provider_call_id=self.retell_call_id,
+            origin=parent.get("origin") if parent else None,
         )
         if business != record["business_name"]:
             self.store.update_call(record["id"], business_name=business)
