@@ -175,7 +175,7 @@ def _business_spoken_turns(transcript: list[dict[str, str]]) -> list[str]:
 
 
 def _strip_fixed_opener(text: str, customer_name: str) -> str:
-    opener = f"Hi, this is an assistant calling on behalf of {customer_name}."
+    opener = f"Hi, this is an AI assistant calling on behalf of {customer_name}. This call may be recorded."
     return re.sub(re.escape(opener), "", text, count=1, flags=re.I).strip()
 
 

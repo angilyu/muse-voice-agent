@@ -41,6 +41,7 @@ from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field, create_model
 
 from .pickup import classify_line, is_greeting, is_note
+from .safety import OutputGuard, assess_commitment_within_limits, is_recording_objection, redact_agent_text
 from .tasks import AnyTask, GeneralCall, build_system_prompt, opening_line, self_intro
 
 _TOOL_MARKER = "<function="
@@ -82,6 +83,14 @@ class CallOutcome(BaseModel):
         default=None, description="Each question you were asked to get answered, with the answer"
     )
     reference: str | None = Field(default=None, description="Confirmation / reference number")
+    committed_within_limits: bool | None = Field(
+        default=None,
+        description="Server-set safety flag: whether any commitment was within the task limits.",
+    )
+    safety_flags: list[str] = Field(
+        default_factory=list,
+        description="Server-set safety flags such as unauthorized_commitment or limit violation.",
+    )
 
 
 SAY_FIELD = "say"
@@ -245,7 +254,7 @@ def _status_notes(
                 "Your introduction got cut off, so they don't know who you are. Start this reply "
                 "without apologizing, e.g. \"I'm "
                 + (f"{task.assistant_name}, " if task.assistant_name else "")
-                + f'the assistant for {task.customer_name}."'
+                + f'the AI assistant for {task.customer_name}."'
             )
     return notes
 
@@ -385,20 +394,50 @@ UNAUTHORIZED_COMMIT_NOTE = "Agent was not authorized to commit; confirm with the
 
 
 def apply_authority(task: AnyTask, outcome: CallOutcome) -> CallOutcome:
-    """An info-only brief never reports a booking or order as done, whoever recorded it."""
-    if not (
-        isinstance(task, GeneralCall)
-        and task.authority == "info_only"
-        and outcome.outcome in {"booked", "ordered"}
-    ):
-        return outcome
-    note = UNAUTHORIZED_COMMIT_NOTE
-    return outcome.model_copy(
-        update={
-            "outcome": "needs_followup",
-            "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
-        }
-    )
+    """Enforce non-overridable authority/limit rules on recorded outcomes."""
+    if outcome.outcome not in {"booked", "ordered"}:
+        return outcome.model_copy(update={"committed_within_limits": None})
+
+    flags = list(outcome.safety_flags or [])
+    if isinstance(task, GeneralCall) and task.authority == "info_only":
+        flags.append("unauthorized_commitment")
+        note = UNAUTHORIZED_COMMIT_NOTE
+        return outcome.model_copy(
+            update={
+                "outcome": "needs_followup",
+                "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
+                "committed_within_limits": False,
+                "safety_flags": sorted(set(flags)),
+            }
+        )
+
+    if isinstance(task, GeneralCall):
+        text = " ".join(
+            str(v)
+            for k, v in outcome.model_dump(exclude_none=True).items()
+            if k not in {"committed_within_limits", "safety_flags"} and not isinstance(v, list)
+        )
+        ok, limit_flags = assess_commitment_within_limits(task.limits, text)
+        flags.extend(limit_flags)
+        if not ok:
+            note = "The business required something outside the user's limits; confirm directly."
+            return outcome.model_copy(
+                update={
+                    "outcome": "needs_followup",
+                    "follow_up": f"{outcome.follow_up} {note}" if outcome.follow_up else note,
+                    "committed_within_limits": False,
+                    "safety_flags": sorted(set(flags)),
+                }
+            )
+        return outcome.model_copy(update={"committed_within_limits": True, "safety_flags": sorted(set(flags))})
+
+    if getattr(task, "kind", None) == "restaurant_reservation":
+        within = outcome.party_size in (None, getattr(task, "party_size", None))
+        if not within:
+            flags.append("party_size_outside_limits")
+        return outcome.model_copy(update={"committed_within_limits": within, "safety_flags": sorted(set(flags))})
+
+    return outcome.model_copy(update={"committed_within_limits": False, "safety_flags": ["unsupported_commitment_type"]})
 
 
 def build_call_graph(
@@ -475,6 +514,29 @@ def build_call_graph(
 
         last_line = _content_text(last) if isinstance(last, HumanMessage) else ""
         kind = classify_line(last_line) if last_line and not is_note(last_line) else None
+        if (
+            last_line
+            and getattr(task, "recording_disclosure_required", True)
+            and is_recording_objection(last_line)
+            and control.outcome is None
+        ):
+            text = (
+                "I understand. I can't continue if you don't consent to recording, so the "
+                "customer will follow up directly. Goodbye."
+            )
+            outcome = CallOutcome(
+                outcome="needs_followup",
+                summary="The business objected to call recording, so the assistant ended the call.",
+                follow_up="Business objected to recording; customer should follow up directly.",
+                committed_within_limits=None,
+                safety_flags=["recording_objected"],
+            )
+            control.outcome = outcome
+            control.closing = True
+            control.end_requested = True
+            on_outcome(outcome)
+            writer(redact_agent_text(text, getattr(task, "shareable_details", {})))
+            return {"messages": [AIMessage(content=text)]}
         earlier_lines = [
             _content_text(m)
             for m in history[:-1]
@@ -516,6 +578,7 @@ def build_call_graph(
         full: AIMessageChunk | None = None
         tool_filter = _ToolMarkupFilter()
         say_streamer = _SayStreamer()
+        output_guard = OutputGuard(getattr(task, "shareable_details", {}))
         held: str | None = ""  # don't speak until there's a word, so "..." alone is never voiced
         spoke_text = False
         dropper = _OpenerDropper(opener) if intro_now else None
@@ -527,9 +590,9 @@ def build_call_graph(
                 if not text:
                     return
             if held is None:
-                writer(text)
+                writer(output_guard.feed(text))
             elif re.search(r"\w", held + text):
-                writer(held + text)
+                writer(output_guard.feed(held + text))
                 held = None
             else:
                 held += text
@@ -568,6 +631,8 @@ def build_call_graph(
             speak(rest)
         if held is not None and full is not None and held.strip():
             full = AIMessageChunk(content="", tool_calls=full.tool_calls, id=full.id)
+        if tail := output_guard.flush():
+            writer(tail)
         if full is not None and full.tool_calls:
             their_last = next(
                 (_content_text(m) for m in reversed(history) if isinstance(m, HumanMessage)), ""
@@ -590,6 +655,8 @@ def build_call_graph(
         content: Any = full.content
         if intro_now:
             content = f"{opener} {_strip_opener(_text(full).strip(), opener)}".strip()
+        if isinstance(content, str):
+            content = redact_agent_text(content, getattr(task, "shareable_details", {}))
         if control.outcome is not None and _text(full).strip() and not full.tool_calls:
             control.closing = True
         return {

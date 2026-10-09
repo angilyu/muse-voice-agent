@@ -105,7 +105,7 @@ def test_custom_llm_websocket_conversation(settings):
         )
         text, last = _collect(ws, 1)
         assert text.strip() == (
-            "Hi, this is an assistant calling on behalf of Angi. I'd like to book a table for two."
+            "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded. I'd like to book a table for two."
         )
         assert last["end_call"] is False
         assert store.get_call(call_id)["status"] == "in_progress"
@@ -236,7 +236,7 @@ def test_silent_pickup_speaks_first_with_protected_opener(settings, monkeypatch)
             events.append(msg)
             if msg["content_complete"]:
                 break
-    assert events[0]["content"].startswith("Hi, this is an assistant calling on behalf of Angi.")
+    assert events[0]["content"].startswith("Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded.")
     assert events[0]["no_interruption_allowed"] is True
     assert "no_interruption_allowed" not in events[1]
     assert "".join(e["content"] for e in events).strip().endswith("book a table for two.")
@@ -287,7 +287,7 @@ def test_reintro_opener_is_protected(settings):
         messages=iter([AIMessage(content="I'd like a table for two."), AIMessage(content="Table for two Friday at 7?")])
     )
     call_id, client, path = _bound_session(settings, store, model)
-    opener = "Hi, this is an assistant calling on behalf of Angi."
+    opener = "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded."
     with client.websocket_connect(path) as ws:
         ws.receive_json(), ws.receive_json()
         ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
