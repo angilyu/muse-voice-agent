@@ -11,18 +11,85 @@ reports back a structured result.
 ![LangGraph](https://img.shields.io/badge/agent-LangGraph-1c3c3c)
 ![Retell AI](https://img.shields.io/badge/voice-Retell%20AI-ff6b35)
 ![Deploy: Docker](https://img.shields.io/badge/deploy-Docker-2496ed)
-![License: proprietary](https://img.shields.io/badge/license-proprietary-lightgrey)
+![License: all rights reserved](https://img.shields.io/badge/license-all%20rights%20reserved-lightgrey)
 
 ```text
 You    → Muse:  "Call Hotel Zed and ask if they have a king room Oct 10–12 and the rate. Don't book."
 Muse   → place_call(business_name="Hotel Zed", assistant_name="Eva", goal=..., questions=[...], authority="info_only")
-Agent  ☎  "Hi, this is Eva, an assistant calling on behalf of Alex. Do you have a king room…"
+Agent  ☎  "Hi, this is Eva, an AI assistant calling on behalf of Alex. This call may be recorded. Do you have a king room…"
 Hotel  ☎  "We do, $289 a night plus tax."
 Agent  → { "outcome": "info_received",
            "answers": [{ "question": "King room Oct 10–12?", "answer": "Yes" },
                        { "question": "Nightly rate?",         "answer": "$289 + tax" }] }
 Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus tax."
 ```
+
+## 🎧 Hear the first real call
+
+https://github.com/user-attachments/assets/dccc1823-c725-4932-9cc3-eee79d3f62e8
+
+<sub>1:47 · Oct 7, 2026 · captioned, unedited except the employee's name is bleeped ·
+🎧 <a href="https://github.com/angilyu/muse-voice-agent/releases/download/demo-first-call/first-real-call.mp3">Audio only</a></sub>
+
+**The errand.** A parent planning a family trip asks Muse: *"Does San Diego Mission Bay Resort
+offer childcare so we can go out for a few hours?"* Muse turns that into a brief and calls
+`place_call`. Everything after that is the agent, live on the public phone network, with no human
+in the loop.
+
+**What happens on the call**
+
+1. **Gets through the phone menu.** It listens to a 30-second recorded menu, picks *"all other
+   inquiries"* and presses **4** for the operator. Its opening line is held back, since nobody is
+   listening to a recording.
+2. **Waits on the line.** It stays silent for about 20 seconds while the front desk rings, then gives
+   who it is calling for and why in one sentence.
+3. **Can be interrupted.** The clerk cuts in mid-sentence. The agent stops talking at once, listens,
+   and carries on.
+4. **Doesn't stop at "no".** It moves straight to the brief's fallback (*"do you partner with
+   or recommend a local babysitter?"*), then confirms there's no kids' club either. It skips
+   the hours and pricing questions, which no longer apply.
+5. **Hangs up cleanly and reports back.** It wraps up in under two minutes and returns a
+   structured report: all 4 questions answered, nothing committed on the user's behalf, and a
+   next step for Muse.
+
+<details>
+<summary><b>What Muse got back</b> (trimmed from the real <code>get_call_status</code> response)</summary>
+
+```jsonc
+{
+  "status": "completed",
+  "summary": "Spoke with [name] at the front desk. The resort does not offer in-house childcare, babysitting, or a supervised kids club, and they do not partner with or recommend a local babysitter service for hotel guests.",
+  "report": {
+    "reached": "person",
+    "duration_seconds": 107,
+    "ended_by": "business",
+    "committed_on_users_behalf": false,
+    "answers": [
+      { "question": "Does the resort offer childcare, babysitter service, or a supervised kids club …?",
+        "answer": "No. They do not offer daytime childcare, babysitting, or a supervised kids club on property." },
+      { "question": "What are the hours and pricing?",
+        "answer": "Not applicable because no childcare service is offered." },
+      { "question": "Will it be available Nov 6-10?",
+        "answer": "No childcare service is offered, so there is no availability for Nov 6-10." },
+      { "question": "If they have no in-house service, do they partner with or recommend a local babysitter service …?",
+        "answer": "No. They do not partner with or recommend a babysitter service; they only partner for baby equipment." }
+    ],
+    "unanswered_questions": [],
+    "next_steps": ["… would need to arrange childcare independently off property if needed for Nov 6-10."]
+  }
+}
+```
+
+Response times on this call, as measured by Retell:
+
+| Stage | p50 | p90 |
+|---|---|---|
+| Business stops talking → agent starts talking (end to end) | **1.7 s** | 2.3 s |
+| LLM (LangGraph turn, first audio chunk) | 1.4 s | 1.9 s |
+| Speech recognition | 158 ms | 287 ms |
+| Text to speech | 58 ms | 75 ms |
+
+</details>
 
 ## Why it's interesting
 
@@ -41,8 +108,9 @@ Muse   → You:   "Hotel Zed has a king room for those nights at $289/night plus
   speech-to-text, text-to-speech, barge-in and voicemail detection. A LangGraph graph you control
   writes each reply over Retell's custom-LLM websocket.
 - **Guardrails enforced in code.** The agent says it's an AI, only dials allowed number prefixes,
-  enforces caps on call length and simultaneous calls, rejects card numbers and SSNs, and won't
-  report a booking it wasn't allowed to make.
+  enforces caps on call length and simultaneous calls, rejects card numbers and SSNs, only shares
+  allow-listed personal details, discloses recording by default, and won't report an over-limit or
+  unauthorized booking as done.
 - **Try it without a phone line.** `DRY_RUN=true` simulates calls end to end, so you can wire up
   your assistant before you have any API keys.
 - **Runs on free hosting.** It ships as a ~400 MB Docker image (~95 MB RAM), with a built-in
@@ -67,8 +135,9 @@ flowchart LR
    MCP tools shouldn't block that long.
 2. Retell connects the call and streams the transcript to the server's websocket. On every turn,
    the LangGraph graph (default `gpt-5.4` with low reasoning effort) reads the conversation and a system prompt built from
-   the brief, then streams back what to say next. The first words ("Hi, this is an assistant calling
-   on behalf of …") are spoken before the model runs. If nobody speaks within `SILENT_PICKUP_MS`
+   the brief, then streams back what to say next. The first words ("Hi, this is an AI assistant calling
+   on behalf of …") are spoken before the model runs. If recording disclosure is enabled, the opener
+   also says the call may be recorded. If nobody speaks within `SILENT_PICKUP_MS`
    after pickup (call screeners often wait), the agent speaks first. It can also press keypad digits
    (`press_digits`) for "press 1 to connect" screens and phone menus, and stay quiet on hold
    (`wait_on_hold`).
@@ -115,7 +184,7 @@ sequenceDiagram
 Requires Python 3.12+ and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-git clone https://github.com/angilyu/MuseVoiceAgent && cd MuseVoiceAgent
+git clone https://github.com/angilyu/muse-voice-agent && cd muse-voice-agent
 uv sync
 cp .env.example .env
 echo "MCP_AUTH_TOKEN=$(python -c 'import secrets;print(secrets.token_urlsafe(32))')" >> .env
@@ -139,14 +208,15 @@ starts a simulated call and polls it until it's done.
 | `list_calls` | Most recent calls |
 
 All three call tools **require `customer_name`**, the person the call is made for. The agent opens
-with "Hi, this is an assistant calling on behalf of {customer_name}". Blank or placeholder names
+with "Hi, this is an AI assistant calling on behalf of {customer_name}. This call may be recorded."
+when recording disclosure is enabled. Blank or placeholder names
 ("user", "unknown", …) are rejected with `invalid_request` so the client asks the user first.
 
 They also take an optional **`assistant_name`**: the calling assistant's own name, e.g. Muse passes
 the name the user knows it by. With `"assistant_name": "Eva"` the agent opens with "Hi, this is
-Eva, an assistant calling on behalf of {customer_name}" and answers screeners as "I'm Eva, an AI
-assistant calling for …". Without it, the opener stays "Hi, this is an assistant calling on behalf
-of {customer_name}". Placeholders ("assistant", "AI", "unknown") are ignored; names must be letters
+Eva, an AI assistant calling on behalf of {customer_name}. This call may be recorded." and answers screeners as "I'm Eva, an AI
+assistant calling for …". Without it, the opener stays "Hi, this is an AI assistant calling on behalf
+of {customer_name}." Placeholders ("assistant", "AI", "unknown") are ignored; names must be letters
 only, up to 40 characters.
 
 ### `place_call`: the general-purpose call
@@ -159,17 +229,27 @@ only, up to 40 characters.
   "assistant_name": "Eva",                                 // optional: the assistant's own name
   "goal": "Find out if they have a king room for Oct 10–12 and the nightly rate",
   "questions": ["Is a king room available Oct 10–12?", "What's the nightly rate?"],
-  "shareable_details": { "guests": "2 adults" },          // what the agent may say if asked
+  "shareable_details": { "guests": "2 adults" },          // approved details the agent may say if asked
   "authority": "info_only",                                // or "may_commit_within_limits"
-  "limits": null                                           // required with may_commit, e.g. "under $300/night, no prepayment"
+  "limits": null,                                          // required with may_commit unless structured limits are provided
+  "max_spend": null,
+  "max_deposit": null,
+  "max_cancellation_fee": null,
+  "allowed_date_time_window": null
 }
 ```
+
+`shareable_details` is an allow-list for personal details. Customer name and callback number are
+included by default; email, full address, DOB, insurance/account IDs and similar details are withheld
+unless explicitly included for that call. Card numbers, SSNs, passwords and bank/routing details are
+always rejected or withheld.
 
 `authority` controls what the agent may commit to. `info_only` (the default) never agrees to
 anything. If the model still claims it booked something, the server downgrades the result to
 `needs_followup`. `may_commit_within_limits` lets it book, order, schedule, reschedule, cancel or
-reserve only within the `limits` you wrote. `may_book_within_limits` is still accepted as a
-backward-compatible alias.
+reserve only within the structured/free-form limits you pass (`max_spend`, `max_deposit`,
+`max_cancellation_fee`, `allowed_date_time_window`, party-size range, and/or `limits` notes).
+`may_book_within_limits` is still accepted as a backward-compatible alias.
 
 For pickup orders, put the exact items and options in `goal`, `shareable_details`, and especially
 `limits`, for example:
@@ -177,7 +257,7 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
 ```jsonc
 {
   "business_name": "HeyTea",
-  "phone_number": "+12138805023",
+  "phone_number": "+14155550142",
   "customer_name": "Wenjing Yu",
   "goal": "Place a pickup order for two Jasmine green milk teas, 25% sugar, less ice. Use defaults for anything else.",
   "shareable_details": { "pickup name": "Wenjing Yu" },
@@ -228,6 +308,9 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
     "ended_by": "assistant",        // assistant | business | timeout | no_answer | system
     "outcome_source": "agent",      // agent (recorded live) | transcript (inferred after) | call_system
     "committed_on_users_behalf": false,
+    "commitment_within_limits": null,
+    "safety_flags": [],
+    "needs_user_action": false,
     "answers": [                    // one per requested question, in order
       { "question": "Is a king room available Oct 10–12?", "answer": "Yes" },
       { "question": "What's the nightly rate?", "answer": "$289 plus tax" }
@@ -237,7 +320,7 @@ For pickup orders, put the exact items and options in `goal`, `shareable_details
   },
   "transcript": [                   // included by default once done
     { "speaker": "business", "text": "Hotel Zed, this is Dana." },
-    { "speaker": "assistant", "text": "Hi, this is an assistant calling on behalf of Wenjing Yu…" }
+    { "speaker": "assistant", "text": "Hi, this is an AI assistant calling on behalf of Wenjing Yu…" }
   ]
 }
 ```
@@ -253,7 +336,7 @@ inbound callback rows so the client can see recent callbacks.
 Outbound setup still works as before:
 
 ```bash
-uv run python scripts/setup_retell.py +16282779475 --public-url https://<your-host>
+uv run python scripts/setup_retell.py +1XXXXXXXXXX --public-url https://<your-host>
 ```
 
 To make the same Retell number answer inbound callbacks, run the setup script with
@@ -282,15 +365,22 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
   unguessable path secret (`RETELL_WS_SECRET`), and it only attaches to calls this server started.
 - **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3) and
   `MAX_CALL_SECONDS` (default 300).
-- **Honest.** Every call opens with a fixed line, "Hi, this is [Eva, ]an assistant calling on
+- **Honest.** Every call opens with a fixed line, "Hi, this is [Eva, ]an AI assistant calling on
   behalf of {name}." It's streamed to text-to-speech before the LLM runs, so the business hears it at once.
   If asked, it always says it's an AI, and it never claims to be human.
-- **Discreet.** It never shares payment details or addresses, and never agrees to deposits or fees.
-  Those cases come back as `needs_followup` for a human to handle.
+- **Discreet.** It never shares payment details, secrets, or unapproved personal details. It only
+  shares the `shareable_details` allow-list (customer name and callback number by default).
+- **Limits-bound.** It never agrees to deposits, cancellation fees, spend, dates/times, party sizes,
+  or other commitments outside the user's authority and limits. Those cases come back as
+  `needs_followup` for a human to handle.
 - **No sensitive input.** Briefs containing Luhn-valid card numbers or SSNs are rejected before
   dialing. Long order or tracking numbers are still allowed.
+- **Recording disclosure.** Recording disclosure is enabled by default. If the business objects,
+  the assistant ends politely and reports that the user must follow up. See [docs/safety.md](docs/safety.md)
+  for the legal research summary and citations (not legal advice).
 - **Check local laws** on AI-voice disclosure and call recording before calling real businesses.
-  Recommend that your MCP client confirm with the user before each call.
+  Recommend that your MCP client confirm with the user before each call. Do not use this for
+  telemarketing or sales calls.
 
 ## Going live: real phone calls
 
@@ -368,6 +458,8 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `PUBLIC_BASE_URL` | — | Public https URL; the Retell websocket is synced to it |
 | `ALLOWED_DIAL_PREFIXES` | `+1` | Comma-separated E.164 prefixes the agent may dial |
 | `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `300` / `3` | Limits on call length and simultaneous calls |
+| `CALL_RECORDING_ENABLED` | `true` | Whether the backend records calls; when true, the agent discloses recording early |
+| `RECORDING_DISCLOSURE_SCOPE` | `always` | `always` (recommended) or `required_states` for known all-party-consent/unknown area codes |
 | `LLM_SERVICE_TIER` | `default` | OpenAI service tier. `default` is standard processing. `priority` cuts about 0.1 to 0.9 s per turn but costs about 2x per token, so it's opt-in only |
 | `FILLER_AFTER_MS` | `1500` | Retell: say "Hmm," if the model hasn't started speaking a reply to a person by then; `0` disables |
 | `SILENT_PICKUP_MS` | `3000` | Retell: if nobody speaks this long after pickup (e.g. a call screener), the agent speaks first; `0` disables |
@@ -439,5 +531,8 @@ the hill-climbing workflow.
 
 ## License
 
-Copyright © 2026 Wenjing Yu. All rights reserved. This is proprietary software; see [LICENSE](LICENSE).
-For licensing or commercial use, contact [@angilyu](https://github.com/angilyu).
+Copyright © 2026 Wenjing Yu. All rights reserved. The source is published for reference only; see
+[LICENSE](LICENSE). For licensing or commercial use, contact [@angilyu](https://github.com/angilyu).
+
+MuseVoiceAgent is an independent project. It is not affiliated with, endorsed by, or sponsored by
+Meta. Muse is referenced only to describe compatibility.

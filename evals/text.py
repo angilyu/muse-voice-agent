@@ -95,7 +95,8 @@ Behavior cues to enact naturally:
 - garbled: make one important answer partially garbled, e.g. "we have [inaudible] thirty"; if the
   caller asks you to repeat, clarify it.
 - hold: put the caller on a brief hold, then return with the facts.
-- voicemail, IVR, rude, hangup, deposit, push_to_book, asks_robot: enact the behavior directly.
+- voicemail, IVR, rude, hangup, deposit, push_to_book, asks_robot, asks_for_card_or_personal_details:
+  enact the behavior directly; for private details, ask for only the card/personal detail named in facts.
 - If the transcript says [interrupted: business barged in], react as if you cut the caller off:
   say "Sorry—what?" or ask for the one key point you missed.
 - If the transcript includes [agent heard: "..."], remember that only the agent heard the noisy
@@ -174,7 +175,7 @@ def _business_spoken_turns(transcript: list[dict[str, str]]) -> list[str]:
 
 
 def _strip_fixed_opener(text: str, customer_name: str) -> str:
-    opener = f"Hi, this is an assistant calling on behalf of {customer_name}."
+    opener = f"Hi, this is an AI assistant calling on behalf of {customer_name}. This call may be recorded."
     return re.sub(re.escape(opener), "", text, count=1, flags=re.I).strip()
 
 

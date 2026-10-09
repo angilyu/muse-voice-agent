@@ -227,6 +227,7 @@ async def test_general_call_dry_run_returns_answers(settings):
         "Nightly rate incl. tax?",
     ]
     assert status["report"]["request"]["shareable_details"] == {
+        "customer name": "Angi",
         "dates": "Oct 10-12",
         "guests": "2 adults",
     }
@@ -255,7 +256,7 @@ async def test_assistant_name_is_spoken_in_opener(settings):
                 break
             await asyncio.sleep(0.02)
     assert status["transcript"][1]["text"].startswith(
-        "Hi, this is Eva, an assistant calling on behalf of Wenjing Yu."
+        "Hi, this is Eva, an AI assistant calling on behalf of Wenjing Yu. This call may be recorded."
     )
     assert status["report"]["request"]["assistant_name"] == "Eva"
 
@@ -302,6 +303,11 @@ async def test_general_call_validation(settings):
                 "place_call", {**base, "shareable_details": {"card": "4111 1111 1111 1111"}}
             )
         )
+        ssn = _data(
+            await client.call_tool(
+                "place_call", {**base, "goal": "Book a massage for SSN 123-45-6789"}
+            )
+        )
         tracking = _data(
             await client.call_tool(
                 "place_call", {**base, "shareable_details": {"tracking": "1234567890123456"}}
@@ -310,6 +316,7 @@ async def test_general_call_validation(settings):
     assert no_limits["error"] == "invalid_request" and "limits" in no_limits["message"]
     assert alias["error"] is None and alias["kind"] == "general"
     assert card["error"] == "invalid_request" and "card" in card["message"]
+    assert ssn["error"] == "invalid_request" and "social security" in ssn["message"]
     assert tracking["error"] is None and tracking["kind"] == "general"  # long non-card numbers (order/tracking) are allowed
 
 

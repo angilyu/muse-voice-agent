@@ -31,7 +31,7 @@ def settings(tmp_path) -> Settings:
         allowed_dial_prefixes=["+1"],
         retell_api_key="key_test",
         retell_agent_id="agent_test",
-        retell_from_number="+16282779475",
+        retell_from_number="+14155550100",
         retell_ws_secret=SECRET,
         public_base_url="https://example.trycloudflare.com",
         silent_pickup_ms=0,
@@ -106,7 +106,7 @@ def test_custom_llm_websocket_conversation(settings):
         )
         text, last = _collect(ws, 1)
         assert text.strip() == (
-            "Hi, this is an assistant calling on behalf of Angi. I'd like to book a table for two."
+            "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded. I'd like to book a table for two."
         )
         assert last["end_call"] is False
         assert store.get_call(call_id)["status"] == "in_progress"
@@ -241,7 +241,7 @@ def test_silent_pickup_speaks_first_with_protected_opener(settings, monkeypatch)
             events.append(msg)
             if msg["content_complete"]:
                 break
-    assert events[0]["content"].startswith("Hi, this is an assistant calling on behalf of Angi.")
+    assert events[0]["content"].startswith("Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded.")
     assert events[0]["no_interruption_allowed"] is True
     assert "no_interruption_allowed" not in events[1]
     assert "".join(e["content"] for e in events).strip().endswith("book a table for two.")
@@ -292,7 +292,7 @@ def test_reintro_opener_is_protected(settings):
         messages=iter([AIMessage(content="I'd like a table for two."), AIMessage(content="Table for two Friday at 7?")])
     )
     call_id, client, path = _bound_session(settings, store, model)
-    opener = "Hi, this is an assistant calling on behalf of Angi."
+    opener = "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded."
     with client.websocket_connect(path) as ws:
         ws.receive_json(), ws.receive_json()
         ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
@@ -364,7 +364,7 @@ def test_inbound_callback_binds_to_recent_outbound_call(settings, monkeypatch):
     assert callback["started_at"] == 1_700_000_000.0
     assert callback["task"]["callback_of"] == parent["id"]
     assert "original_call_id" in callback["task"]["callback_context"]
-    assert text.startswith("Hi, this is an assistant for Angi. Thanks for calling back.")
+    assert text.startswith("Hi, this is an AI assistant for Angi. Thanks for calling back. This call may be recorded.")
 
 
 def test_unknown_inbound_caller_takes_message_only(settings, monkeypatch):
@@ -441,7 +441,7 @@ async def test_dispatcher_places_retell_call_and_finalizes(settings, monkeypatch
 
     body = json.loads(requests[0].content)
     assert body == {
-        "from_number": "+16282779475",
+        "from_number": "+14155550100",
         "to_number": "+14155550123",
         "override_agent_id": "agent_test",
         "metadata": {"muse_call_id": record["id"]},

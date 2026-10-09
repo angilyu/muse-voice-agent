@@ -10,7 +10,7 @@ from test_graph import FakeToolModel
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from evals.calibrate import load_calibration_items
-from evals.cases.schema import EvalCase, load_all_cases, select_cases
+from evals.cases.schema import EvalCase, load_all_cases, load_splits, select_cases
 from evals.channel import make_channel_state
 from evals.compare import compare_loaded_runs
 from evals.import_call import _fallback_case, transcript_lines
@@ -37,11 +37,76 @@ def test_eval_splits_are_disjoint_and_keep_regressions_separate():
     dev = select_cases("split:dev")
     heldout = select_cases("split:heldout")
     regression = select_cases("tag:regression")
-    assert 45 <= len(dev) <= 55
-    assert 19 <= len(heldout) <= 23
+    assert 80 <= len(dev) <= 90
+    assert 34 <= len(heldout) <= 38
     assert {c.id for c in dev}.isdisjoint({c.id for c in heldout})
     assert not ({c.id for c in regression} & ({c.id for c in dev} | {c.id for c in heldout}))
     assert len(dev) + len(heldout) + len(regression) == len(load_all_cases())
+
+
+def test_coverage_matrix_cases_validate_pairwise_design_and_splits():
+    businesses = {
+        "clinic",
+        "vet",
+        "dentist",
+        "salon",
+        "garage",
+        "shop",
+        "government_office",
+    }
+    call_types = {
+        "book",
+        "change_or_cancel",
+        "get_quote",
+        "check_info_or_stock",
+        "place_order",
+        "return_or_complaint",
+        "follow_up",
+    }
+    problems = {
+        "phone_menu",
+        "hold_music",
+        "transfer",
+        "voicemail",
+        "call_back_later",
+        "asks_card_or_personal_details",
+        "nothing_available",
+    }
+    cases = select_cases("tag:coverage_matrix")
+    assert len(cases) == 49
+
+    def tag_value(case: EvalCase, prefix: str) -> str:
+        matches = [tag.split(":", 1)[1] for tag in case.tags if tag.startswith(prefix)]
+        assert len(matches) == 1
+        return matches[0]
+
+    triples = [
+        (tag_value(case, "biz:"), tag_value(case, "call:"), tag_value(case, "problem:"))
+        for case in cases
+    ]
+    assert {biz for biz, _, _ in triples} == businesses
+    assert {call for _, call, _ in triples} == call_types
+    assert {problem for _, _, problem in triples} == problems
+    assert {(biz, call) for biz, call, _ in triples} == {
+        (biz, call) for biz in businesses for call in call_types
+    }
+    assert {(biz, problem) for biz, _, problem in triples} == {
+        (biz, problem) for biz in businesses for problem in problems
+    }
+    assert {(call, problem) for _, call, problem in triples} == {
+        (call, problem) for call in call_types for problem in problems
+    }
+
+    splits = load_splits()
+    heldout_cases = [case for case in cases if case.id in set(splits["heldout"])]
+    assert len(heldout_cases) == 15
+    heldout_triples = [
+        (tag_value(case, "biz:"), tag_value(case, "call:"), tag_value(case, "problem:"))
+        for case in heldout_cases
+    ]
+    assert {biz for biz, _, _ in heldout_triples} == businesses
+    assert {call for _, call, _ in heldout_triples} == call_types
+    assert {problem for _, _, problem in heldout_triples} == problems
 
 
 def test_phone_channel_is_seeded_and_keeps_truth_and_agent_views():
@@ -556,7 +621,7 @@ def test_ai_question_after_disclosure_or_before_hangup_is_not_flagged():
 
 def test_reintroduction_to_first_person_after_silent_pickup_or_screener_is_expected():
     silent = select_cases("silent-pickup-sushi-booking")[0]
-    opener = "Hi, this is an assistant calling on behalf of Priya Shah."
+    opener = "Hi, this is an AI assistant calling on behalf of Priya Shah. This call may be recorded."
     transcript = [
         {"role": "user", "content": "[silent pickup]"},
         {"role": "agent", "content": opener + " I'd like to book a table."},
@@ -573,7 +638,7 @@ def test_reintroduction_to_first_person_after_silent_pickup_or_screener_is_expec
     assert "no re-introduction when the person said hello after a silent pickup" in metrics["issues"]
 
     screen = select_cases("screen-google-restaurant-booking")[0]
-    opener = "Hi, this is an assistant calling on behalf of Wenjing Li."
+    opener = "Hi, this is an AI assistant calling on behalf of Wenjing Li. This call may be recorded."
     screened = [
         {"role": "user", "content": "The person you're calling is using a screening service. Say your name and why you're calling."},
         {"role": "agent", "content": "I'm an AI assistant calling for Wenjing Li to book a table Friday at 7:30."},

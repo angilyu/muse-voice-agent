@@ -8,7 +8,17 @@ from typing import Annotated, Literal, Union
 
 from zoneinfo import ZoneInfo
 
-from pydantic import BaseModel, Field, TypeAdapter, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+
+from .safety import (
+    CommitmentLimits,
+    FIXED_SAFETY_RULES,
+    format_shareable_details,
+    normalize_shareable_details,
+    recording_disclosure_required,
+    reject_sensitive_payload,
+    reject_sensitive_text,
+)
 
 E164 = re.compile(r"^\+[1-9]\d{6,14}$")
 
@@ -42,6 +52,8 @@ _ASSISTANT_NAME = re.compile(r"[^\W\d_](?:[^\W\d_]|[' .-]){0,39}")  # letters, s
 
 
 class _BaseTask(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     business_name: str = Field(min_length=1, max_length=120)
     phone_number: str = Field(description="Business phone number, E.164 preferred")
     customer_name: str = Field(
@@ -62,6 +74,21 @@ class _BaseTask(BaseModel):
         default=None,
         description="Prior-call context to use when answering an inbound callback.",
     )
+    shareable_details: dict[str, str] = Field(
+        default_factory=dict,
+        description=(
+            "Approved personal details the agent may share if relevant. The server always adds "
+            "customer name and callback number; anything else is withheld."
+        ),
+    )
+    recording_disclosure_required: bool = Field(default=True, exclude=True)
+    recording_disclosure_state: str | None = Field(default=None, exclude=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_sensitive_payload(cls, data: object) -> object:
+        reject_sensitive_payload(data, cls.__name__, exclude_fields={"phone_number", "callback_number"})
+        return data
 
     @field_validator("assistant_name", mode="before")
     @classmethod
@@ -96,6 +123,37 @@ class _BaseTask(BaseModel):
     def _callback(cls, v: str | None) -> str | None:
         return normalize_phone(v) if v else None
 
+    @field_validator("shareable_details")
+    @classmethod
+    def _shareable_details(cls, v: dict[str, str]) -> dict[str, str]:
+        if len(v) > 20:
+            raise ValueError("at most 20 shareable_details")
+        cleaned: dict[str, str] = {}
+        for k, val in v.items():
+            key = " ".join(str(k).split()).strip().lower()
+            value = " ".join(str(val).split()).strip()
+            if not key or not value:
+                continue
+            if len(key) > 60 or len(value) > 300:
+                raise ValueError("shareable_details keys must be <=60 and values <=300 characters")
+            reject_sensitive_text(f"{key} {value}", "shareable_details")
+            cleaned[key] = value
+        return cleaned
+
+    @model_validator(mode="after")
+    def _fixed_base_safety(self) -> "_BaseTask":
+        self.shareable_details = normalize_shareable_details(
+            self.customer_name, self.callback_number, self.shareable_details
+        )
+        required, state = recording_disclosure_required(
+            self.phone_number, recording_enabled=True, scope="required_states"
+        )
+        # Task input may request stricter disclosure, but cannot suppress legally safer disclosure
+        # for all-party/unknown states.
+        self.recording_disclosure_required = bool(self.recording_disclosure_required or required)
+        self.recording_disclosure_state = state
+        return self
+
 
 class RestaurantReservation(_BaseTask):
     kind: Literal["restaurant_reservation"] = "restaurant_reservation"
@@ -118,27 +176,6 @@ class HandymanQuote(_BaseTask):
 
 Authority = Literal["info_only", "may_commit_within_limits", "may_book_within_limits"]
 
-# Card numbers (13-19 digits, optional spaces/dashes) and US SSNs must never be handed to the agent.
-_CARD = re.compile(r"(?<!\d)(?:\d[ -]?){12,18}\d(?!\d)")
-_SSN = re.compile(r"(?<!\d)\d{3}-\d{2}-\d{4}(?!\d)")
-
-
-def _luhn_ok(digits: str) -> bool:
-    total = 0
-    for i, ch in enumerate(reversed(digits)):
-        n = int(ch)
-        if i % 2:
-            n = n * 2 - 9 if n > 4 else n * 2
-        total += n
-    return total % 10 == 0
-
-
-def _reject_sensitive(text: str, field: str) -> None:
-    cards = (re.sub(r"\D", "", m.group()) for m in _CARD.finditer(text))
-    if _SSN.search(text) or any(_luhn_ok(d) for d in cards):
-        raise ValueError(f"{field} looks like it contains a card or social security number; remove it")
-
-
 class GeneralCall(_BaseTask):
     """Any phone errand Muse can describe as a brief: orders, appointments, questions, bookings."""
 
@@ -147,22 +184,25 @@ class GeneralCall(_BaseTask):
     questions: list[str] = Field(
         default_factory=list, max_length=10, description="Specific questions to get answered"
     )
-    shareable_details: dict[str, str] = Field(
-        default_factory=dict,
-        description="Facts the agent may share if relevant (dates, party size, order number...)",
-    )
     authority: Authority = Field(
         default="info_only",
         description="info_only: ask and commit to nothing. may_commit_within_limits: may book, "
         "order, schedule, reschedule, cancel, or reserve only within `limits`. "
         "may_book_within_limits is a backward-compatible alias.",
     )
-    limits: str | None = Field(
+    limits: CommitmentLimits | None = Field(
         default=None,
-        max_length=500,
-        description="Required with may_commit_within_limits/may_book_within_limits, e.g. "
-        "'two jasmine milk teas, 25% sugar, less ice, defaults otherwise, pay at pickup'",
+        description=(
+            "Structured limits required with may_commit_within_limits/may_book_within_limits. "
+            "Legacy strings are accepted as binding notes."
+        ),
     )
+    max_spend: float | None = Field(default=None, ge=0)
+    max_deposit: float | None = Field(default=None, ge=0)
+    max_cancellation_fee: float | None = Field(default=None, ge=0)
+    allowed_date_time_window: str | None = Field(default=None, max_length=300)
+    party_size_min: int | None = Field(default=None, ge=1, le=100)
+    party_size_max: int | None = Field(default=None, ge=1, le=100)
 
     @field_validator("questions")
     @classmethod
@@ -171,32 +211,42 @@ class GeneralCall(_BaseTask):
         for q in cleaned:
             if len(q) > 300:
                 raise ValueError("each question must be 300 characters or fewer")
-            _reject_sensitive(q, "questions")
+            reject_sensitive_text(q, "questions")
         return cleaned
-
-    @field_validator("shareable_details")
-    @classmethod
-    def _details(cls, v: dict[str, str]) -> dict[str, str]:
-        if len(v) > 20:
-            raise ValueError("at most 20 shareable_details")
-        for k, val in v.items():
-            if len(k) > 60 or len(val) > 300:
-                raise ValueError("shareable_details keys must be <=60 and values <=300 characters")
-            _reject_sensitive(f"{k} {val}", "shareable_details")
-        return v
 
     @field_validator("goal", "limits")
     @classmethod
-    def _no_sensitive(cls, v: str | None, info) -> str | None:  # noqa: ANN001
-        if v:
-            _reject_sensitive(v, info.field_name)
+    def _no_sensitive(cls, v: object, info) -> object:  # noqa: ANN001
+        if isinstance(v, str):
+            reject_sensitive_text(v, info.field_name)
+        return v
+
+    @field_validator("limits", mode="before")
+    @classmethod
+    def _limits(cls, v: object) -> object:
+        if isinstance(v, str):
+            reject_sensitive_text(v, "limits")
+            return {"notes": v}
         return v
 
     @model_validator(mode="after")
-    def _limits_required(self) -> "GeneralCall":
+    def _limits_required_and_merged(self) -> "GeneralCall":
+        data = (self.limits.model_dump() if self.limits else {}) | {
+            k: v
+            for k, v in {
+                "max_spend": self.max_spend,
+                "max_deposit": self.max_deposit,
+                "max_cancellation_fee": self.max_cancellation_fee,
+                "allowed_date_time_window": self.allowed_date_time_window,
+                "party_size_min": self.party_size_min,
+                "party_size_max": self.party_size_max,
+            }.items()
+            if v is not None
+        }
+        self.limits = CommitmentLimits(**data) if data else None
         if self.authority in {"may_commit_within_limits", "may_book_within_limits"} and not (
-            self.limits or ""
-        ).strip():
+            self.limits and self.limits.has_any_limits()
+        ):
             raise ValueError(
                 "limits are required when authority is may_commit_within_limits "
                 "or may_book_within_limits"
@@ -309,14 +359,15 @@ Confirming and wrapping up:
   Call end_call (you may say "Bye!" with it) only once they've said bye or there's nothing left.
 
 Privacy and commitments:
-- Never invent details about {customer_name}. If asked something you don't know, say
-  {customer_name} will follow up, and note it in the outcome.
-- Never give out payment card numbers, addresses, or other personal data. You may share the
-  customer's name{callback_clause}.
-- Never agree to deposits, cancellation fees, or prepayment. If one is required, get the details and
-  record the outcome as needs_followup instead of confirming.
+- Never invent details about {customer_name}. If asked something you don't know or are not approved
+  to share, say {customer_name} will follow up, and note it in the outcome.
+- Approved shareable details:
+{shareable_details}
+- Do not share any personal detail not on that list.
 - For pickup orders, pay-at-pickup is okay when it fits the brief. If the business requires a card
   or prepayment over the phone, do not place the order; record needs_followup.
+
+{fixed_safety_rules}
 
 Today is {today} (Pacific time).
 """
@@ -336,29 +387,26 @@ def self_intro(task: AnyTask, *, ai: bool = True) -> str:
 def opening_line(task: AnyTask) -> str:
     """Fixed first sentence, spoken before the LLM runs so the callee hears us immediately."""
     if isinstance(task, InboundMessage):
-        return f"Hi, this is {self_intro(task, ai=True)}. I can take a message."
-    if getattr(task, "callback_of", None):
-        return (
-            f"Hi, this is {self_intro(task, ai=False)} for {task.customer_name}. "
-            "Thanks for calling back."
-        )
-    return f"Hi, this is {self_intro(task, ai=False)} calling on behalf of {task.customer_name}."
+        line = f"Hi, this is {self_intro(task, ai=True)}. I can take a message."
+    elif getattr(task, "callback_of", None):
+        line = f"Hi, this is {self_intro(task, ai=True)} for {task.customer_name}. Thanks for calling back."
+    else:
+        line = f"Hi, this is {self_intro(task, ai=True)} calling on behalf of {task.customer_name}."
+    if getattr(task, "recording_disclosure_required", True):
+        line += " This call may be recorded."
+    return line
 
 
 def build_system_prompt(task: AnyTask) -> str:
     if isinstance(task, InboundMessage):
         return _inbound_message_prompt(task)
 
-    callback_clause = (
-        f" and the callback number {task.callback_number} if they ask for one"
-        if task.callback_number
-        else ""
-    )
     rules = _COMMON_RULES.format(
         customer_name=task.customer_name,
-        callback_clause=callback_clause,
         opening_line=opening_line(task),
         self_intro=self_intro(task),
+        shareable_details=format_shareable_details(task.shareable_details),
+        fixed_safety_rules=FIXED_SAFETY_RULES.strip(),
         today=_today(),
     )
 
@@ -434,22 +482,24 @@ How to talk:
 - If they refuse to leave a message or it is clearly a wrong number, record outcome "needs_followup"
   with a compact summary and end the call.
 
+{FIXED_SAFETY_RULES.strip()}
+
+Approved shareable details:
+- none
+
 Today is {_today()} (Pacific time).
 """
 
 
 def _general_goal(task: GeneralCall) -> str:
-    details = (
-        "\n".join(f"- {k}: {v}" for k, v in task.shareable_details.items())
-        or "- none beyond the customer's name"
-    )
+    details = format_shareable_details(task.shareable_details)
     questions = (
         "\n".join(f"{i}. {q}" for i, q in enumerate(task.questions, 1))
         or "(none listed; get whatever information the goal needs)"
     )
     if task.authority in {"may_commit_within_limits", "may_book_within_limits"}:
         authority = f"""You MAY book, order, reserve, schedule, reschedule, cancel, or otherwise commit, but only if every part of it fits these limits:
-{task.limits}
+{task.limits.render() if task.limits else "- No limits provided; do not commit."}
 If what they offer falls outside the limits, don't just say no: ask once whether they have anything
 closer (e.g. a nearby time or a similar option). If nothing fits, do not accept it; note every offer
 and use outcome "unavailable" or "needs_followup". If the offer fits, commit under {task.customer_name} using only

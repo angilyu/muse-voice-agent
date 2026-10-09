@@ -61,7 +61,7 @@ async def test_speaks_text_without_calling_tool():
         graph,
         [
             HumanMessage(content="Hello, Luigi's."),
-            AIMessage(content="Hi, this is an assistant calling on behalf of Angi."),
+            AIMessage(content="Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded."),
             HumanMessage(content="How can I help?"),
         ],
     )
@@ -131,7 +131,7 @@ async def test_livekit_llm_adapter_streams_only_spoken_text():
             if chunk.delta and chunk.delta.content:
                 spoken += chunk.delta.content
 
-    assert spoken.strip() == "Hi, this is an assistant calling on behalf of Angi. Okay, thanks, bye!"
+    assert spoken.strip() == "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded. Okay, thanks, bye!"
     assert outcomes[0].outcome == "unavailable"
 
 
@@ -170,7 +170,7 @@ async def test_info_only_call_cannot_report_an_order():
 
     task = GeneralCall(
         business_name="HeyTea",
-        phone_number="+12138805023",
+        phone_number="+14155550142",
         customer_name="Wenjing Yu",
         goal="Ask whether jasmine green milk tea is available",
         questions=["Is it available?"],
@@ -194,12 +194,20 @@ async def test_info_only_call_cannot_report_an_order():
     assert outcomes[0].order_total == "$12.80"
 
 
+@pytest.mark.asyncio
+async def test_asked_if_robot_answer_stays_truthful():
+    model = FakeToolModel(messages=iter([AIMessage(content="Yes, I'm an AI assistant calling for Angi.")]))
+    graph = build_call_graph(_task(), lambda o: None, model=model)
+    spoken = "".join(await _run(graph, [HumanMessage(content="Are you a robot or a real person?")]))
+    assert "AI assistant" in spoken
+
+
 def test_general_order_prompt_allows_commitments_and_defaults():
     from muse_voice_agent.tasks import GeneralCall, build_system_prompt
 
     task = GeneralCall(
         business_name="HeyTea",
-        phone_number="+12138805023",
+        phone_number="+14155550142",
         customer_name="Wenjing Yu",
         goal="Order two jasmine green milk teas.",
         authority="may_commit_within_limits",
@@ -238,7 +246,7 @@ class SlowRecordingModel(FakeToolModel):
 
 @pytest.mark.asyncio
 async def test_first_turn_speaks_fixed_opener_before_the_llm():
-    opener = "Hi, this is an assistant calling on behalf of Angi."
+    opener = "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded."
     SlowRecordingModel.seen = []
     model = SlowRecordingModel(messages=iter([AIMessage(content="Could I book a table for two?")]))
     graph = build_call_graph(_task(), lambda o: None, model=model)
@@ -279,7 +287,7 @@ async def test_goodbye_with_outcome_is_one_pass_and_farewell_skips_the_model():
     control = CallControl(opener_spoken=True)
     graph = build_call_graph(_task(), outcomes.append, model=model, control=control)
     history = [
-        AIMessage(content="Hi, this is an assistant calling on behalf of Angi. Table for two Friday at 7?"),
+        AIMessage(content="Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded. Table for two Friday at 7?"),
         HumanMessage(content="Sure, you're booked."),
     ]
     assert "".join(await _run(graph, history)).strip() == "Perfect, thanks. Bye!"
@@ -309,7 +317,7 @@ def _all_text(messages) -> str:
     return "\n".join(m.content if isinstance(m.content, str) else str(m.content) for m in messages)
 
 
-OPENER = "Hi, this is an assistant calling on behalf of Angi."
+OPENER = "Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded."
 
 
 @pytest.mark.asyncio
@@ -500,7 +508,7 @@ async def test_silent_end_call_on_question_gets_spoken_fallback():
     graph = build_call_graph(_task(), lambda o: None, model=model, control=control)
     spoken = await _run(
         graph,
-        [AIMessage(content="Hi, this is an assistant calling on behalf of Angi."), HumanMessage(content="What's a good callback number?")],
+        [AIMessage(content="Hi, this is an AI assistant calling on behalf of Angi. This call may be recorded."), HumanMessage(content="What's a good callback number?")],
     )
     assert "could you say that again" in "".join(spoken)
     assert control.end_requested is False

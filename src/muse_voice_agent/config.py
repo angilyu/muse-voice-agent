@@ -125,6 +125,12 @@ class Settings:
     allowed_dial_prefixes: list[str] = field(
         default_factory=lambda: _list("ALLOWED_DIAL_PREFIXES", "+1")
     )
+    # If Retell (or another backend) records calls, disclose it in the opener. "always" is the
+    # default; "required_states" still discloses for all-party-consent states or unknown area codes.
+    recording_disclosure_scope: str = field(
+        default_factory=lambda: _str("RECORDING_DISCLOSURE_SCOPE", "always").lower()
+    )
+    call_recording_enabled: bool = field(default_factory=lambda: _bool("CALL_RECORDING_ENABLED", True))
     max_call_seconds: int = field(default_factory=lambda: _int("MAX_CALL_SECONDS", 300))
     max_concurrent_calls: int = field(default_factory=lambda: _int("MAX_CONCURRENT_CALLS", 3))
     # Retell: speak first if the line is silent this long after pickup (0 disables).
