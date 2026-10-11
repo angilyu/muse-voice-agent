@@ -31,7 +31,7 @@ _UNANSWERED = re.compile(
     re.IGNORECASE,
 )
 
-_REQUEST_SKIP = {"kind", "business_name", "phone_number"}
+_REQUEST_SKIP = {"kind", "business_name", "phone_number", "callback_of", "callback_context"}
 
 
 def _iso(ts: float | None) -> str | None:

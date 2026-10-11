@@ -5,6 +5,7 @@ TWILIO_SIP_USERNAME/PASSWORD from .env (created by setup_twilio_trunk.py), then 
 RETELL_AGENT_ID, RETELL_FROM_NUMBER, RETELL_WS_SECRET, PUBLIC_BASE_URL and VOICE_BACKEND=retell.
 
     uv run python scripts/setup_retell.py +1XXXXXXXXXX --public-url https://<tunnel-host>
+    uv run python scripts/setup_retell.py +1XXXXXXXXXX --enable-inbound  # also answer callbacks
 """
 
 from __future__ import annotations
@@ -50,7 +51,13 @@ def _twilio_termination_uri() -> str:
     sys.exit(f"No Twilio trunk named {TWILIO_TRUNK_NAME!r}; run scripts/setup_twilio_trunk.py first")
 
 
-async def main_async(number: str, public_url: str | None, termination_uri: str | None) -> None:
+async def main_async(
+    number: str,
+    public_url: str | None,
+    termination_uri: str | None,
+    *,
+    enable_inbound: bool,
+) -> None:
     settings = get_settings()
     if not settings.retell_api_key:
         sys.exit("RETELL_API_KEY is not set in .env")
@@ -94,10 +101,14 @@ async def main_async(number: str, public_url: str | None, termination_uri: str |
         _save("RETELL_AGENT_ID", agent_id)
 
         outbound = [{"agent_id": agent_id, "weight": 1}]
+        phone_update: dict[str, object] = {"outbound_agents": outbound}
+        if enable_inbound:
+            phone_update["inbound_agent_id"] = agent_id
         existing = {p["phone_number"]: p for p in await client.list_phone_numbers()}
         if number in existing:
-            await client.update_phone_number(number, {"outbound_agents": outbound})
-            print(f"Bound {number} (already in Retell) to the agent")
+            await client.update_phone_number(number, phone_update)
+            inbound = " and inbound callbacks" if enable_inbound else ""
+            print(f"Bound {number} (already in Retell) to outbound calls{inbound}")
         else:
             username = os.getenv("TWILIO_SIP_USERNAME", "")
             password = os.getenv("TWILIO_SIP_PASSWORD", "")
@@ -110,6 +121,7 @@ async def main_async(number: str, public_url: str | None, termination_uri: str |
                     "sip_trunk_auth_username": username,
                     "sip_trunk_auth_password": password,
                     "outbound_agents": outbound,
+                    **({"inbound_agent_id": agent_id} if enable_inbound else {}),
                     "nickname": "Muse Voice Agent (Twilio)",
                 }
             )
@@ -125,9 +137,21 @@ def main() -> None:
     parser.add_argument("number", help="Caller ID, e.g. +1XXXXXXXXXX (must be on the Twilio trunk)")
     parser.add_argument("--public-url", help="Public https base URL of muse-voice-mcp (tunnel)")
     parser.add_argument("--termination-uri", help="Twilio trunk domain (default: looked up)")
+    parser.add_argument(
+        "--enable-inbound",
+        action="store_true",
+        help="Set this Retell phone number's inbound_agent_id so callbacks are answered.",
+    )
     args = parser.parse_args()
     try:
-        asyncio.run(main_async(normalize_phone(args.number), args.public_url, args.termination_uri))
+        asyncio.run(
+            main_async(
+                normalize_phone(args.number),
+                args.public_url,
+                args.termination_uri,
+                enable_inbound=args.enable_inbound,
+            )
+        )
     except RetellError as e:
         sys.exit(str(e))
 
