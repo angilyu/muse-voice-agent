@@ -343,8 +343,9 @@ uv run python scripts/setup_retell.py +1XXXXXXXXXX --public-url https://<your-ho
 ```
 
 To make the same Retell number answer inbound callbacks, run the setup script with
-`--enable-inbound` or set the phone number's `inbound_agent_id` to `RETELL_AGENT_ID` in the Retell
-dashboard. Do this only after the deployed server has `PUBLIC_BASE_URL`, `RETELL_WS_SECRET`, and the
+`--enable-inbound`. That sets the number's Retell `inbound_agents` to `RETELL_AGENT_ID` and adds
+`sip:sip.retellai.com` as an origination URI on the Twilio trunk, so Twilio sends inbound calls to
+Retell. Do this only after the deployed server has `PUBLIC_BASE_URL`, `RETELL_WS_SECRET`, and the
 current code. Callback matching uses `INBOUND_CALLBACK_LOOKBACK_DAYS` (default 14). Simulated
 (`DRY_RUN`) calls are never matched.
 
