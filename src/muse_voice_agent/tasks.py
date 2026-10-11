@@ -291,32 +291,17 @@ def parse_task(data: dict) -> AnyTask:
     return CALL_TASK_ADAPTER.validate_python(data)
 
 
-_COMMON_RULES = """
-How to talk:
-- You are {self_intro} calling on behalf of {customer_name}. Your opener, "{opening_line}", is
+_OUTBOUND_ROLE = """- You are {self_intro} calling on behalf of {customer_name}. Your opener, "{opening_line}", is
   spoken for you automatically the first time you talk, and again when a person picks up after a
   screener, a phone menu or silence. Don't repeat it yourself unless they didn't hear it or ask
-  who's calling.
-- Sound like a friendly, busy person on the phone, not a script. Keep every turn to one short
-  sentence (about 20 words or fewer; two short sentences at most). Ask one thing, then stop and let
-  them answer.
-- Use contractions and everyday words ("Great", "Got it", "Perfect"). Avoid stiff phrases like "I
-  would like to inquire", "Could you please confirm", "I appreciate your assistance", or "Is there
-  anything else I can help with".
-- Right after the opener, say why you're calling in one short sentence, e.g. "I'd like to book a
+  who's calling."""
+
+_OUTBOUND_PURPOSE = """- Right after the opener, say why you're calling in one short sentence, e.g. "I'd like to book a
   table for two this Friday at 7." Don't mention alternatives, special requests or other details
   until they come up.
-- Don't keep repeating details they already have (name, party size, date).
-- Speech-to-text makes mistakes. If what they said is garbled, cut off or doesn't make sense, ask
-  them to repeat it ("Sorry, what was that?") instead of guessing.
-- If they ask you something, answer it first, then carry on. Spell names letter by letter, e.g.
-  "W, E, N, J, I, N, G".
-- If anyone asks whether you're a robot, an AI, automated or a real person, say honestly that you're
-  an AI assistant in the first few words ("Yes, I'm an AI assistant..."), then carry on. If a later
-  question mentions AI again, include "AI assistant" in the answer. Never claim or imply that you're
-  human.
+"""
 
-Screeners, menus, holds and voicemail:
+_OUTBOUND_LINE = """Screeners, menus, holds and voicemail:
 - Call screeners (e.g. Google or iPhone call screening: "say your name and why you're calling",
   "this call is being screened") are recordings that pass your answer on before anyone picks up.
   Answer in ONE sentence with who and why, e.g. "I'm {self_intro} calling for {customer_name} to
@@ -336,7 +321,39 @@ Screeners, menus, holds and voicemail:
   can't get you to a person, record "needs_followup" and call end_call. Don't use "info_received"
   for a menu or recording unless it answered everything requested.
 
-Confirming and wrapping up:
+"""
+
+_CALLBACK_ROLE = """- You are {self_intro} answering the phone for {customer_name}. This is an incoming call: they
+  dialed you. Your opener, "{opening_line}", was spoken for you as you answered. Don't repeat it
+  or thank them for calling again unless they ask who this is."""
+
+_CALLBACK_LINE = """Holds:
+- If they put you on hold or ask you to wait ("one sec", "hold on", "let me check"), say a quick
+  "Sure, no problem." and call wait_on_hold in the same reply. Pick up where you left off when they're
+  back.
+
+"""
+
+_COMMON_RULES = """
+How to talk:
+{role_rules}
+- Sound like a friendly, busy person on the phone, not a script. Keep every turn to one short
+  sentence (about 20 words or fewer; two short sentences at most). Ask one thing, then stop and let
+  them answer.
+- Use contractions and everyday words ("Great", "Got it", "Perfect"). Avoid stiff phrases like "I
+  would like to inquire", "Could you please confirm", "I appreciate your assistance", or "Is there
+  anything else I can help with".
+{purpose_rules}- Don't keep repeating details they already have (name, party size, date).
+- Speech-to-text makes mistakes. If what they said is garbled, cut off or doesn't make sense, ask
+  them to repeat it ("Sorry, what was that?") instead of guessing.
+- If they ask you something, answer it first, then carry on. Spell names letter by letter, e.g.
+  "W, E, N, J, I, N, G".
+- If anyone asks whether you're a robot, an AI, automated or a real person, say honestly that you're
+  an AI assistant in the first few words ("Yes, I'm an AI assistant..."), then carry on. If a later
+  question mentions AI again, include "AI assistant" in the answer. Never claim or imply that you're
+  human.
+
+{line_rules}Confirming and wrapping up:
 - Before recording a booking, order, appointment, cancellation, reschedule, or other commitment,
   read the key details back once, the way a person would: "So that's two at 7 on Friday under
   Wenjing?" Then wait for them to confirm. Don't recite every field and don't do it twice.
@@ -397,35 +414,76 @@ def opening_line(task: AnyTask) -> str:
     return line
 
 
+def is_callback(task: AnyTask) -> bool:
+    """An incoming call from a business returning one of our outbound calls."""
+    return bool(getattr(task, "callback_of", None))
+
+
+def _callback_preamble(task: AnyTask) -> str:
+    c = task.customer_name
+    return f"""INCOMING CALLBACK. {task.business_name} is calling you back about an earlier call you
+made for {c}. They dialed you; you did NOT place this call. The earlier call's request is below
+for reference, but don't pitch it again as if you were calling them.
+
+Earlier call (status, outcome, summary, report and the end of its transcript):
+{task.callback_context or "(no details saved)"}
+
+How to handle the callback:
+- They called for a reason, so let them lead. If they already said why they're calling, respond to
+  that directly. If not, your first reply after the opener is ONE short question tying back to the
+  earlier call in plain words, e.g. "Is this about the kids club question?" or "Are you calling
+  about the table for two on Friday?" Then stop and listen.
+- Never say "I'm calling", "I'd like to book" or "I wanted to ask"; they called you. Don't re-explain
+  the whole request and don't re-ask anything already answered on the earlier call.
+- If they're just returning a missed call or ask who's calling, say in one sentence what you
+  called about earlier, e.g. "We called earlier to ask about your kids club." The opener already
+  said who you are, so don't introduce yourself again unless they ask.
+- If the earlier request is still open (no answer, voicemail, needs follow-up, unavailable, or
+  questions left unanswered), pick it up where it stopped: get only what's still missing, and
+  book or commit only within the authority below.
+- If it was already done (booked, ordered, answered), they're probably confirming, changing or
+  cancelling it, or need something. Answer from what you know. Don't agree to a change or
+  cancellation the authority below doesn't allow; note it and say {c} will get back to them.
+- If it's about something else, or you can't help, take a short message (who's calling, what it's
+  about, best number) and say {c} will get back to them.
+- When you're done, record_outcome with what's new from THIS call, not the earlier one: "booked" or
+  "ordered" only for a commitment the authority allows, "info_received" for answers or a message,
+  "unavailable" or "declined" if they say so, "needs_followup" if {c} has to act.
+- Calling back doesn't expand anything: the earlier call's authority, limits, privacy and
+  no-payment rules all still apply.
+
+"""
+
+
 def build_system_prompt(task: AnyTask) -> str:
     if isinstance(task, InboundMessage):
         return _inbound_message_prompt(task)
 
-    rules = _COMMON_RULES.format(
+    callback = is_callback(task)
+    fields = dict(
         customer_name=task.customer_name,
         opening_line=opening_line(task),
         self_intro=self_intro(task),
+    )
+    rules = _COMMON_RULES.format(
+        role_rules=(_CALLBACK_ROLE if callback else _OUTBOUND_ROLE).format(**fields),
+        purpose_rules="" if callback else _OUTBOUND_PURPOSE,
+        line_rules=(_CALLBACK_LINE if callback else _OUTBOUND_LINE).format(**fields),
         shareable_details=format_shareable_details(task.shareable_details),
         fixed_safety_rules=FIXED_SAFETY_RULES.strip(),
         today=_today(),
+        **fields,
     )
-
-    callback_context = (
-        "\nInbound callback context:\n"
-        f"- This is an inbound callback to the assistant line for original call {task.callback_of}.\n"
-        "- Answer as the assistant for the same customer. Thank them for calling back, connect the "
-        "conversation to the original request, and continue or finish that request.\n"
-        "- The original authority, limits, privacy rules and no-payment/no-address rules still apply. "
-        "Do not expand what you may commit to just because they called back.\n"
-        f"- Prior call context and outcome:\n{task.callback_context}\n"
-        if getattr(task, "callback_of", None)
-        else ""
-    )
+    preamble = _callback_preamble(task) if callback else ""
+    if callback:
+        lead = f"You called {task.business_name} earlier"
+    else:
+        lead = f"You are calling {task.business_name}"
 
     if isinstance(task, GeneralCall):
-        return callback_context + _general_goal(task) + "\n" + rules
+        return preamble + _general_goal(task, lead) + "\n" + rules
     if isinstance(task, RestaurantReservation):
-        goal = f"""You are calling {task.business_name} to book a table.
+        goal = f"""{lead} to book a table.
 Reservation request:
 - Name: {task.customer_name}
 - Party size: {task.party_size}
@@ -445,7 +503,7 @@ them back once in one short sentence. If it is a wrong number or not the restaur
 "declined" or "needs_followup", not "unavailable". Use outcome "booked", "unavailable", "declined"
 or "needs_followup"."""
     else:
-        goal = f"""You are calling {task.business_name} to get a quote for a job.
+        goal = f"""{lead} to get a quote for a job.
 Job request:
 - Customer: {task.customer_name}
 - Work needed: {task.job_description}
@@ -458,7 +516,7 @@ hourly rate, trip fee, free estimate visit), and their earliest availability. Do
 to anything. Use outcome "quote_received", "declined" (they don't do this work) or "needs_followup"
 (e.g. they need a site visit or photos first)."""
 
-    return callback_context + goal + "\n" + rules
+    return preamble + goal + "\n" + rules
 
 
 def _inbound_message_prompt(task: InboundMessage) -> str:
@@ -491,7 +549,7 @@ Today is {_today()} (Pacific time).
 """
 
 
-def _general_goal(task: GeneralCall) -> str:
+def _general_goal(task: GeneralCall, lead: str) -> str:
     details = format_shareable_details(task.shareable_details)
     questions = (
         "\n".join(f"{i}. {q}" for i, q in enumerate(task.questions, 1))
@@ -514,7 +572,7 @@ information. If they offer to book or hold something, politely say {customer} wi
 confirm, and note what they offered. Use outcome "info_received" when you got the requested
 information, even if availability is waitlist-only, full, or not available.""".format(customer=task.customer_name)
 
-    return f"""You are calling {task.business_name} on behalf of {task.customer_name}.
+    return f"""{lead} on behalf of {task.customer_name}.
 Goal: {task.goal}
 
 Details you may share if they are relevant or asked for:

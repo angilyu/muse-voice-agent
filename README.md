@@ -101,8 +101,10 @@ Response times on this call, as measured by Retell:
   `quote_received`, `info_received`, `voicemail`, and so on. It includes per-question answers,
   confirmation numbers, and the full transcript.
 - **Inbound callbacks.** If a business calls back the Retell number, the agent matches the caller to
-  a recent outbound call, answers as the same assistant with the original brief and result as
-  context, and links the callback report to the original call. Unknown callers are told this is an
+  a recent outbound call and answers the phone for you: "Thanks for calling back", then a short
+  "Is this about the kids club question?" (or it follows their lead). It doesn't re-pitch the
+  request, picks up whatever is still open, only commits within the original limits, and links the
+  callback report to the original call. Unknown callers are told this is an
   AI assistant line and can only leave a message. The assistant collects callbacks and messages with
   `get_updates`, so it can tell you when the business got back to you.
 - **Your code decides what's said, Retell handles the phone audio.** Retell AI does dialing,
@@ -486,6 +488,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `LLM_SERVICE_TIER` | `default` | OpenAI service tier. `default` is standard processing. `priority` cuts about 0.1 to 0.9 s per turn but costs about 2x per token, so it's opt-in only |
 | `FILLER_AFTER_MS` | `1500` | Retell: say "Hmm," if the model hasn't started speaking a reply to a person by then; `0` disables |
 | `SILENT_PICKUP_MS` | `3000` | Retell: if nobody speaks this long after pickup (e.g. a call screener), the agent speaks first; `0` disables |
+| `INBOUND_GREET_MS` | `500` | Retell inbound: the agent answers an incoming call this long after it connects unless the caller already spoke; `0` waits for the caller |
 | `RETELL_VOICE_ID` | `cartesia-Cleo` | Retell voice |
 | `DEFAULT_CALLBACK_NUMBER` | — | Used when the client doesn't pass one |
 | `DEFAULT_CUSTOMER_NAME` | — | LiveKit console agent only. MCP call tools require the client to pass `customer_name` |

@@ -36,6 +36,7 @@ def settings(tmp_path) -> Settings:
         retell_ws_secret=SECRET,
         public_base_url="https://example.trycloudflare.com",
         silent_pickup_ms=0,
+        inbound_greet_ms=0,
     )
 
 
@@ -782,3 +783,59 @@ def test_callback_prompt_includes_original_call(settings):
     assert "Manager to call back." in prompt
     assert "The manager will call you back." in prompt
     assert "calling back" in prompt.lower()
+
+
+def test_inbound_callback_is_answered_before_the_caller_speaks(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    settings = replace(settings, inbound_greet_ms=20)
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(_task().model_dump(), dry_run=False)
+    store.update_call(parent["id"], status="completed", outcome="voicemail", summary="Left a voicemail.")
+    seen: list = []
+
+    class _Recording(FakeToolModel):
+        async def _astream(self, messages, stop=None, run_manager=None, **kwargs):  # type: ignore[override]
+            seen.append(list(messages))
+            async for chunk in super()._astream(messages, stop, run_manager, **kwargs):
+                yield chunk
+
+    model = _Recording(messages=iter([AIMessage(content="Is this about the table for two on Friday?")]))
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+        _inbound_details(ws, "+14155550123", settings)
+        events = []
+        while True:
+            msg = ws.receive_json()
+            assert msg["response_type"] == "agent_interrupt"
+            events.append(msg)
+            if msg["content_complete"]:
+                break
+
+    text = "".join(e["content"] for e in events)
+    assert text.startswith("Hi, this is an AI assistant for Angi. Thanks for calling back. This call may be recorded.")
+    assert text.strip().endswith("Is this about the table for two on Friday?")
+    assert events[0]["no_interruption_allowed"] is True
+    system, *rest = seen[0]
+    assert "INCOMING CALLBACK" in system.content
+    assert rest[0].content == retell.INBOUND_ANSWER_NOTE
+
+
+def test_inbound_answer_waits_when_the_caller_speaks_first(settings, monkeypatch):
+    monkeypatch.setattr(retell, "monitor_call", _noop_monitor)
+    settings = replace(settings, inbound_greet_ms=200)
+    store = CallStore(settings.call_db_path)
+    parent = store.create_call(_task().model_dump(), dry_run=False)
+    store.update_call(parent["id"], status="completed", outcome="voicemail", summary="Left a voicemail.")
+    model = FakeToolModel(messages=iter([AIMessage(content="Great, does Friday at 7 work?")]))
+    app = build_app(settings, store, model_factory=lambda: model)
+
+    with TestClient(app).websocket_connect(f"/retell/llm/{SECRET}/rc_in") as ws:
+        _inbound_details(ws, "+14155550123", settings)
+        text = _say(ws, 1, "Hi, Luigi's returning your call about Friday.")
+        time.sleep(0.3)
+        ws.send_json({"interaction_type": "ping_pong", "timestamp": 1})
+        assert ws.receive_json()["response_type"] == "ping_pong"  # no agent_interrupt in between
+
+    assert text.startswith("Hi, this is an AI assistant for Angi. Thanks for calling back.")
+    assert text.strip().endswith("does Friday at 7 work?")
