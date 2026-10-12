@@ -135,6 +135,9 @@ class Settings:
     max_concurrent_calls: int = field(default_factory=lambda: _int("MAX_CONCURRENT_CALLS", 3))
     # Retell: speak first if the line is silent this long after pickup (0 disables).
     silent_pickup_ms: int = field(default_factory=lambda: _int("SILENT_PICKUP_MS", 3000))
+    # Retell inbound: answer an incoming call this long after it connects if the caller hasn't
+    # spoken yet (0 waits for the caller to speak first).
+    inbound_greet_ms: int = field(default_factory=lambda: _int("INBOUND_GREET_MS", 500))
     # Retell: if a reply to a person has no words yet after this long, say "Hmm," so the line
     # doesn't go dead while the model thinks (0 disables).
     filler_after_ms: int = field(default_factory=lambda: _int("FILLER_AFTER_MS", 1500))

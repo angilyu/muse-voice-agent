@@ -567,3 +567,77 @@ async def test_model_repeating_the_opener_is_not_spoken_twice(chunked):
     graph = build_call_graph(_task(), lambda o: None, model=model)
     spoken = "".join(await _run(graph, [HumanMessage(content="You've reached Luigi's. Please leave a message.")]))
     assert spoken.count("on behalf of") == 1 and spoken.strip().endswith("hemming jeans. Bye!")
+
+
+CALLBACK_OPENER = "Hi, this is an AI assistant for Angi. Thanks for calling back. This call may be recorded."
+
+
+def _callback_task() -> RestaurantReservation:
+    return RestaurantReservation(
+        **{**_task().model_dump(), "callback_of": "call_1", "callback_context": '{"original_outcome": "needs_followup"}'}
+    )
+
+
+def test_callback_prompt_answers_the_phone_instead_of_pitching():
+    from muse_voice_agent.tasks import build_system_prompt
+
+    prompt = build_system_prompt(_callback_task())
+    assert "INCOMING CALLBACK" in prompt
+    assert "You called Luigi's earlier to book a table." in prompt
+    assert "answering the phone for Angi" in prompt
+    assert '"original_outcome": "needs_followup"' in prompt
+    assert "You are calling" not in prompt
+    assert "say why you're calling" not in prompt
+    assert "Call screeners" not in prompt and "voicemail, leave" not in prompt
+    assert "wait_on_hold" in prompt
+
+    outbound = build_system_prompt(_task())
+    assert "INCOMING CALLBACK" not in outbound
+    assert "You are calling Luigi's to book a table." in outbound
+    assert "Right after the opener, say why you're calling" in outbound
+    assert "Call screeners" in outbound
+
+
+def test_callback_prompt_for_general_call_uses_callback_lead():
+    from muse_voice_agent.tasks import GeneralCall, build_system_prompt
+
+    task = GeneralCall(
+        business_name="Bob's Plumbing",
+        phone_number="+14155550123",
+        customer_name="Angi",
+        goal="Get a quote for a leaky faucet",
+        callback_of="call_1",
+        callback_context="{}",
+    )
+    prompt = build_system_prompt(task)
+    assert "You called Bob's Plumbing earlier on behalf of Angi." in prompt
+    assert "You are calling" not in prompt
+
+
+@pytest.mark.asyncio
+async def test_callback_greeting_after_we_answered_does_not_repeat_the_opener():
+    from muse_voice_agent.graph import CallControl
+
+    model = FakeToolModel(messages=iter([AIMessage(content="Great, does Friday at 7 work now?")]))
+    graph = build_call_graph(_callback_task(), lambda o: None, model=model, control=CallControl(opener_spoken=True))
+    history = [
+        AIMessage(content=CALLBACK_OPENER + " Is this about the table for two on Friday?"),
+        HumanMessage(content="Hi, this is Luigi's returning your call."),
+    ]
+    spoken = "".join(await _run(graph, history))
+    assert not spoken.startswith(CALLBACK_OPENER)
+    assert "Friday at 7" in spoken
+
+
+@pytest.mark.asyncio
+async def test_callback_line_is_never_treated_as_a_screener_or_voicemail():
+    from muse_voice_agent.graph import CallControl
+
+    SlowRecordingModel.seen = []
+    model = SlowRecordingModel(messages=iter([AIMessage(content="Is this about the table for two?")]))
+    control = CallControl()
+    graph = build_call_graph(_callback_task(), lambda o: None, model=model, control=control)
+    spoken = "".join(await _run(graph, [HumanMessage(content="Please say your name and the reason for your call.")]))
+    assert spoken.startswith(CALLBACK_OPENER)
+    assert not control.on_hold
+    assert not any("screener" in str(m.content) for m in SlowRecordingModel.seen[0][1:])

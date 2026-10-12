@@ -47,6 +47,7 @@ from .tasks import (
     GeneralCall,
     InboundMessage,
     build_system_prompt,
+    is_callback,
     opening_line,
     self_intro,
 )
@@ -519,6 +520,8 @@ def build_call_graph(
 
     opener = opening_line(task)
     control.opener_text = opener
+    # They called us: no screeners, menus or voicemail, and they heard our opener when we answered.
+    inbound = isinstance(task, InboundMessage) or is_callback(task)
 
     async def caller(state: CallState) -> dict[str, list[BaseMessage]]:
         writer = get_stream_writer()
@@ -532,7 +535,10 @@ def build_call_graph(
             return {"messages": [AIMessage(content="Bye!")]}
 
         last_line = _content_text(last) if isinstance(last, HumanMessage) else ""
-        kind = classify_line(last_line) if last_line and not is_note(last_line) else None
+        if not last_line or is_note(last_line):
+            kind = None
+        else:
+            kind = "person" if inbound else classify_line(last_line)
         if (
             last_line
             and getattr(task, "recording_disclosure_required", True)
@@ -577,7 +583,8 @@ def build_call_graph(
         # menu), and again when a person first greets us after we spoke to silence, a screener or a
         # menu, since they never heard who we are.
         reintro = (
-            control.outcome is None
+            not inbound
+            and control.outcome is None
             and kind == "person"
             and not person_before
             and spoke_before

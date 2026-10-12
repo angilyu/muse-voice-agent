@@ -49,6 +49,11 @@ SILENT_PICKUP_NOTE = (
     "[The call connected but nobody has spoken for a few seconds. It may be a call-screening "
     "service or a person who didn't hear anything yet. Say why you're calling in one sentence.]"
 )
+# An incoming call: we answer, so speak first instead of waiting for the caller.
+INBOUND_ANSWER_NOTE = (
+    "[You just answered this incoming call and the caller hasn't said anything yet. Your opener "
+    "was just spoken; give your first reply now.]"
+)
 # Once we've said goodbye, a few seconds of silence means they're done: hang up.
 CLOSING_REMINDER_MS = 4000
 # Said when a reply to a person is slow to start, so the line doesn't go dead while the model thinks.
@@ -376,7 +381,11 @@ class RetellLLMSession:
         logger.info("retell call %s bound to %s", self.retell_call_id, call_id)
         if record.get("direction") == "inbound" and self.settings is not None:
             _spawn(monitor_call(self.settings, self.store, call_id, self.retell_call_id))
-        if self.settings is not None and self.silent_pickup_seconds is not None:
+            if self.settings.inbound_greet_ms > 0:
+                self._watcher = asyncio.create_task(
+                    self._answer_inbound(self.settings.inbound_greet_ms / 1000)
+                )
+        elif self.settings is not None and self.silent_pickup_seconds is not None:
             self._watcher = asyncio.create_task(self._watch_silent_pickup())
 
     async def _create_inbound_call(self, call: dict[str, Any]) -> dict[str, Any] | None:
@@ -426,6 +435,19 @@ class RetellLLMSession:
             or self.control.opener_spoken
             or any((u.get("content") or "").strip() for u in transcript)
         )
+
+    async def _answer_inbound(self, delay: float) -> None:
+        """Answer an incoming call like a person picking up: speak first unless the caller did.
+
+        Retell connects us once the inbound call is answered, so there's no ringing to wait out.
+        """
+        await asyncio.sleep(delay)
+        if self._anyone_spoke() or (self._turn and not self._turn.done()):
+            return
+        self._interrupt_id += 1
+        self._turn = asyncio.create_task(self._run_turn(
+            [HumanMessage(content=INBOUND_ANSWER_NOTE)], interrupt_id=self._interrupt_id
+        ))
 
     async def _watch_silent_pickup(self) -> None:
         """Speak first when the line stays silent after pickup.
