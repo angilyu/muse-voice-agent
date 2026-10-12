@@ -17,6 +17,7 @@ import json
 import os
 import secrets
 import sys
+import urllib.parse
 import urllib.request
 
 from dotenv import set_key
@@ -28,6 +29,7 @@ from muse_voice_agent.tasks import normalize_phone
 ENV_PATH = PROJECT_ROOT / ".env"
 AGENT_NAME = "Muse Voice Agent (LangGraph)"
 TWILIO_TRUNK_NAME = "muse-voice-agent"
+RETELL_SIP_URI = "sip:sip.retellai.com"
 
 
 def _save(key: str, value: str) -> None:
@@ -35,20 +37,38 @@ def _save(key: str, value: str) -> None:
     os.environ[key] = value
 
 
-def _twilio_termination_uri() -> str:
+def _twilio(path: str, data: dict[str, str] | None = None) -> dict:
     sid, token = os.getenv("TWILIO_ACCOUNT_SID", ""), os.getenv("TWILIO_AUTH_TOKEN", "")
     if not sid or not token:
         sys.exit("Set TWILIO_ACCOUNT_SID/TWILIO_AUTH_TOKEN or pass --termination-uri")
     req = urllib.request.Request(
-        "https://trunking.twilio.com/v1/Trunks?PageSize=100",
+        f"https://trunking.twilio.com/v1/{path}",
+        data=urllib.parse.urlencode(data).encode() if data is not None else None,
         headers={"Authorization": "Basic " + base64.b64encode(f"{sid}:{token}".encode()).decode()},
     )
     with urllib.request.urlopen(req, timeout=20) as resp:
-        trunks = json.load(resp).get("trunks", [])
-    for t in trunks:
+        return json.load(resp)
+
+
+def _twilio_trunk() -> dict:
+    for t in _twilio("Trunks?PageSize=100").get("trunks", []):
         if t.get("friendly_name") == TWILIO_TRUNK_NAME and t.get("domain_name"):
-            return t["domain_name"]
+            return t
     sys.exit(f"No Twilio trunk named {TWILIO_TRUNK_NAME!r}; run scripts/setup_twilio_trunk.py first")
+
+
+def _ensure_twilio_origination() -> None:
+    """Route calls to the trunk's numbers into Retell (Twilio needs an origination URI for inbound)."""
+    sid = _twilio_trunk()["sid"]
+    urls = _twilio(f"Trunks/{sid}/OriginationUrls").get("origination_urls", [])
+    if any(u.get("sip_url") == RETELL_SIP_URI and u.get("enabled") for u in urls):
+        print(f"Twilio trunk already sends inbound calls to {RETELL_SIP_URI}")
+        return
+    _twilio(
+        f"Trunks/{sid}/OriginationUrls",
+        {"SipUrl": RETELL_SIP_URI, "FriendlyName": "retell", "Priority": "10", "Weight": "10", "Enabled": "true"},
+    )
+    print(f"Twilio trunk now sends inbound calls to {RETELL_SIP_URI}")
 
 
 async def main_async(
@@ -100,15 +120,15 @@ async def main_async(
             print(f"Created Retell agent {agent_id}")
         _save("RETELL_AGENT_ID", agent_id)
 
+        # Retell removed the single-agent inbound_agent_id/outbound_agent_id fields; use weighted lists.
         outbound = [{"agent_id": agent_id, "weight": 1}]
-        phone_update: dict[str, object] = {"outbound_agents": outbound}
-        if enable_inbound:
-            phone_update["inbound_agent_id"] = agent_id
+        inbound = {"inbound_agents": [{"agent_id": agent_id, "weight": 1}]} if enable_inbound else {}
+        phone_update: dict[str, object] = {"outbound_agents": outbound, **inbound}
         existing = {p["phone_number"]: p for p in await client.list_phone_numbers()}
         if number in existing:
             await client.update_phone_number(number, phone_update)
-            inbound = " and inbound callbacks" if enable_inbound else ""
-            print(f"Bound {number} (already in Retell) to outbound calls{inbound}")
+            extra = " and inbound callbacks" if enable_inbound else ""
+            print(f"Bound {number} (already in Retell) to outbound calls{extra}")
         else:
             username = os.getenv("TWILIO_SIP_USERNAME", "")
             password = os.getenv("TWILIO_SIP_PASSWORD", "")
@@ -117,15 +137,17 @@ async def main_async(
             await client.import_phone_number(
                 {
                     "phone_number": number,
-                    "termination_uri": termination_uri or _twilio_termination_uri(),
+                    "termination_uri": termination_uri or _twilio_trunk()["domain_name"],
                     "sip_trunk_auth_username": username,
                     "sip_trunk_auth_password": password,
                     "outbound_agents": outbound,
-                    **({"inbound_agent_id": agent_id} if enable_inbound else {}),
+                    **inbound,
                     "nickname": "Muse Voice Agent (Twilio)",
                 }
             )
             print(f"Imported {number} into Retell via the Twilio trunk")
+        if enable_inbound:
+            _ensure_twilio_origination()
         _save("RETELL_FROM_NUMBER", number)
         _save("VOICE_BACKEND", "retell")
 
@@ -140,7 +162,7 @@ def main() -> None:
     parser.add_argument(
         "--enable-inbound",
         action="store_true",
-        help="Set this Retell phone number's inbound_agent_id so callbacks are answered.",
+        help="Answer callbacks: set the number's Retell inbound_agents and route the Twilio trunk to Retell.",
     )
     args = parser.parse_args()
     try:
