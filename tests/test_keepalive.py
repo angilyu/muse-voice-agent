@@ -1,8 +1,7 @@
 import asyncio
 
 import httpx
-
-from muse_voice_agent.keepalive import KeepAliveMiddleware, keep_awake
+from voice_kit.keepalive import KeepAliveMiddleware, keep_awake
 
 
 async def test_keep_awake_pings_url_repeatedly_and_survives_errors():

@@ -42,3 +42,27 @@ def test_service_tier_defaults_to_standard_processing(monkeypatch):
     tier = Settings().llm_service_tier
     assert tier == "default"
     assert "service_tier" not in llm_model_init_args("openai:gpt-5.4@low", service_tier=tier)[1]
+
+
+def test_voice_preset_keeps_legacy_env_names(monkeypatch):
+    for name in ("MUSE_VOICE_PRESET", "MUSE_STT_MODEL", "MUSE_TTS_MODEL", "MUSE_TTS_VOICE"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setenv("STT_MODEL", "deepgram/nova-3")
+    monkeypatch.setenv("TTS_MODEL", "cartesia/sonic-3")
+    monkeypatch.setenv("TTS_VOICE", "v1")
+
+    voice = Settings().voice
+
+    assert (voice.stt_model, voice.tts_model, voice.tts_voice) == ("deepgram/nova-3", "cartesia/sonic-3", "v1")
+
+
+def test_voice_preset_defaults_match_previous_settings(monkeypatch):
+    for name in ("MUSE_VOICE_PRESET", "MUSE_STT_MODEL", "MUSE_TTS_MODEL", "MUSE_TTS_VOICE", "STT_MODEL", "TTS_MODEL", "TTS_VOICE"):
+        monkeypatch.delenv(name, raising=False)
+
+    voice = Settings().voice
+
+    assert voice.name == "default" and voice.language == "en"
+    assert voice.stt_model == "assemblyai/universal-3-5-pro"
+    assert voice.tts_model == "fishaudio/s2.1-pro"
+    assert voice.tts_voice == "fa4c9eb3dccc4806b382b40d61c6b10a"

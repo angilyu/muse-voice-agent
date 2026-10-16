@@ -288,6 +288,52 @@ def test_slow_reply_to_a_person_gets_a_filler_once(settings):
         assert text.strip() == "Sure."  # no filler for a menu
 
 
+@pytest.mark.parametrize("hold", [True, False])
+async def test_filler_is_vetoed_once_the_graph_puts_us_on_hold(hold):
+    handler = retell.MuseRetellHandler("rc_1", store=None)  # type: ignore[arg-type]
+
+    class _Graph:
+        async def astream(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            handler.control.on_hold = hold
+            await asyncio.sleep(0.15)
+            yield "Sure."
+
+    handler.graph = _Graph()
+    chunks = [c async for c in handler._graph_chunks([], filler_wait=0.1)]
+    assert chunks == (["", "Sure."] if hold else ["Sure."])
+
+
+async def test_hold_from_the_previous_turn_does_not_veto_the_filler():
+    from types import SimpleNamespace
+
+    from langchain_core.messages import HumanMessage
+    from voice_kit.retell import RetellTurn
+
+    handler = retell.MuseRetellHandler("rc_1", store=None)  # type: ignore[arg-type]
+    handler.session = SimpleNamespace(filler_seconds=0.1)  # type: ignore[assignment]
+    handler.control.opener_spoken = True
+    handler.control.on_hold = True  # left over from "please hold"
+    seen = []
+
+    class _Graph:
+        async def astream(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            seen.append(handler.control.on_hold)
+            await asyncio.sleep(0.15)
+            yield "Great, 6:30 works."
+
+    handler.graph = _Graph()
+    turn = RetellTurn(
+        kind="response_required",
+        messages=[HumanMessage(content="Thanks for holding, we have 6:30. Does that work?")],
+        transcript=[],
+        response_id=2,
+        interrupt_id=None,
+    )
+    assert handler.filler_wait(turn) == 0.1
+    chunks = [c async for c in handler.respond(turn)]
+    assert chunks == ["Great, 6:30 works."] and seen == [False]
+
+
 def test_reintro_opener_is_protected(settings):
     store = CallStore(settings.call_db_path)
     model = FakeToolModel(

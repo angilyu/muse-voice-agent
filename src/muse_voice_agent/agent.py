@@ -13,16 +13,8 @@ import logging
 import time
 
 from livekit import api, rtc
-from livekit.agents import (
-    Agent,
-    AgentServer,
-    AgentSession,
-    JobContext,
-    TurnHandlingOptions,
-    cli,
-    inference,
-)
-from livekit.plugins import langchain
+from livekit.agents import Agent, AgentServer, JobContext, cli
+from voice_kit.livekit import build_session, room_options
 
 from .config import get_settings
 from .graph import CallControl, CallOutcome, build_call_graph
@@ -108,12 +100,7 @@ async def entrypoint(ctx: JobContext) -> None:
         await ctx.wait_for_participant(identity=sip_identity)
         store.update_call(call_id, status="in_progress", started_at=time.time())
 
-    session = AgentSession(
-        stt=inference.STT(model=settings.stt_model, language="en"),
-        tts=inference.TTS(model=settings.tts_model, voice=settings.tts_voice),
-        llm=langchain.LLMAdapter(graph=graph, stream_mode="custom"),
-        turn_handling=TurnHandlingOptions(turn_detection=inference.TurnDetector()),
-    )
+    session = build_session(settings.voice, graph=graph)
 
     @session.on("conversation_item_added")
     def _on_item(ev) -> None:  # noqa: ANN001
@@ -138,7 +125,9 @@ async def entrypoint(ctx: JobContext) -> None:
         last_activity = time.monotonic()
 
     # The callee speaks first ("Hello, Luigi's"), so no greeting here.
-    await session.start(agent=Agent(instructions=""), room=ctx.room)
+    await session.start(
+        agent=Agent(instructions=""), room=ctx.room, room_options=room_options(settings.voice)
+    )
 
     async def wait_for_playout() -> None:
         await asyncio.sleep(0.5)

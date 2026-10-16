@@ -503,15 +503,21 @@ src/muse_voice_agent/
   pickup.py       Classifies business lines: screener, voicemail, phone menu, or a person
   graph.py        LangGraph conversation graph, CallControl, and the call tools (record_outcome, end_call, press_digits, wait_on_hold)
   dispatcher.py   Starts calls (Retell, LiveKit, or simulated) and enforces limits
-  retell.py       Retell REST client, custom-LLM websocket, call monitor
+  retell.py       Muse's Retell call handler (binding, pickup/answer watchers, hold/closing), call monitor
   outcome_fallback.py  Reads the result from the transcript when a call ends before record_outcome
   agent.py        Optional LiveKit Agents worker (VOICE_BACKEND=livekit)
   store.py        SQLite call log (status, outcome, transcript)
-  keepalive.py    Self-ping for hosts that sleep when idle
   config.py       Settings from env
 scripts/          Twilio trunk and Retell agent setup, MCP smoke test
 tests/            Graph, MCP server, Retell websocket and keepalive tests
 ```
+
+The reusable voice plumbing lives in [voice-kit](https://github.com/angilyu/voice-kit), pinned to a
+commit in `pyproject.toml`: the Retell REST client and custom-LLM websocket protocol, text
+streaming helpers (tool-markup filtering, `say` streaming, opener dropping, fillers), LiveKit
+session presets, env helpers and the keepalive pinger. Muse keeps the domain logic: briefs,
+prompts, pickup classification, safety rules, outcomes, the call store and the MCP server.
+To move to a newer voice-kit, change the commit in `pyproject.toml` and run `uv lock`.
 
 ## Development
 

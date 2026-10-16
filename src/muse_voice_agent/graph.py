@@ -20,7 +20,6 @@ we've spoken into silence, to a screener or to a menu hears the opener again.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Callable, Literal, TypedDict
@@ -39,6 +38,14 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
 from pydantic import BaseModel, Field, create_model
+from voice_kit.streaming import (
+    OpenerDropper,
+    SayStreamer,
+    ToolMarkupFilter,
+    is_farewell,
+    message_text,
+    strip_opener,
+)
 
 from .pickup import classify_line, is_greeting, is_note
 from .safety import OutputGuard, assess_commitment_within_limits, is_recording_objection, redact_agent_text
@@ -51,9 +58,6 @@ from .tasks import (
     opening_line,
     self_intro,
 )
-
-_TOOL_MARKER = "<function="
-_TOOL_MARKUP = re.compile(r"<function=.*?/>", re.S)
 
 Outcome = Literal[
     "booked",
@@ -137,73 +141,8 @@ class CallControl:
 
 TERMINAL_TOOLS = {"end_call", "press_digits", "wait_on_hold"}
 _DIGITS = re.compile(r"^[0-9*#]{1,12}$")
-_FAREWELL = re.compile(
-    r"^(?:(?:ok(?:ay)?|alright|all right|great|perfect|awesome|sounds (?:good|great)|cool|got it|"
-    r"will do|you'?re all set|yep|yeah|yes|sure|thanks?|"
-    r"thank you(?: so much| very much)?|you too|same to you|no problem|bye(?:[- ]bye)?|goodbye|"
-    r"have a (?:good|great|nice) (?:one|day|night|evening)|take care|see you|see ya|"
-    r"you'?re welcome)[\s,.!]*)+$",
-    re.I,
-)
-
-
-def is_farewell(text: str) -> bool:
-    """True for a pure sign-off ("Okay, thanks, bye!") with no question or new information."""
-    text = text.strip()
-    return bool(_FAREWELL.match(text)) and bool(
-        re.search(r"\bbye\b|goodbye|take care|have a (?:good|great|nice)|see (?:you|ya)", text, re.I)
-    )
-
-
 class CallState(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
-
-
-def _text(chunk: AIMessageChunk) -> str:
-    content = chunk.content
-    if isinstance(content, str):
-        return content
-    return "".join(
-        part.get("text", "") if isinstance(part, dict) else str(part) for part in content or []
-    )
-
-
-class _ToolMarkupFilter:
-    """Drop raw streamed tool-call markup before it reaches TTS."""
-
-    def __init__(self) -> None:
-        self._buffer = ""
-
-    def feed(self, text: str) -> str:
-        self._buffer += text
-        out: list[str] = []
-        while self._buffer:
-            start = self._buffer.find(_TOOL_MARKER)
-            if start < 0:
-                keep = self._partial_marker_len(self._buffer)
-                emit, self._buffer = self._buffer[: len(self._buffer) - keep], self._buffer[len(self._buffer) - keep :]
-                out.append(emit)
-                break
-            out.append(self._buffer[:start])
-            end = self._buffer.find("/>", start)
-            if end < 0:
-                self._buffer = self._buffer[start:]
-                break
-            self._buffer = self._buffer[end + 2 :]
-        return "".join(out)
-
-    def flush(self) -> str:
-        text = "" if self._buffer.startswith(_TOOL_MARKER) else self._buffer
-        self._buffer = ""
-        return _TOOL_MARKUP.sub("", text)
-
-    @staticmethod
-    def _partial_marker_len(text: str) -> int:
-        max_len = min(len(text), len(_TOOL_MARKER) - 1)
-        for n in range(max_len, 0, -1):
-            if _TOOL_MARKER.startswith(text[-n:]):
-                return n
-        return 0
 
 
 def _line_notes(task: AnyTask, kind: str | None, *, intro_now: bool, reintro: bool) -> list[str]:
@@ -256,7 +195,7 @@ def _status_notes(
         customer_name = getattr(task, "customer_name", "")
         first = customer_name.split()[0].lower() if customer_name else ""
         heard = any(
-            first and isinstance(m, AIMessage) and first in _content_text(m).lower() for m in history
+            first and isinstance(m, AIMessage) and first in message_text(m).lower() for m in history
         )
         if customer_name and not heard:
             notes.append(
@@ -273,82 +212,6 @@ def _notes_message(notes: list[str]) -> SystemMessage | None:
     if not notes:
         return None
     return SystemMessage(content="Call status right now:\n- " + "\n- ".join(notes))
-
-
-_PARTIAL_SAY = re.compile(r'"say"\s*:\s*"((?:[^"\\]|\\.)*)(")?')
-
-
-class _OpenerDropper:
-    """Drops a copy of the opener the model sometimes starts with; it was already spoken."""
-
-    def __init__(self, opener: str) -> None:
-        self.opener = opener.strip().lower()
-        self.buf = ""
-        self.done = False
-
-    def feed(self, text: str) -> str:
-        if self.done:
-            return text
-        self.buf += text
-        head = self.buf.lstrip().lower()
-        if len(head) < len(self.opener) and self.opener.startswith(head):
-            return ""  # might still be the opener
-        self.done = True
-        out, self.buf = self.buf, ""
-        if head.startswith(self.opener):
-            return out.lstrip()[len(self.opener) :].lstrip()
-        return out
-
-    def flush(self) -> str:
-        self.done = True
-        out, self.buf = self.buf, ""
-        return out
-
-
-def _strip_opener(text: str, opener: str) -> str:
-    if text.lower().startswith(opener.strip().lower()):
-        return text[len(opener.strip()) :].lstrip()
-    return text
-
-
-class _SayStreamer:
-    """Pull the `say` argument out of record_outcome's streamed JSON arguments as it arrives."""
-
-    def __init__(self) -> None:
-        self._args: dict[int, list[str]] = {}
-        self._names: dict[int, str] = {}
-        self.spoken = ""
-        self.done = False
-
-    def feed(self, chunk: AIMessageChunk) -> str:
-        """Return newly available `say` text."""
-        for tc in getattr(chunk, "tool_call_chunks", None) or []:
-            idx = tc.get("index") or 0
-            if tc.get("name"):
-                self._names[idx] = tc["name"]
-            if tc.get("args"):
-                self._args.setdefault(idx, []).append(tc["args"])
-        if self.done:
-            return ""
-        for idx, name in self._names.items():
-            if name != "record_outcome":
-                continue
-            m = _PARTIAL_SAY.search("".join(self._args.get(idx, [])))
-            if not m:
-                return ""
-            raw = m.group(1)
-            if m.group(2):
-                self.done = True
-            else:
-                raw = re.sub(r"\\(?:u[0-9a-fA-F]{0,3})?$", "", raw)
-            try:
-                value = json.loads(f'"{raw}"')
-            except ValueError:
-                return ""
-            new = value[len(self.spoken) :] if value.startswith(self.spoken) else ""
-            self.spoken = value if value.startswith(self.spoken) else self.spoken
-            return new
-        return ""
 
 
 _ANYTHING_ELSE = re.compile(
@@ -386,17 +249,10 @@ def _hold_hangup_until_they_reply(
     if not recorded and not asked and not should_wait_after_outcome:
         return msg
     kept = [tc for tc in msg.tool_calls if tc["name"] != "end_call"]
-    if not _text(msg).strip():
+    if not message_text(msg).strip():
         fallback = _silent_hangup_fallback(their_last_line, done=control.outcome is not None or bool(recorded))
         return AIMessageChunk(content=fallback, tool_calls=kept, id=msg.id)
     return AIMessageChunk(content=msg.content, tool_calls=kept, id=msg.id)
-
-
-def _content_text(m: BaseMessage) -> str:
-    c = m.content
-    if isinstance(c, str):
-        return c
-    return "".join(p.get("text", "") if isinstance(p, dict) else str(p) for p in c or [])
 
 
 UNAUTHORIZED_COMMIT_NOTE = "Agent was not authorized to commit; confirm with the business yourself."
@@ -528,13 +384,13 @@ def build_call_graph(
         history = state["messages"]
         control.on_hold = False
         last = history[-1] if history else None
-        if control.closing and isinstance(last, HumanMessage) and is_farewell(_content_text(last)):
+        if control.closing and isinstance(last, HumanMessage) and is_farewell(message_text(last)):
             # They're just signing off; answer in kind without waiting on the model.
             writer("Bye!")
             control.end_requested = True
             return {"messages": [AIMessage(content="Bye!")]}
 
-        last_line = _content_text(last) if isinstance(last, HumanMessage) else ""
+        last_line = message_text(last) if isinstance(last, HumanMessage) else ""
         if not last_line or is_note(last_line):
             kind = None
         else:
@@ -563,14 +419,14 @@ def build_call_graph(
             writer(redact_agent_text(text, getattr(task, "shareable_details", {})))
             return {"messages": [AIMessage(content=text)]}
         earlier_lines = [
-            _content_text(m)
+            message_text(m)
             for m in history[:-1]
-            if isinstance(m, HumanMessage) and not is_note(_content_text(m))
+            if isinstance(m, HumanMessage) and not is_note(message_text(m))
         ]
         # Someone has heard us only if the line just before this one was a person; a screener
         # handoff, menu or voicemail in between means whoever speaks now is new to the call.
         person_before = bool(earlier_lines) and classify_line(earlier_lines[-1]) == "person"
-        spoke_before = any(isinstance(m, AIMessage) and _content_text(m).strip() for m in history)
+        spoke_before = any(isinstance(m, AIMessage) and message_text(m).strip() for m in history)
 
         if kind == "screener_wait" and not person_before and control.outcome is None:
             # A screener or forwarding service is connecting us ("please stay on the line"); talking
@@ -602,12 +458,12 @@ def build_call_graph(
         if (note := _notes_message(notes)) is not None:
             messages.append(note)
         full: AIMessageChunk | None = None
-        tool_filter = _ToolMarkupFilter()
-        say_streamer = _SayStreamer()
+        tool_filter = ToolMarkupFilter()
+        say_streamer = SayStreamer()
         output_guard = OutputGuard(getattr(task, "shareable_details", {}))
         held: str | None = ""  # don't speak until there's a word, so "..." alone is never voiced
         spoke_text = False
-        dropper = _OpenerDropper(opener) if intro_now else None
+        dropper = OpenerDropper(opener) if intro_now else None
 
         def speak(text: str) -> None:
             nonlocal held
@@ -624,7 +480,7 @@ def build_call_graph(
                 held += text
 
         async for chunk in llm_with_tools.astream(messages):
-            text = tool_filter.feed(_text(chunk))
+            text = tool_filter.feed(message_text(chunk))
             if text and not say_streamer.spoken:
                 speak(text)
                 spoke_text = spoke_text or bool(text.strip())
@@ -661,17 +517,17 @@ def build_call_graph(
             writer(tail)
         if full is not None and full.tool_calls:
             their_last = next(
-                (_content_text(m) for m in reversed(history) if isinstance(m, HumanMessage)), ""
+                (message_text(m) for m in reversed(history) if isinstance(m, HumanMessage)), ""
             )
-            before_hold_text = _text(full).strip()
+            before_hold_text = message_text(full).strip()
             full = _hold_hangup_until_they_reply(full, their_last, control)
-            after_hold_text = _text(full).strip()
+            after_hold_text = message_text(full).strip()
             if after_hold_text and not before_hold_text:
                 writer(after_hold_text)
         if (
             full is not None
             and any(tc["name"] == "end_call" for tc in full.tool_calls)
-            and not _text(full).strip()
+            and not message_text(full).strip()
         ):
             # Never hang up in silence.
             writer("Bye!")
@@ -680,10 +536,10 @@ def build_call_graph(
             return {"messages": [AIMessage(content=opener)] if intro_now else []}
         content: Any = full.content
         if intro_now:
-            content = f"{opener} {_strip_opener(_text(full).strip(), opener)}".strip()
+            content = f"{opener} {strip_opener(message_text(full).strip(), opener)}".strip()
         if isinstance(content, str):
             content = redact_agent_text(content, getattr(task, "shareable_details", {}))
-        if control.outcome is not None and _text(full).strip() and not full.tool_calls:
+        if control.outcome is not None and message_text(full).strip() and not full.tool_calls:
             control.closing = True
         return {
             "messages": [AIMessage(content=content, tool_calls=full.tool_calls, id=full.id)]
@@ -694,7 +550,7 @@ def build_call_graph(
         if ai is None:
             return "caller"
         names = {tc["name"] for tc in ai.tool_calls}
-        said = _content_text(ai).strip()
+        said = message_text(ai).strip()
         spoke = bool(said.removeprefix(opener).strip())  # the fixed opener doesn't count
         if "record_outcome" in names and spoke:
             control.closing = True

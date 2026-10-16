@@ -9,7 +9,9 @@ from langchain_core.language_models.fake_chat_models import GenericFakeChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage
 from langchain_core.outputs import ChatGenerationChunk
 
-from muse_voice_agent.graph import CallOutcome, _ToolMarkupFilter, build_call_graph
+from voice_kit.streaming import OpenerDropper, SayStreamer, ToolMarkupFilter
+
+from muse_voice_agent.graph import CallOutcome, build_call_graph
 from muse_voice_agent.tasks import RestaurantReservation
 
 
@@ -222,7 +224,7 @@ def test_general_order_prompt_allows_commitments_and_defaults():
 
 
 def test_raw_streamed_tool_markup_is_filtered_across_chunks():
-    f = _ToolMarkupFilter()
+    f = ToolMarkupFilter()
     chunks = ['<function=record_outcome ', '={"outcome":"booked"} ', "/> ", "Thanks, goodbye!"]
 
     spoken = "".join(f.feed(chunk) for chunk in chunks) + f.flush()
@@ -422,9 +424,7 @@ async def test_record_outcome_say_is_not_repeated_after_text():
 
 
 def test_say_streamer_handles_partial_json_and_escapes():
-    from muse_voice_agent.graph import _SayStreamer
-
-    streamer = _SayStreamer()
+    streamer = SayStreamer()
     out = []
     for piece in ['{"sa', 'y": "No wor', 'ries, \\', '"5\\" is too early', '. Bye!", "outcome": "unav']:
         chunk = AIMessageChunk(content="", tool_call_chunks=[{"name": "record_outcome" if not out else None, "args": piece, "id": "r", "index": 0}])
@@ -552,15 +552,13 @@ async def test_screener_repair_line_does_not_block_reintroduction_to_the_connect
 @pytest.mark.asyncio
 @pytest.mark.parametrize("chunked", [False, True])
 async def test_model_repeating_the_opener_is_not_spoken_twice(chunked):
-    from muse_voice_agent.graph import _OpenerDropper
-
     if chunked:
-        dropper = _OpenerDropper(OPENER)
+        dropper = OpenerDropper(OPENER)
         parts = [OPENER[:10], OPENER[10:30], OPENER[30:] + " Calling", " about jeans."]
         assert "".join(dropper.feed(p) for p in parts) + dropper.flush() == "Calling about jeans."
-        other = _OpenerDropper(OPENER)
+        other = OpenerDropper(OPENER)
         assert other.feed("Hi") == "" and other.feed(" there!") == "Hi there!"
-        partial = _OpenerDropper(OPENER)
+        partial = OpenerDropper(OPENER)
         assert partial.feed("Hi, this") == "" and partial.flush() == "Hi, this"
         return
     model = FakeToolModel(messages=iter([AIMessage(content=OPENER + " I'm calling about hemming jeans. Bye!")]))

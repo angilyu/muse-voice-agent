@@ -10,9 +10,11 @@ ENV PYTHONUNBUFFERED=1 \
     MCP_PORT=10000
 
 # Install the locked runtime deps (no dev group, no livekit extra) from public PyPI.
+# voice-kit is pinned to a git commit; fetch that commit's GitHub tarball so the image needs no git.
 ARG PYPI_INDEX_URL=https://pypi.org/simple
 COPY pyproject.toml uv.lock ./
 RUN uv export --frozen --no-dev --no-emit-project -o /tmp/requirements.txt \
+    && sed -i -E 's#git\+(https://github\.com/[^@ ]+)@([0-9a-f]{40})#\1/archive/\2.tar.gz#' /tmp/requirements.txt \
     && uv pip install --system --no-cache --index-url "$PYPI_INDEX_URL" -r /tmp/requirements.txt \
     && rm /tmp/requirements.txt
 

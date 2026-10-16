@@ -1,84 +1,34 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 from dotenv import load_dotenv
+from voice_kit.env import env_bool as _bool
+from voice_kit.env import env_int as _int
+from voice_kit.env import env_list as _list
+from voice_kit.env import env_str as _str
+from voice_kit.llm import LLMModelSpec, llm_model_init_args, parse_llm_model_spec
+from voice_kit.presets import VoicePreset, preset_from_env
+
+__all__ = ["LLMModelSpec", "Settings", "get_settings", "llm_model_init_args", "parse_llm_model_spec"]
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 load_dotenv(PROJECT_ROOT / ".env")
 
 
-def _bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None or raw.strip() == "":
-        return default
-    return raw.strip().lower() in {"1", "true", "yes", "on"}
+# Unprefixed names Muse has always read for its voice; they override MUSE_* preset variables.
+_LEGACY_VOICE_ENV = {"STT_MODEL": "stt_model", "TTS_MODEL": "tts_model", "TTS_VOICE": "tts_voice"}
 
 
-def _int(name: str, default: int) -> int:
-    raw = os.getenv(name)
-    return int(raw) if raw and raw.strip() else default
-
-
-def _str(name: str, default: str = "") -> str:
-    raw = os.getenv(name)
-    return raw.strip() if raw and raw.strip() else default
-
-
-def _list(name: str, default: str) -> list[str]:
-    return [p.strip() for p in _str(name, default).split(",") if p.strip()]
-
-
-@dataclass(frozen=True)
-class LLMModelSpec:
-    model: str
-    reasoning_effort: str | None = None
-
-
-def parse_llm_model_spec(raw: str) -> LLMModelSpec:
-    """Parse ``provider:model[@reasoning_effort]`` for production model settings."""
-    value = (raw or "").strip()
-    if not value:
-        raise ValueError("LLM model must not be empty")
-    model, sep, effort = value.rpartition("@")
-    if not sep:
-        return LLMModelSpec(model=value)
-    model = model.strip()
-    effort = effort.strip()
-    if not model or not effort:
-        raise ValueError(f"Invalid LLM model spec {raw!r}; expected provider:model[@effort]")
-    return LLMModelSpec(model=model, reasoning_effort=effort)
-
-
-def llm_model_init_args(
-    raw: str,
-    *,
-    temperature: float | None = 0.3,
-    service_tier: str | None = None,
-) -> tuple[str, dict[str, Any]]:
-    """Return the model name and ``init_chat_model`` kwargs for a production model spec.
-
-    Reasoning-effort specs intentionally omit temperature because OpenAI reasoning models reject
-    non-default temperature. ``service_tier`` (e.g. "priority") only applies to OpenAI models.
-    """
-    spec = parse_llm_model_spec(raw)
-    kwargs: dict[str, Any] = {}
-    if spec.reasoning_effort:
-        kwargs["reasoning_effort"] = spec.reasoning_effort
-        if spec.model.startswith("openai:"):
-            # OpenAI Chat Completions currently rejects reasoning_effort together with tools for
-            # gpt-5.4. LangChain's Responses API path supports streaming + tool calling.
-            kwargs["use_responses_api"] = True
-    elif temperature is not None:
-        kwargs["temperature"] = temperature
-    tier = (service_tier or "").strip().lower()
-    if tier and tier != "default" and spec.model.startswith("openai:"):
-        kwargs["service_tier"] = tier
-    return spec.model, kwargs
+def voice_preset_from_env() -> VoicePreset:
+    """LiveKit voice preset from ``MUSE_VOICE_PRESET`` (and other ``MUSE_*`` voice-kit variables),
+    with the legacy ``STT_MODEL``/``TTS_MODEL``/``TTS_VOICE`` names still honoured."""
+    preset = preset_from_env(prefix="MUSE_")
+    legacy = {field_name: _str(env_name) for env_name, field_name in _LEGACY_VOICE_ENV.items()}
+    legacy = {k: v for k, v in legacy.items() if v}
+    return preset.with_overrides(**legacy) if legacy else preset
 
 
 @dataclass(frozen=True)
@@ -107,11 +57,8 @@ class Settings:
     # OpenAI processing tier. "default" (standard processing) is used for live calls and evals;
     # "priority" answers a little faster at about 2x the token price and is opt-in only.
     llm_service_tier: str = field(default_factory=lambda: _str("LLM_SERVICE_TIER", "default"))
-    stt_model: str = field(default_factory=lambda: _str("STT_MODEL", "assemblyai/universal-3-5-pro"))
-    tts_model: str = field(default_factory=lambda: _str("TTS_MODEL", "fishaudio/s2.1-pro"))
-    tts_voice: str = field(
-        default_factory=lambda: _str("TTS_VOICE", "fa4c9eb3dccc4806b382b40d61c6b10a")
-    )
+    # LiveKit STT/TTS/turn-taking (voice-kit preset; Retell configures its own voice)
+    voice: VoicePreset = field(default_factory=voice_preset_from_env)
 
     # MCP server
     mcp_host: str = field(default_factory=lambda: _str("MCP_HOST", "127.0.0.1"))
@@ -174,14 +121,11 @@ class Settings:
 
     def retell_llm_websocket_url(self) -> str:
         """URL Retell dials for the custom LLM; Retell appends /{retell_call_id}."""
+        from voice_kit.retell import retell_llm_websocket_url
+
         if not self.public_base_url or not self.retell_ws_secret:
             raise ValueError("PUBLIC_BASE_URL and RETELL_WS_SECRET must be set")
-        base = self.public_base_url
-        if base.startswith("https://"):
-            base = "wss://" + base[len("https://") :]
-        elif base.startswith("http://"):
-            base = "ws://" + base[len("http://") :]
-        return f"{base}/retell/llm/{self.retell_ws_secret}"
+        return retell_llm_websocket_url(self.public_base_url, self.retell_ws_secret)
 
 
 def get_settings() -> Settings:

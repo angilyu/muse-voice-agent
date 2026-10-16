@@ -14,12 +14,12 @@ from typing import Any, Protocol
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
+from voice_kit.retell import transcript_to_messages
 
 from muse_voice_agent import retell as retell_module
 from muse_voice_agent.graph import CallControl, CallOutcome, build_call_graph
 from muse_voice_agent.outcome_fallback import infer_outcome
 from muse_voice_agent.pickup import classify_line, is_greeting
-from muse_voice_agent.retell import transcript_to_messages
 
 from . import copilot_llm
 from .cases.schema import EvalCase, select_cases

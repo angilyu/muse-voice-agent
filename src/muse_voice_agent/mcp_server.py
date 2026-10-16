@@ -25,12 +25,12 @@ from mcp.types import ToolAnnotations
 from pydantic import ValidationError
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
+from voice_kit.keepalive import KeepAliveMiddleware
 
 from .config import Settings, get_settings
 from .dispatcher import CallRejected, start_call
-from .keepalive import KeepAliveMiddleware
 from .report import build_report, speaker_transcript
-from .retell import RetellWebsocketRouter, sync_agent_websocket_url
+from .retell import build_websocket_router, sync_agent_websocket_url
 from .safety import recording_disclosure_required, reject_sensitive_payload
 from .store import FINAL_STATUSES, CallStore
 from .tasks import Authority, GeneralCall, HandymanQuote, RestaurantReservation
@@ -470,7 +470,7 @@ def build_app(
         host=settings.mcp_host,
     )
     # HTTP requests need the bearer token; websockets are only Retell's (secret-path protected).
-    app = RetellWebsocketRouter(
+    app = build_websocket_router(
         BearerAuthMiddleware(app, settings.mcp_auth_token), settings, store, model_factory
     )
     if settings.keepalive_seconds > 0 and settings.public_base_url:

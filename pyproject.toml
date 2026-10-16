@@ -18,12 +18,13 @@ dependencies = [
     "pydantic>=2",
     "python-dotenv>=1.2.3",
     "uvicorn>=0.54.0",
+    "voice-kit[openai,retell,server] @ git+https://github.com/angilyu/voice-kit@309c363",
     "websockets>=15",
 ]
 
 [project.optional-dependencies]
 # Only needed for VOICE_BACKEND=livekit (the agent.py worker); the Retell deploy omits it.
-livekit = ["livekit-agents[langchain]~=1.8"]
+livekit = ["voice-kit[livekit] @ git+https://github.com/angilyu/voice-kit@309c363"]
 
 [project.scripts]
 muse-voice-agent = "muse_voice_agent.agent:main"
@@ -36,9 +37,9 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "github-copilot-sdk>=1.0.15",
-    "livekit-agents[langchain]~=1.8",
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
+    "voice-kit[livekit] @ git+https://github.com/angilyu/voice-kit@309c363",
 ]
 
 
