@@ -474,10 +474,18 @@ upgrading to Plus.
   callbacks from businesses, and status checks are free. Free minutes are used first.
 - **When it's checked.** Before dialing. If the allowance is used up, `place_call` (and the
   shortcuts) return `{"error": "payment_required", "message": "...", "billing_url": "..."}` and
-  nothing is dialed, so the assistant can tell the user in plain language. A call in progress is
-  never cut off. Results include a `billing_notice` when two or fewer minutes are left.
-- **Pages.** `/pricing` (sign up with an email, get a key), `/account` (sign in with the key, see
-  usage, subscribe to a plan, change plan or cancel, rotate the key). Rotating or revoking a key
+  nothing is dialed, so the assistant can tell the user in plain language. Results include a
+  `billing_notice` when two or fewer minutes are left.
+- **Calls that run over.** A call that starts with minutes left can finish even if it goes past
+  them, by up to `CALL_OVERAGE_MINUTES` (default 20). The overage is one allowance per account,
+  shared by all its calls that are going at once, and the server re-checks it while calls run. When
+  it's used up the agent says a short goodbye and hangs up, and the call result includes `cut_off`.
+  The overage is billed like any other talk time; a free-minutes call that runs past the free
+  minutes of a subscriber uses plan minutes. `MAX_CALL_SECONDS` still caps every call, so with the
+  default 5-minute cap this only matters if you raise it.
+- **Pages.** `/pricing` (enter an email, confirm it with a 6-digit code we email, get a key),
+  `/account` (sign in with the key or an emailed code, see usage, subscribe to a plan, change plan
+  or cancel, rotate the key). Rotating or revoking a key
   signs out every browser that used the old one. Checkout and the billing portal are hosted by
   Stripe; this server stores only the Stripe customer/subscription ids, never card details.
 - **Admin.** `MCP_AUTH_TOKEN` still works as an unmetered admin key that sees legacy calls and
@@ -486,7 +494,7 @@ upgrading to Plus.
 **Stripe setup:**
 1. Create two recurring monthly prices, $5 (Starter) and $20 (Plus), and put their ids in
    `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PLUS`. Put the secret key in `STRIPE_SECRET_KEY`.
-   Sign-ups stay closed until the key and at least one price are set.
+   Sign-ups stay closed until the key, at least one price and email (below) are set.
 2. Add a webhook endpoint at `https://<your-host>/stripe/webhook` for `checkout.session.completed`,
    `customer.subscription.created`, `customer.subscription.updated`,
    `customer.subscription.deleted`, `invoice.paid` and `invoice.payment_failed`. Put its signing
@@ -494,6 +502,12 @@ upgrading to Plus.
 3. In Settings → Billing → Customer portal, allow customers to update payment methods, view
    invoices and cancel subscriptions, and turn on switching plans with both prices.
 4. Use test-mode keys first and pay with card `4242 4242 4242 4242`.
+
+**Email setup.** Sign-up and sign-in codes are sent over SMTP. Set `SMTP_HOST`, `SMTP_PORT`
+(587 for STARTTLS or 465 for TLS), `SMTP_USERNAME`, `SMTP_PASSWORD` and `EMAIL_FROM`. Any provider
+works, for example a Gmail account with an app password (`smtp.gmail.com`), or Resend/SendGrid
+SMTP with a verified domain. For local testing, `SMTP_HOST=log` writes the codes to the server log
+instead of sending them.
 
 **Admin commands.** Run them where the database lives: locally with `uv run muse-voice-billing`, or
 on Render from the service's Shell with `python -m muse_voice_agent.billing_cli`:
@@ -555,11 +569,13 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `DEFAULT_CUSTOMER_NAME` | — | LiveKit console agent only. MCP call tools require the client to pass `customer_name` |
 | `KEEPALIVE_SECONDS` | `0` | When greater than 0, the server pings its own `/healthz` at this interval |
 | `CALL_DB_PATH` | `data/calls.db` | SQLite file for calls, accounts and keys; put it on a persistent disk |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | Billing; sign-ups are closed until the key and a price are set |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | Billing; sign-ups are closed until the key, a price and email are set |
 | `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PLUS` | — | Stripe price ids for the $5 and $20 monthly plans |
 | `FREE_TRIAL_MINUTES` | `10` | Free minutes per new account |
 | `STARTER_MINUTES` / `PLUS_MINUTES` | `50` / `200` | Minutes per paid period (`0` = unlimited) |
 | `BILLING_GRACE_DAYS` | `3` | Days a past-due subscription keeps working |
+| `CALL_OVERAGE_MINUTES` | `20` | How far past its remaining minutes a call can run before it's ended |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USERNAME` / `SMTP_PASSWORD` / `EMAIL_FROM` | — / `587` / — / — / — | Email for sign-up codes; sign-ups are closed until set (`SMTP_HOST=log` for local testing) |
 | `MAX_CONCURRENT_CALLS_PER_ACCOUNT` / `SIGNUPS_PER_IP_PER_DAY` | `2` / `3` | Abuse limits |
 | `BILLING_SESSION_SECRET` / `SUPPORT_EMAIL` | derived / — | Account-page cookie key; contact shown on billing pages |
 

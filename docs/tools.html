@@ -46,7 +46,9 @@
 }</code></pre>
     <p>Show the <code>message</code> and link to the user and don't retry. <code>get_call_status</code>,
       <code>list_calls</code> and <code>get_updates</code> keep working. When two or fewer minutes are
-      left, call results also include a <code>billing_notice</code> string to pass on.</p>
+      left, call results also include a <code>billing_notice</code> string to pass on. A call that runs
+      20 minutes past the remaining minutes is ended politely, and its result includes a
+      <code>cut_off</code> explanation.</p>
 
     <h2 id="flow">Typical flow</h2>
     <ol>
