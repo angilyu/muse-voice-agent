@@ -144,7 +144,10 @@ class Settings:
         default_factory=lambda: _str("RECORDING_DISCLOSURE_SCOPE", "always").lower()
     )
     call_recording_enabled: bool = field(default_factory=lambda: _bool("CALL_RECORDING_ENABLED", True))
-    max_call_seconds: int = field(default_factory=lambda: _int("MAX_CALL_SECONDS", 300))
+    # Retell accepts 1 minute to 2 hours, so the value is clamped to that range.
+    max_call_seconds: int = field(
+        default_factory=lambda: min(max(_int("MAX_CALL_SECONDS", 7200), 60), 7200)
+    )
     max_concurrent_calls: int = field(default_factory=lambda: _int("MAX_CONCURRENT_CALLS", 3))
     # Retell: speak first if the line is silent this long after pickup (0 disables).
     silent_pickup_ms: int = field(default_factory=lambda: _int("SILENT_PICKUP_MS", 3000))
