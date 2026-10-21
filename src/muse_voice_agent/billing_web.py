@@ -306,8 +306,9 @@ shows its secure credential prompt, paste the new key.</p>
             connect = _muse_steps(self._base(request), first_step=2)
         body = f"""<h1>{_e(title)}</h1>{intro}
 <div class="card notice"><h2>Step 1: Copy your API key</h2>
-<p>Save it somewhere safe. For your security we won't show it again, but you can make a new one
-from your account page anytime.</p><code class="key" id="key">{_e(key)}</code>
+<p>You'll paste it into Muse in the next step, and Muse keeps it for you, so there's no need to
+save it anywhere else. We only show it once; if you ever need it again, make a new one from your
+account page.</p><code class="key" id="key">{_e(key)}</code>
 <div class="row">{_copy_button("key", "Copy key")}</div></div>
 {connect}
 <p><a class="btn" href="/account">Go to your account</a></p>"""
@@ -627,7 +628,7 @@ def _muse_steps(base: str, *, first_step: int, key_step: bool = False) -> str:
     parts = []
     if key_step:
         parts.append(f"""<div class="card"><h2>Step {n}: Have your API key ready</h2><p>It's the
-<code>mva_...</code> key you copied when you signed up. Lost it? Make a new one above.</p></div>""")
+<code>mva_...</code> key shown when you signed up. Don't have it? Make a new one above.</p></div>""")
         n += 1
     parts.append(f"""<div class="card"><h2>Step {n}: Send Muse this message</h2>
 <p>Open a chat with Muse, paste this, and send it.</p>
