@@ -293,25 +293,19 @@ value="{_e(email)}"><button type="submit" class="secondary">Send a new code</but
 
     def _key_page(self, request: Request, key: str, title: str, *, rotated: bool = False) -> HTMLResponse:
         if rotated:
-            intro = "<p>Your old key no longer works. Copy the new one, then update it in Muse.</p>"
-            connect = """<div class="card"><h2>Step 2: Update the key in Muse</h2>
+            body = f"""<h1>{_e(title)}</h1><p>Your old key no longer works. Update it in Muse.</p>
+<div class="card notice"><h2>Update the key in Muse</h2>
 <p>Tell Muse: <em>"Update the API key for my phone-calling agent integration."</em> When Muse
-shows its secure credential prompt, paste the new key.</p>
+shows its secure credential prompt, paste this key there, <strong>never in the chat</strong>.</p>
+{_key_block(key)}</div>
 <p class="muted">Haven't added the agent to Muse yet? The setup steps are on your
-<a href="/account">account page</a>.</p></div>"""
+<a href="/account">account page</a>.</p>"""
         else:
-            intro = (f"<p>You have {self.settings.free_trial_minutes} free minutes of calls. Adding "
-                     "the agent to Muse takes about 2 minutes: copy your key, send Muse one "
-                     "message, and paste the key when Muse asks for it.</p>")
-            connect = _muse_steps(self._base(request), first_step=2)
-        body = f"""<h1>{_e(title)}</h1>{intro}
-<div class="card notice"><h2>Step 1: Copy your API key</h2>
-<p>You'll paste it into Muse in the next step, and Muse keeps it for you, so there's no need to
-save it anywhere else. We only show it once; if you ever need it again, make a new one from your
-account page.</p><code class="key" id="key">{_e(key)}</code>
-<div class="row">{_copy_button("key", "Copy key")}</div></div>
-{connect}
-<p><a class="btn" href="/account">Go to your account</a></p>"""
+            body = f"""<h1>{_e(title)}</h1>
+<p>You have {self.settings.free_trial_minutes} free minutes of calls. Adding the agent to Muse
+takes about 2 minutes: send Muse one message, then paste your key when Muse asks for it.</p>
+{_muse_steps(self._base(request), key=key)}"""
+        body += '\n<p><a class="btn" href="/account">Go to your account</a></p>'
         return _page(title, body)
 
     async def account(self, request: Request) -> Response:
@@ -397,7 +391,7 @@ it in Muse afterwards.</p><form method="post" action="/account/rotate-key"
 onsubmit="return confirm('Make a new key? The current key stops working.')">
 <button class="secondary">Make a new API key</button></form></div>
 <details class="card"{setup_open}><summary><strong>Add the agent to Muse</strong></summary>
-{_muse_steps(base, first_step=1, key_step=True)}</details>{_logout_form()}"""
+{_muse_steps(base)}</details>{_logout_form()}"""
         return _page("Account", body)
 
     def _has_subscription(self, account: Account) -> bool:
@@ -622,22 +616,30 @@ def muse_prompt(mcp_url: str) -> str:
     )
 
 
-def _muse_steps(base: str, *, first_step: int, key_step: bool = False) -> str:
+def _key_block(key: str) -> str:
+    return (f'<code class="key" id="key">{_e(key)}</code>'
+            f'<div class="row">{_copy_button("key", "Copy key")}</div>')
+
+
+def _muse_steps(base: str, *, key: str | None = None) -> str:
     """Numbered cards that walk an existing Muse user through adding the agent."""
-    n = first_step
+    if key:
+        key_html = f"""{_key_block(key)}<p class="muted">Muse keeps the key for you, so there's no
+need to save it. We only show it once; if you ever need it again, make a new one from your account
+page.</p>"""
+    else:
+        key_html = """<p class="muted">Use the <code>mva_...</code> key shown when you signed up.
+Don't have it? Make a new one above.</p>"""
+    n = 1
     parts = []
-    if key_step:
-        parts.append(f"""<div class="card"><h2>Step {n}: Have your API key ready</h2><p>It's the
-<code>mva_...</code> key shown when you signed up. Don't have it? Make a new one above.</p></div>""")
-        n += 1
     parts.append(f"""<div class="card"><h2>Step {n}: Send Muse this message</h2>
 <p>Open a chat with Muse, paste this, and send it.</p>
 <pre class="prompt" id="muse-prompt">{_e(muse_prompt(base + "/mcp"))}</pre>
 <div class="row">{_copy_button("muse-prompt", "Copy message")}</div></div>""")
-    parts.append(f"""<div class="card"><h2>Step {n + 1}: Paste your key when Muse asks</h2>
+    parts.append(f"""<div class="card{' notice' if key else ''}"><h2>Step {n + 1}: Paste your API key when Muse asks</h2>
 <p>Muse connects and shows a secure credential prompt. Paste your API key there,
 <strong>never in the chat</strong>. Muse tests the connection and saves the agent as a skill, so
-you only do this once.</p></div>""")
+you only do this once.</p>{key_html}</div>""")
     parts.append(f"""<div class="card"><h2>Step {n + 2}: Ask Muse to make a call</h2><ul>
 <li><em>"Book a table for 2 at Luigi's (+1…) Friday at 7:30, flexible 6:30 to 8:30."</em></li>
 <li><em>"Get a quote from Bob's Handyman (+1…) to replace a kitchen faucet."</em></li>
