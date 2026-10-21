@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>Muse Voice Agent</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6D5DFC"/>
+      <stop offset="1" stop-color="#22B5C4"/>
+    </linearGradient>
+    <linearGradient id="wave" gradientUnits="userSpaceOnUse" x1="149" y1="0" x2="363" y2="0">
+      <stop offset="0" stop-color="#5B4BE8"/>
+      <stop offset="1" stop-color="#1A9AAA"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <path fill="#FFFFFF" d="M164 116H348A68 68 0 0 1 416 184V288A68 68 0 0 1 348 356H236L158 414L172 356H164A68 68 0 0 1 96 288V184A68 68 0 0 1 164 116Z"/>
+  <g fill="url(#wave)">
+    <rect x="149" y="206" width="26" height="60" rx="13"/>
+    <rect x="196" y="174" width="26" height="124" rx="13"/>
+    <rect x="243" y="146" width="26" height="180" rx="13"/>
+    <rect x="290" y="174" width="26" height="124" rx="13"/>
+    <rect x="337" y="206" width="26" height="60" rx="13"/>
+  </g>
+</svg>
