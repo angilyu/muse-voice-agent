@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 import sqlite3
 import time
@@ -61,7 +62,21 @@ CREATE TABLE IF NOT EXISTS stripe_events (
     type TEXT NOT NULL,
     received_at REAL NOT NULL
 );
+CREATE TABLE IF NOT EXISTS email_codes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    ip TEXT,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at REAL NOT NULL,
+    expires_at REAL NOT NULL,
+    used_at REAL
+);
+CREATE INDEX IF NOT EXISTS email_codes_email ON email_codes (email, created_at);
 """
+
+EMAIL_CODE_TTL_SECONDS = 15 * 60
+EMAIL_CODE_MAX_ATTEMPTS = 5
 
 
 class BillingError(Exception):
@@ -212,6 +227,61 @@ class Billing:
             rows = c.execute("SELECT * FROM accounts ORDER BY created_at").fetchall()
         return [_account(r) for r in rows]
 
+    # --- email verification codes ---------------------------------------------------------
+
+    def new_email_code(self, email: str, ip: str | None = None) -> str:
+        """Make a 6-digit code for `email`; it replaces any earlier unused code."""
+        email = normalize_email(email)
+        code = f"{secrets.randbelow(10**6):06d}"
+        now = time.time()
+        with self._conn() as c:
+            c.execute(
+                "UPDATE email_codes SET used_at = ? WHERE email = ? AND used_at IS NULL",
+                (now, email),
+            )
+            c.execute(
+                "INSERT INTO email_codes (email, code_hash, ip, created_at, expires_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (email, hash_key(f"{email}:{code}"), ip, now, now + EMAIL_CODE_TTL_SECONDS),
+            )
+            c.execute("DELETE FROM email_codes WHERE created_at < ?", (now - 2 * 86400,))
+        return code
+
+    def check_email_code(self, email: str, code: str) -> bool:
+        """True (once) if `code` is the current code for `email`; wrong guesses use it up."""
+        email = normalize_email(email)
+        code = re.sub(r"\D", "", code or "")
+        now = time.time()
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT * FROM email_codes WHERE email = ? AND used_at IS NULL AND expires_at > ?"
+                " ORDER BY id DESC LIMIT 1",
+                (email, now),
+            ).fetchone()
+            if row is None or row["attempts"] >= EMAIL_CODE_MAX_ATTEMPTS:
+                return False
+            if len(code) == 6 and hmac.compare_digest(
+                row["code_hash"], hash_key(f"{email}:{code}")
+            ):
+                c.execute("UPDATE email_codes SET used_at = ? WHERE id = ?", (now, row["id"]))
+                return True
+            c.execute("UPDATE email_codes SET attempts = attempts + 1 WHERE id = ?", (row["id"],))
+        return False
+
+    def email_codes_sent(self, *, since: float, email: str | None = None, ip: str | None = None) -> int:
+        where, args = ["created_at >= ?"], [since]
+        if email is not None:
+            where.append("email = ?")
+            args.append(normalize_email(email))
+        if ip is not None:
+            where.append("ip = ?")
+            args.append(ip)
+        with self._conn() as c:
+            (n,) = c.execute(
+                f"SELECT COUNT(*) FROM email_codes WHERE {' AND '.join(where)}", args
+            ).fetchone()
+        return int(n)
+
     # --- API keys -------------------------------------------------------------------------
 
     def issue_key(self, account_id: str, *, revoke_existing: bool = True) -> str:
@@ -296,6 +366,20 @@ class Billing:
                 account.id, "paid", since=account.current_period_start
             )
         return Usage(free_used, account.free_seconds, paid_used, paid_total)
+
+    def talk_limit_seconds(self, account: Account, bucket: str | None) -> float | None:
+        """Talk time after which a new call is ended: minutes left now plus the overage allowance.
+
+        None means no limit (unmetered accounts and unlimited plans).
+        """
+        if bucket is None or account.is_admin:
+            return None
+        usage = self.usage(account)
+        paid_left = usage.paid_left if account.subscription_active() else 0.0
+        if paid_left is None:
+            return None
+        overage = max(0, self.settings.call_overage_minutes) * 60
+        return usage.free_left + paid_left + overage
 
     def authorize_call(self, account: Account) -> str | None:
         """Pick the allowance a new call draws on, or raise BillingError. None = unmetered."""

@@ -205,6 +205,66 @@ def test_silence_after_goodbye_hangs_up_but_not_on_hold(settings):
         assert text == "" and last["end_call"] is True
 
 
+def test_call_is_ended_politely_at_its_talk_limit(settings, monkeypatch):
+    started_ms = time.time() * 1000
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"call_id": "rc_1", "call_status": "ongoing", "start_timestamp": started_ms}
+        )
+
+    monkeypatch.setattr(
+        retell,
+        "client_factory",
+        lambda s: retell.RetellClient(s.retell_api_key, transport=httpx.MockTransport(handler)),
+    )
+    store = CallStore(settings.call_db_path)
+    model = FakeToolModel(messages=iter([AIMessage(content="Do you have a table at 7?")] * 3))
+    call_id, client, path = _bound_session(settings, store, model)
+    store.update_call(call_id, talk_limit_seconds=0.3)
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        t = [{"role": "user", "content": "Luigi's, how can I help?"}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 1, "transcript": t})
+        _collect(ws, 1)
+        msg = ws.receive_json()
+        assert msg["response_type"] == "agent_interrupt"
+        assert msg["content"] == retell.LIMIT_GOODBYE
+        assert msg["end_call"] is True and msg["content_complete"] is True
+        # Anything the business says after that gets no more replies.
+        t += [{"role": "user", "content": "Wait, what about 8?"}]
+        ws.send_json({"interaction_type": "response_required", "response_id": 2, "transcript": t})
+        text, last = _collect(ws, 2)
+        assert text == "" and last["end_call"] is True
+    assert store.get_call(call_id)["cut_off"] == "minutes_limit"
+
+
+def test_no_talk_limit_watcher_when_the_call_cap_comes_first(settings, monkeypatch):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json={"call_id": "rc_1", "call_status": "ongoing"})
+
+    monkeypatch.setattr(
+        retell,
+        "client_factory",
+        lambda s: retell.RetellClient(s.retell_api_key, transport=httpx.MockTransport(handler)),
+    )
+    store = CallStore(settings.call_db_path)
+    model = FakeToolModel(messages=iter([AIMessage(content="Hi!")]))
+    call_id, client, path = _bound_session(settings, store, model)
+    store.update_call(call_id, talk_limit_seconds=settings.max_call_seconds + 1)
+    with client.websocket_connect(path) as ws:
+        ws.receive_json(), ws.receive_json()
+        ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
+        ws.send_json({"interaction_type": "response_required", "response_id": 1, "transcript": []})
+        _collect(ws, 1)
+    assert calls == []
+    assert store.get_call(call_id)["cut_off"] is None
+
+
 def test_press_digits_is_sent_after_speech(settings):
     store = CallStore(settings.call_db_path)
     press = {"name": "press_digits", "args": {"digits": "1"}, "id": "p"}

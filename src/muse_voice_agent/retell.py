@@ -58,6 +58,10 @@ INBOUND_ANSWER_NOTE = (
 CLOSING_REMINDER_MS = 4000
 # Said when a reply to a person is slow to start, so the line doesn't go dead while the model thinks.
 FILLER = "Hmm, "
+# Said when a call reaches the account's talk-time limit; the call ends right after.
+LIMIT_GOODBYE = (
+    "I'm so sorry, I have to wrap up this call now. Thank you so much for your help. Goodbye!"
+)
 _LEADING_FILLER = re.compile(r"^\s*(?:hmm+|um+|uh+)\b[,.!]?\s*", re.I)
 _background: set[asyncio.Task] = set()
 
@@ -287,6 +291,8 @@ class RetellLLMSession:
         self._heard_response_request = False
         self._interrupt_id = 0
         self._watcher: asyncio.Task | None = None
+        self._limit_watcher: asyncio.Task | None = None
+        self._cut_off = False
         self.retell_call_id = retell_call_id
         self.store = store
         self.model = model
@@ -325,7 +331,7 @@ class RetellLLMSession:
         except (WebSocketDisconnect, RuntimeError):
             logger.info("retell websocket closed (retell call %s)", self.retell_call_id)
         finally:
-            for task in (self._turn, self._watcher):
+            for task in (self._turn, self._watcher, self._limit_watcher):
                 if task and not task.done():
                     task.cancel()
 
@@ -341,7 +347,18 @@ class RetellLLMSession:
             self._save_transcript(msg.get("transcript"))
             if kind == "response_required":
                 self._heard_response_request = True
-            elif self.control.closing or self.control.on_hold:
+            if self._cut_off:
+                await self._send(
+                    {
+                        "response_type": "response",
+                        "response_id": msg["response_id"],
+                        "content": "",
+                        "content_complete": True,
+                        "end_call": True,
+                    }
+                )
+                return
+            if kind == "reminder_required" and (self.control.closing or self.control.on_hold):
                 # Silence after our goodbye means they're done; silence on hold is expected.
                 await self._send(
                     {
@@ -387,6 +404,14 @@ class RetellLLMSession:
                 )
         elif self.settings is not None and self.silent_pickup_seconds is not None:
             self._watcher = asyncio.create_task(self._watch_silent_pickup())
+        limit = record.get("talk_limit_seconds")
+        if (
+            self.settings is not None
+            and record.get("direction") != "inbound"
+            and isinstance(limit, (int, float))
+            and limit < self.settings.max_call_seconds
+        ):
+            self._limit_watcher = asyncio.create_task(self._enforce_talk_limit(float(limit)))
 
     async def _create_inbound_call(self, call: dict[str, Any]) -> dict[str, Any] | None:
         if self.settings is None:
@@ -487,6 +512,50 @@ class RetellLLMSession:
             raise
         except Exception as e:  # noqa: BLE001
             logger.warning("silent-pickup watcher failed (retell call %s): %s", self.retell_call_id, e)
+
+    async def _enforce_talk_limit(self, limit: float) -> None:
+        """End the call politely once its talk time reaches the account's limit."""
+        assert self.settings is not None
+        try:
+            async with client_factory(self.settings) as client:
+                deadline = time.monotonic() + 180
+                while True:
+                    call = await client.get_call(self.retell_call_id)
+                    status = call.get("call_status")
+                    if status == "ongoing":
+                        break
+                    if status in ("ended", "error", "not_connected") or time.monotonic() > deadline:
+                        return
+                    await asyncio.sleep(1.0)
+            started = call.get("start_timestamp")
+            wait = limit
+            if isinstance(started, (int, float)):
+                wait = max(0.0, started / 1000 + limit - time.time())
+            await asyncio.sleep(wait)
+            if self._closed:
+                return
+            logger.info("retell call %s reached its talk limit; ending it", self.retell_call_id)
+            self._cut_off = True
+            self.control.closing = True
+            if self._turn and not self._turn.done():
+                self._turn.cancel()
+            if self.call_id:
+                self.store.update_call(self.call_id, cut_off="minutes_limit")
+            self._interrupt_id += 1
+            await self._send(
+                {
+                    "response_type": "agent_interrupt",
+                    "interrupt_id": self._interrupt_id,
+                    "content": LIMIT_GOODBYE,
+                    "content_complete": True,
+                    "no_interruption_allowed": True,
+                    "end_call": True,
+                }
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001
+            logger.warning("talk-limit watcher failed (retell call %s): %s", self.retell_call_id, e)
 
     def _on_outcome(self, outcome: CallOutcome) -> None:
         self.outcome = outcome

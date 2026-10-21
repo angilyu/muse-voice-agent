@@ -178,12 +178,22 @@ class Settings:
     max_concurrent_calls_per_account: int = field(
         default_factory=lambda: _int("MAX_CONCURRENT_CALLS_PER_ACCOUNT", 2)
     )
+    # A metered call is ended politely once its talk time passes the account's remaining minutes
+    # (at dial time) by this much. MAX_CALL_SECONDS still caps every call.
+    call_overage_minutes: int = field(default_factory=lambda: _int("CALL_OVERAGE_MINUTES", 20))
     signups_per_ip_per_day: int = field(default_factory=lambda: _int("SIGNUPS_PER_IP_PER_DAY", 3))
     # Signs account-page session cookies; derived from MCP_AUTH_TOKEN when unset.
     billing_session_secret: str = field(
         default_factory=lambda: _str("BILLING_SESSION_SECRET"), repr=False
     )
     support_email: str = field(default_factory=lambda: _str("SUPPORT_EMAIL", "angilyu@gmail.com"))
+    # Sign-up and sign-in codes are emailed over SMTP (port 587 with STARTTLS, or 465 with TLS).
+    # SMTP_HOST=log writes emails to the server log instead; only for local development.
+    smtp_host: str = field(default_factory=lambda: _str("SMTP_HOST"))
+    smtp_port: int = field(default_factory=lambda: _int("SMTP_PORT", 587))
+    smtp_username: str = field(default_factory=lambda: _str("SMTP_USERNAME"))
+    smtp_password: str = field(default_factory=lambda: _str("SMTP_PASSWORD"), repr=False)
+    email_from: str = field(default_factory=lambda: _str("EMAIL_FROM"))
 
     # Storage
     call_db_path: Path = field(
@@ -228,6 +238,15 @@ class Settings:
     def billing_configured(self) -> bool:
         """Sign-ups and checkout need Stripe; without it only existing keys work."""
         return bool(self.stripe_secret_key and self.plans)
+
+    @property
+    def email_configured(self) -> bool:
+        return bool(self.smtp_host and (self.email_from or self.smtp_host == "log"))
+
+    @property
+    def signups_open(self) -> bool:
+        """New accounts need Stripe (to pay later) and email (to verify the address)."""
+        return self.billing_configured and self.email_configured
 
     @property
     def billing_url(self) -> str:

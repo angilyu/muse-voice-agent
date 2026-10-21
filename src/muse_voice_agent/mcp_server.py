@@ -112,6 +112,8 @@ def _public_view(
         "direction": record.get("direction") or "outbound",
         "callback_of": record.get("parent_call_id"),
     }
+    if record.get("cut_off") == "minutes_limit":
+        view["cut_off"] = "Ended early because the account ran out of call minutes."
     if include_report and done:
         view["report"] = build_report(record)
     if include_transcript:
@@ -160,7 +162,12 @@ def build_server(
             bucket = billing.authorize_call(account)
             notice = billing.low_balance_notice(account, bucket)
             record = await start_call(
-                task, settings, store, account_id=account.id, billing_bucket=bucket
+                task,
+                settings,
+                store,
+                account_id=account.id,
+                billing_bucket=bucket,
+                talk_limit_seconds=billing.talk_limit_seconds(account, bucket),
             )
         except BillingError as e:
             return {

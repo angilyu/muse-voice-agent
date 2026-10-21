@@ -10,6 +10,7 @@ from muse_voice_agent import dispatcher
 from muse_voice_agent.billing import Billing, BillingError
 from muse_voice_agent.billing_web import SESSION_COOKIE, BillingWeb
 from muse_voice_agent.config import Settings
+from muse_voice_agent.mailer import EmailError, Outbox
 from muse_voice_agent.mcp_server import build_app
 from muse_voice_agent.store import ADMIN_ACCOUNT_ID, CallStore
 from muse_voice_agent.stripe_api import (
@@ -50,6 +51,9 @@ def settings(tmp_path) -> Settings:
         max_concurrent_calls=5,
         max_concurrent_calls_per_account=2,
         signups_per_ip_per_day=3,
+        call_overage_minutes=20,
+        smtp_host="smtp.example",
+        email_from="Muse Voice Agent <hi@example.com>",
     )
 
 
@@ -275,6 +279,29 @@ def test_unlimited_plan(settings, store):
     _talk(store, account.id, "free", 600)
     _talk(store, account.id, "paid", 10_000)
     assert billing.authorize_call(account) == "paid"
+    assert billing.talk_limit_seconds(account, "paid") is None
+
+
+def test_talk_limit_is_minutes_left_plus_overage(http, billing, store, settings):
+    account = billing.create_account("a@example.com")
+    _talk(store, account.id, "free", 540)
+    assert billing.talk_limit_seconds(account, "free") == pytest.approx(60 + 20 * 60)
+    assert billing.talk_limit_seconds(billing.get_account("admin"), None) is None
+
+    mcp = MCP(http, billing.issue_key(account.id)).connect()
+    started = mcp.tool("place_call", CALL_ARGS)
+    assert store.get_call(started["call_id"])["talk_limit_seconds"] == pytest.approx(1260, abs=2)
+    admin = MCP(http, ADMIN).connect().tool("place_call", CALL_ARGS)
+    assert store.get_call(admin["call_id"])["talk_limit_seconds"] is None
+
+    # Leftover free minutes and this period's paid minutes both count.
+    account = _subscribe(billing, account)
+    _talk(store, account.id, "paid", 45 * 60)
+    limit = billing.talk_limit_seconds(account, "free")
+    assert limit is not None and 5 * 60 + 20 * 60 < limit < 6 * 60 + 20 * 60 + 5
+    assert Billing(replace(settings, call_overage_minutes=0), store).talk_limit_seconds(
+        account, "paid"
+    ) == pytest.approx(limit - 20 * 60, abs=1)
 
 
 def test_past_due_grace_then_inactive(billing, store):
@@ -453,9 +480,28 @@ def fake_stripe() -> FakeStripe:
 
 
 @pytest.fixture
-def web(settings, billing, fake_stripe):
-    app = BillingWeb(settings, billing, fake_stripe.client()).app()
+def outbox() -> Outbox:
+    return Outbox()
+
+
+@pytest.fixture
+def web(settings, billing, fake_stripe, outbox):
+    app = BillingWeb(settings, billing, fake_stripe.client(), outbox).app()
     return TestClient(app, base_url="https://voice.example")
+
+
+def _code(outbox: Outbox, email: str) -> str:
+    to, subject, body = outbox.sent[-1]
+    assert to == email
+    code = subject.split()[0]
+    assert code.isdigit() and len(code) == 6 and code in body
+    return code
+
+
+def _signup(web, outbox, email: str, **kw):
+    r = web.post("/signup", data={"email": email}, **kw)
+    assert r.status_code == 200, r.text
+    return web.post("/signup/verify", data={"email": email, "code": _code(outbox, email)}, **kw)
 
 
 def _event(web, kind: str, obj: dict, event_id: str = "evt_1", secret: str = WHSEC):
@@ -561,8 +607,16 @@ def test_unknown_price_counts_as_cheapest_plan(billing):
     assert billing.usage(billing.get_account(account.id)).paid_total == 50 * 60
 
 
-def test_signup_shows_key_once_and_signs_in(web, billing):
+def test_signup_verifies_email_then_shows_key_once(web, billing, outbox):
     r = web.post("/signup", data={"email": "New@Example.com"})
+    assert r.status_code == 200 and "Check your email" in r.text
+    assert billing.find_by_email("new@example.com") is None  # nothing until the code is entered
+    code = _code(outbox, "New@Example.com")
+    wrong = "000000" if code != "000000" else "111111"
+    r = web.post("/signup/verify", data={"email": "New@Example.com", "code": wrong})
+    assert r.status_code == 401 and billing.find_by_email("new@example.com") is None
+
+    r = web.post("/signup/verify", data={"email": "New@Example.com", "code": f"{code[:3]} {code[3:]}"})
     assert r.status_code == 200
     assert r.headers["cache-control"] == "no-store"
     key = r.text.split('id="key">')[1].split("<")[0]
@@ -575,34 +629,85 @@ def test_signup_shows_key_once_and_signs_in(web, billing):
     assert "10 of 10 minutes left" in page.text
     assert "Starter: $5/month" in page.text
     assert key not in page.text
-    assert web.post("/signup", data={"email": "new@example.com"}).status_code == 409
+    # A code works once.
+    assert web.post("/signup/verify", data={"email": "new@example.com", "code": code}).status_code == 401
 
 
-def test_signup_limits_and_validation(web, settings):
+def test_email_code_signs_in_existing_account(web, billing, outbox):
+    account = billing.create_account("a@example.com")
+    key = billing.issue_key(account.id)
+    assert "Lost your key?" in web.get("/account").text
+    r = _signup(web, outbox, "A@example.com", follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/account"
+    page = web.get("/account").text
+    assert "Free trial" in page and key not in page
+    assert len(billing.list_accounts()) == 2  # admin + a@example.com; no duplicate
+
+
+def test_email_code_expires_and_locks_after_wrong_guesses(web, billing, outbox):
+    web.post("/signup", data={"email": "a@example.com"})
+    code = _code(outbox, "a@example.com")
+    wrong = "000000" if code != "000000" else "111111"
+    for _ in range(5):
+        assert not billing.check_email_code("a@example.com", wrong)
+    assert not billing.check_email_code("a@example.com", code)  # locked after 5 wrong tries
+
+    code = billing.new_email_code("b@example.com")
+    with billing._conn() as c:
+        c.execute("UPDATE email_codes SET expires_at = ?", (time.time() - 1,))
+    assert not billing.check_email_code("b@example.com", code)
+
+
+def test_email_code_resend_is_throttled(web, billing, outbox):
+    web.post("/signup", data={"email": "a@example.com"})
+    r = web.post("/signup", data={"email": "a@example.com"})
+    assert r.status_code == 200 and "We just sent a code" in r.text
+    assert len(outbox.sent) == 1
+    with billing._conn() as c:
+        c.execute("UPDATE email_codes SET created_at = created_at - 61")
+    web.post("/signup", data={"email": "a@example.com"})
+    assert len(outbox.sent) == 2
+    first, second = outbox.sent[0][1].split()[0], outbox.sent[1][1].split()[0]
+    if first != second:  # only the newest code works
+        assert not billing.check_email_code("a@example.com", first)
+    assert billing.check_email_code("a@example.com", second)
+
+
+def test_email_send_failure(settings, billing, fake_stripe):
+    class Broken(Outbox):
+        async def send(self, to, subject, body):
+            raise EmailError("smtp down")
+
+    client = TestClient(BillingWeb(settings, billing, fake_stripe.client(), Broken()).app())
+    assert client.post("/signup", data={"email": "a@example.com"}).status_code == 502
+
+
+def test_signup_limits_and_validation(web, settings, outbox):
     assert web.post("/signup", data={"email": "nope"}).status_code == 400
     for i in range(3):
-        assert web.post("/signup", data={"email": f"u{i}@example.com"}).status_code == 200
+        assert _signup(web, outbox, f"u{i}@example.com").status_code == 200
     assert web.post("/signup", data={"email": "u9@example.com"}).status_code == 429
 
 
-def test_signup_limit_uses_proxy_appended_address(web):
+def test_signup_limit_uses_proxy_appended_address(web, outbox):
     # Only the last X-Forwarded-For entry comes from our proxy; a forged first entry doesn't help.
-    for i in range(4):
-        r = web.post(
-            "/signup",
-            data={"email": f"x{i}@example.com"},
-            headers={"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.7"},
-        )
+    for i in range(3):
+        _signup(web, outbox, f"x{i}@example.com", headers={"X-Forwarded-For": f"10.0.0.{i}, 203.0.113.7"})
+    r = web.post(
+        "/signup", data={"email": "x9@example.com"}, headers={"X-Forwarded-For": "10.0.0.9, 203.0.113.7"}
+    )
     assert r.status_code == 429
-    r = web.post("/signup", data={"email": "y@example.com"}, headers={"X-Forwarded-For": "203.0.113.8"})
+    r = _signup(web, outbox, "y@example.com", headers={"X-Forwarded-For": "203.0.113.8"})
     assert r.status_code == 200
 
 
-def test_signup_closed_without_stripe(settings, billing):
-    app = BillingWeb(replace(settings, stripe_secret_key=""), billing).app()
-    client = TestClient(app)
-    assert client.post("/signup", data={"email": "a@example.com"}).status_code == 503
-    assert "Sign-ups open soon" in client.get("/pricing").text
+def test_signup_closed_without_stripe_or_email(settings, billing):
+    for closed in (replace(settings, stripe_secret_key=""), replace(settings, smtp_host="")):
+        client = TestClient(BillingWeb(closed, billing, mailer=Outbox()).app())
+        assert client.post("/signup", data={"email": "a@example.com"}).status_code == 503
+        assert client.post("/signup/verify", data={"email": "a@example.com", "code": "1"}).status_code == 503
+        assert "Sign-ups open soon" in client.get("/pricing").text
+        assert "Lost your key?" not in client.get("/account").text
 
 
 def test_pricing_page_shows_stripe_price(web):

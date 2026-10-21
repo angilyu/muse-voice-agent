@@ -22,6 +22,7 @@ from starlette.routing import Route
 
 from .billing import Account, Billing, format_date, minutes
 from .config import Plan, Settings
+from .mailer import EmailError, Mailer
 from .stripe_api import StripeClient, StripeError, price_label, verify_webhook
 
 logger = logging.getLogger("muse_voice_agent.billing")
@@ -29,8 +30,12 @@ logger = logging.getLogger("muse_voice_agent.billing")
 SESSION_COOKIE = "mva_session"
 SESSION_DAYS = 30
 SITE_URL = "https://angilyu.github.io/muse-voice-agent/"
-WEB_PATHS = ("/pricing", "/signup", "/account", "/stripe/webhook")
+WEB_PATHS = ("/pricing", "/signup", "/signup/verify", "/account", "/stripe/webhook")
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Email code throttles: per address, then per client IP.
+CODE_RESEND_SECONDS = 60
+CODES_PER_EMAIL_PER_HOUR = 5
+CODES_PER_IP_PER_HOUR = 10
 
 
 def is_web_path(path: str) -> bool:
@@ -77,10 +82,17 @@ def _e(value: Any) -> str:
 
 
 class BillingWeb:
-    def __init__(self, settings: Settings, billing: Billing, stripe: StripeClient | None = None):
+    def __init__(
+        self,
+        settings: Settings,
+        billing: Billing,
+        stripe: StripeClient | None = None,
+        mailer: Mailer | None = None,
+    ):
         self.settings = settings
         self.billing = billing
         self.stripe = stripe or StripeClient(settings.stripe_secret_key)
+        self.mailer = mailer or Mailer(settings)
         secret = settings.billing_session_secret or hmac.new(
             settings.mcp_auth_token.encode(), b"account-session", hashlib.sha256
         ).hexdigest()
@@ -92,6 +104,7 @@ class BillingWeb:
             routes=[
                 Route("/pricing", self.pricing, methods=["GET"]),
                 Route("/signup", self.signup, methods=["POST"]),
+                Route("/signup/verify", self.verify, methods=["POST"]),
                 Route("/account", self.account, methods=["GET"]),
                 Route("/account/login", self.login, methods=["POST"]),
                 Route("/account/logout", self.logout, methods=["POST"]),
@@ -174,11 +187,12 @@ class BillingWeb:
 <div class="price">{_e(await self._price_label(plan))}</div>
 <p>{_e(plan.minutes_label)}.</p>
 </div>'''
-        if self.settings.billing_configured:
+        if self.settings.signups_open:
             signup = """<form method="post" action="/signup"><label for="email">Email</label>
 <input id="email" type="email" name="email" required autocomplete="email" placeholder="you@example.com">
-<div class="row"><button type="submit">Create account and get API key</button></div></form>
-<p class="muted">Already have a key? <a href="/account">Sign in</a>.</p>"""
+<div class="row"><button type="submit">Email me a code</button></div></form>
+<p class="muted">We'll email you a 6-digit code to confirm it's you, then show your API key.
+Already have a key? <a href="/account">Sign in</a>.</p>"""
         else:
             signup = '<p class="muted">Sign-ups open soon.</p>'
         body = f"""<h1>Pricing</h1>
@@ -195,20 +209,74 @@ never charged. Unused minutes don't roll over. Switch plans or cancel anytime fr
         return _page("Pricing", body)
 
     async def signup(self, request: Request) -> Response:
-        if not self.settings.billing_configured:
+        """Email a 6-digit code. It signs up new emails and signs in existing accounts."""
+        if not self.settings.signups_open:
             return _page("Sign up", "<h1>Sign-ups open soon</h1>", 503)
         email = (await self._form(request)).get("email", "").strip()
         if not _EMAIL.match(email) or len(email) > 254:
             return _page("Sign up", "<h1>Check your email</h1><p>That email address doesn't look "
                          'right. <a href="/pricing">Try again</a>.</p>', 400)
-        if self.billing.find_by_email(email):
-            return _page("Sign up", f"""<h1>You already have an account</h1>
-<p><a href="/account">Sign in with your API key</a>. Lost it? Email
-<a href="mailto:{_e(self.settings.support_email)}">{_e(self.settings.support_email)}</a> from
-{_e(email)} and we'll send a new one.</p>""", 409)
         ip = self._client_ip(request)
+        now = time.time()
+        if self.billing.email_codes_sent(email=email, since=now - CODE_RESEND_SECONDS):
+            return self._code_page(email, "We just sent a code. Check your inbox (and spam folder), "
+                                   "or wait a minute to send another.")
+        too_many = self.billing.email_codes_sent(
+            email=email, since=now - 3600
+        ) >= CODES_PER_EMAIL_PER_HOUR or bool(
+            ip and self.billing.email_codes_sent(ip=ip, since=now - 3600) >= CODES_PER_IP_PER_HOUR
+        )
+        if too_many or (not self.billing.find_by_email(email) and self._signup_limit_reached(ip)):
+            return _page("Sign up", "<h1>Too many tries</h1><p>Please try again later, or email "
+                         f"{_e(self.settings.support_email)}.</p>", 429)
+        code = self.billing.new_email_code(email, ip=ip or None)
+        try:
+            await self.mailer.send(
+                email,
+                f"{code} is your Muse Voice Agent code",
+                f"Your Muse Voice Agent code is {code}\n\nIt expires in 15 minutes. If you didn't "
+                "ask for it, you can ignore this email.\n",
+            )
+        except EmailError:
+            return _page("Sign up", "<h1>We couldn't send the email</h1><p>Please try again in a "
+                         f"minute, or email {_e(self.settings.support_email)}.</p>", 502)
+        return self._code_page(email)
+
+    def _signup_limit_reached(self, ip: str) -> bool:
         limit = self.settings.signups_per_ip_per_day
-        if ip and limit and self.billing.signups_from_ip(ip, time.time() - 86400) >= limit:
+        return bool(ip and limit and self.billing.signups_from_ip(ip, time.time() - 86400) >= limit)
+
+    def _code_page(self, email: str, error: str = "", status_code: int = 200) -> HTMLResponse:
+        err = f'<div class="card warn">{_e(error)}</div>' if error else ""
+        body = f"""<h1>Check your email</h1>{err}
+<div class="card"><p>We sent a 6-digit code to <strong>{_e(email)}</strong>. It expires in 15
+minutes.</p><form method="post" action="/signup/verify">
+<input type="hidden" name="email" value="{_e(email)}"><label for="code">Code</label>
+<input id="code" type="text" name="code" required inputmode="numeric" autocomplete="one-time-code"
+pattern="[0-9 ]{{6,7}}" maxlength="7" placeholder="123456" autofocus>
+<div class="row"><button type="submit">Continue</button></div></form>
+<form method="post" action="/signup" class="row"><input type="hidden" name="email"
+value="{_e(email)}"><button type="submit" class="secondary">Send a new code</button></form></div>
+<p class="muted">Wrong address? <a href="/pricing">Start over</a>.</p>"""
+        return _page("Check your email", body, status_code)
+
+    async def verify(self, request: Request) -> Response:
+        if not self.settings.signups_open:
+            return _page("Sign up", "<h1>Sign-ups open soon</h1>", 503)
+        form = await self._form(request)
+        email = form.get("email", "").strip()
+        if not _EMAIL.match(email) or not self.billing.check_email_code(email, form.get("code", "")):
+            return self._code_page(
+                email, "That code isn't right or has expired. Check it, or send a new one.", 401
+            )
+        existing = self.billing.find_by_email(email)
+        if existing is not None:
+            # A verified email signs in to its account, where the user can make a new key.
+            response = RedirectResponse("/account", status_code=303)
+            self._set_session(response, existing.id, request)
+            return response
+        ip = self._client_ip(request)
+        if self._signup_limit_reached(ip):
             return _page("Sign up", "<h1>Too many sign-ups</h1><p>Please try again tomorrow, or "
                          f"email {_e(self.settings.support_email)}.</p>", 429)
         account = self.billing.create_account(email, signup_ip=ip)
@@ -245,9 +313,19 @@ document.getElementById('key').textContent);this.textContent='Copied'">Copy key<
 <div class="card"><h2>Sign in</h2><form method="post" action="/account/login">
 <label for="key">API key</label><input id="key" type="password" name="api_key" required
 autocomplete="off" placeholder="mva_..."><div class="row"><button type="submit">Sign in</button></div>
-</form></div><p>New here? <a href="/pricing">Create an account</a> and get
+</form></div>{self._email_signin_card()}<p>New here? <a href="/pricing">Create an account</a> and get
 {self.settings.free_trial_minutes} free minutes.</p>"""
         return _page("Account", body, status_code)
+
+    def _email_signin_card(self) -> str:
+        if not self.settings.signups_open:
+            return ""
+        return """<div class="card"><h2>Lost your key?</h2><p class="muted">Sign in with a code sent
+to your email, then make a new key from your account page.</p>
+<form method="post" action="/signup"><label for="email">Email</label>
+<input id="email" type="email" name="email" required autocomplete="email" placeholder="you@example.com">
+<div class="row"><button type="submit" class="secondary">Email me a sign-in code</button></div>
+</form></div>"""
 
     async def _dashboard(self, account: Account, checkout: str | None) -> HTMLResponse:
         if account.is_admin:

@@ -33,6 +33,8 @@ _ADDED_COLUMNS = {
     "seen_at": "REAL",  # when get_updates delivered this inbound call to the MCP client
     "account_id": "TEXT",  # billing account that owns the call; only it can read the call
     "billing_bucket": "TEXT",  # which allowance the call draws on: free | paid (NULL = unmetered)
+    "talk_limit_seconds": "REAL",  # end the call after this much talk time (NULL = no limit)
+    "cut_off": "TEXT",  # why we ended the call early, e.g. "minutes_limit"
 }
 
 _SCHEMA = """
@@ -60,6 +62,8 @@ CREATE TABLE IF NOT EXISTS calls (
     seen_at REAL,
     account_id TEXT,
     billing_bucket TEXT,
+    talk_limit_seconds REAL,
+    cut_off TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
@@ -104,6 +108,7 @@ class CallStore:
         origin: str | None = None,
         account_id: str = ADMIN_ACCOUNT_ID,
         billing_bucket: str | None = None,
+        talk_limit_seconds: float | None = None,
     ) -> dict[str, Any]:
         call_id = uuid.uuid4().hex[:12]
         now = time.time()
@@ -111,8 +116,8 @@ class CallStore:
             c.execute(
                 "INSERT INTO calls (id, kind, business_name, phone_number, task_json, status,"
                 " dry_run, provider_call_id, direction, parent_call_id, origin, account_id,"
-                " billing_bucket, created_at, updated_at)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " billing_bucket, talk_limit_seconds, created_at, updated_at)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     call_id,
                     task["kind"],
@@ -127,6 +132,7 @@ class CallStore:
                     origin,
                     account_id,
                     billing_bucket,
+                    talk_limit_seconds,
                     now,
                     now,
                 ),

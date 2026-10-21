@@ -46,6 +46,7 @@ async def start_call(
     *,
     account_id: str = ADMIN_ACCOUNT_ID,
     billing_bucket: str | None = None,
+    talk_limit_seconds: float | None = None,
 ) -> dict[str, Any]:
     _check_allowed(task, settings, store, account_id)
 
@@ -61,6 +62,7 @@ async def start_call(
         dry_run=settings.dry_run,
         account_id=account_id,
         billing_bucket=billing_bucket,
+        talk_limit_seconds=talk_limit_seconds,
     )
     call_id = record["id"]
 
