@@ -163,3 +163,5 @@ a.button {
 }
 
 a.button:hover { background: #4a3bd0; }
+
+ol.steps li { margin-bottom: 8px; }

@@ -652,10 +652,13 @@ def test_signup_verifies_email_then_shows_key_once(web, billing, outbox):
     account = billing.authenticate(key)
     assert account and account.email == "new@example.com" and account.free_seconds == 600
     assert "https://voice.example/mcp" in r.text
+    assert "Send Muse this message" in r.text and "secure credential prompt" in r.text
     assert SESSION_COOKIE in r.cookies
 
     page = web.get("/account")
     assert "10 of 10 minutes left" in page.text
+    assert '<details class="card" open>' in page.text  # setup guide starts open before any calls
+    assert "https://voice.example/mcp" in page.text
     assert "Starter: $5/month" in page.text
     assert key not in page.text
     # A code works once.
@@ -754,6 +757,7 @@ def test_login_rotate_and_logout(web, billing):
     assert r.status_code == 303
     r = web.post("/account/rotate-key")
     new_key = r.text.split('id="key">')[1].split("<")[0]
+    assert "Update the key in Muse" in r.text and "Send Muse this message" not in r.text
     assert billing.authenticate(key) is None
     assert billing.authenticate(new_key).id == account.id
     web.post("/account/logout")

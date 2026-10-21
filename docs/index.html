@@ -31,8 +31,26 @@
         <p class="lede">Muse Voice Agent is an MCP server that lets your AI assistant call businesses on
           your behalf. It books tables, gets quotes, places pickup orders, checks availability and asks
           questions, then reports back with a structured result.</p>
+        <p><strong>Already use Muse? Setup is simple:</strong> about 2 minutes, no code. Sign up, send
+          Muse one message, and start asking it to make calls.</p>
+        <p><a class="button" href="https://muse-voice-agent.onrender.com/pricing">Get started free</a>
+          &nbsp; <span class="meta">10 free minutes, no card needed</span></p>
       </div>
     </section>
+
+    <h2 id="setup">Add it to Muse in 2 minutes</h2>
+    <ol class="steps">
+      <li><strong>Sign up with your email.</strong> Go to
+        <a href="https://muse-voice-agent.onrender.com/pricing">the sign-up page</a>, enter the 6-digit
+        code we email you, and copy your API key.</li>
+      <li><strong>Send Muse one message.</strong> The page after sign-up gives you a ready-made message
+        to copy. Paste it into a Muse chat and send it.</li>
+      <li><strong>Paste your key when Muse asks.</strong> Muse opens a secure credential prompt. Paste
+        the key there, not in the chat. Muse saves the agent as a skill, so you only do this once.</li>
+      <li><strong>Ask Muse to make a call.</strong> "Book a table for 2 at Luigi's Friday at 7:30" or
+        "Get a quote from Bob's Handyman to fix my faucet." Muse checks the details with you first,
+        then reports back.</li>
+    </ol>
 
     <h2>How it works</h2>
     <ol>
@@ -98,8 +116,8 @@
       minutes before it politely wraps up. Payments are handled by
       <a href="https://stripe.com">Stripe</a>.</p>
 
-    <h2>Connecting</h2>
-    <p>Muse Voice Agent speaks the <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+    <h2>Connecting other assistants</h2>
+    <p>Using Muse? Follow the <a href="#setup">2-minute setup</a> above. For other assistants: Muse Voice Agent speaks the <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
       over streamable HTTP at the <code>/mcp</code> endpoint. Every request needs your API key as a bearer token
       (<code>Authorization: Bearer &lt;api key&gt;</code>). See the <a href="tools.html">MCP tool
       reference</a> for what each tool does. Get a key at

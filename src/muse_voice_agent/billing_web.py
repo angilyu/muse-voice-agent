@@ -63,6 +63,10 @@ font-size:.95rem}.notice{background:#ecfdf5;border-color:#a7f3d0}.warn{backgroun
 border-color:#fed7aa}.meter{height:10px;background:#eceaf6;border-radius:6px;overflow:hidden}
 .meter span{display:block;height:100%;background:linear-gradient(90deg,var(--brand),var(--teal))}
 dt{font-weight:600;margin-top:10px}dd{margin:2px 0 0}
+pre.prompt{white-space:pre-wrap;background:#f1f0fa;padding:12px 14px;border-radius:10px;
+font:.92rem/1.5 system-ui,-apple-system,Segoe UI,sans-serif;margin:0}
+details.card summary{cursor:pointer}details.card .card{border:0;padding:6px 0;margin:8px 0 0}
+details.card h2{font-size:1.1rem}
 """
 
 
@@ -191,7 +195,8 @@ class BillingWeb:
             signup = """<form method="post" action="/signup"><label for="email">Email</label>
 <input id="email" type="email" name="email" required autocomplete="email" placeholder="you@example.com">
 <div class="row"><button type="submit">Email me a code</button></div></form>
-<p class="muted">We'll email you a 6-digit code to confirm it's you, then show your API key.
+<p class="muted">We'll email you a 6-digit code to confirm it's you. Next we'll show your API key
+and walk you through adding the agent to Muse. It takes about 2 minutes, no code.
 Already have a key? <a href="/account">Sign in</a>.</p>"""
         else:
             signup = '<p class="muted">Sign-ups open soon.</p>'
@@ -286,18 +291,25 @@ value="{_e(email)}"><button type="submit" class="secondary">Send a new code</but
         self._set_session(response, account.id, request)
         return response
 
-    def _key_page(self, request: Request, key: str, title: str) -> HTMLResponse:
-        base = self._base(request)
-        body = f"""<h1>{_e(title)}</h1>
-<div class="card notice"><h2>Your API key</h2>
-<p>Copy it now. For your security it won't be shown again. You can make a new one from your
-account page anytime.</p><code class="key" id="key">{_e(key)}</code>
-<div class="row"><button type="button" onclick="navigator.clipboard.writeText(
-document.getElementById('key').textContent);this.textContent='Copied'">Copy key</button></div></div>
-<div class="card"><h2>Connect it to Muse</h2><dl>
-<dt>Server URL</dt><dd><code>{_e(base)}/mcp</code></dd>
-<dt>Authentication</dt><dd>API key / bearer token: paste the key above.</dd></dl>
-<p class="muted">Muse sends it as <code>Authorization: Bearer &lt;key&gt;</code>.</p></div>
+    def _key_page(self, request: Request, key: str, title: str, *, rotated: bool = False) -> HTMLResponse:
+        if rotated:
+            intro = "<p>Your old key no longer works. Copy the new one, then update it in Muse.</p>"
+            connect = """<div class="card"><h2>Step 2: Update the key in Muse</h2>
+<p>Tell Muse: <em>"Update the API key for my phone-calling agent integration."</em> When Muse
+shows its secure credential prompt, paste the new key.</p>
+<p class="muted">Haven't added the agent to Muse yet? The setup steps are on your
+<a href="/account">account page</a>.</p></div>"""
+        else:
+            intro = (f"<p>You have {self.settings.free_trial_minutes} free minutes of calls. Adding "
+                     "the agent to Muse takes about 2 minutes: copy your key, send Muse one "
+                     "message, and paste the key when Muse asks for it.</p>")
+            connect = _muse_steps(self._base(request), first_step=2)
+        body = f"""<h1>{_e(title)}</h1>{intro}
+<div class="card notice"><h2>Step 1: Copy your API key</h2>
+<p>Save it somewhere safe. For your security we won't show it again, but you can make a new one
+from your account page anytime.</p><code class="key" id="key">{_e(key)}</code>
+<div class="row">{_copy_button("key", "Copy key")}</div></div>
+{connect}
 <p><a class="btn" href="/account">Go to your account</a></p>"""
         return _page(title, body)
 
@@ -305,7 +317,7 @@ document.getElementById('key').textContent);this.textContent='Copied'">Copy key<
         account = self._session_account(request)
         if account is None:
             return self._login_page()
-        return await self._dashboard(account, request.query_params.get("checkout"))
+        return await self._dashboard(account, request.query_params.get("checkout"), self._base(request))
 
     def _login_page(self, error: str = "", status_code: int = 200) -> HTMLResponse:
         err = f'<div class="card warn">{_e(error)}</div>' if error else ""
@@ -327,7 +339,7 @@ to your email, then make a new key from your account page.</p>
 <div class="row"><button type="submit" class="secondary">Email me a sign-in code</button></div>
 </form></div>"""
 
-    async def _dashboard(self, account: Account, checkout: str | None) -> HTMLResponse:
+    async def _dashboard(self, account: Account, checkout: str | None, base: str) -> HTMLResponse:
         if account.is_admin:
             return _page("Account", "<h1>Admin account</h1><p>This is the owner key. Calls are "
                          "unmetered.</p>" + _logout_form())
@@ -376,12 +388,15 @@ to your email, then make a new key from your account page.</p>
                            f'<button class="secondary">{label}</button></form>')
         hint = self.billing.key_hint(account.id)
         key_line = f"Active key ends in <code>{_e(hint)}</code>." if hint else "No active key."
+        setup_open = " open" if usage.free_used == 0 and not usage.paid_used else ""
         body = f"""<h1>Your account</h1>{url_note}<p class="muted">{_e(account.email)}</p>
 <div class="card"><h2>Plan</h2><p>{plan}</p>{meters}<div class="row">{''.join(actions)}</div></div>
 <div class="card"><h2>API key</h2><p>{key_line} Making a new key turns off the old one, so update
 it in Muse afterwards.</p><form method="post" action="/account/rotate-key"
 onsubmit="return confirm('Make a new key? The current key stops working.')">
-<button class="secondary">Make a new API key</button></form></div>{_logout_form()}"""
+<button class="secondary">Make a new API key</button></form></div>
+<details class="card"{setup_open}><summary><strong>Add the agent to Muse</strong></summary>
+{_muse_steps(base, first_step=1, key_step=True)}</details>{_logout_form()}"""
         return _page("Account", body)
 
     def _has_subscription(self, account: Account) -> bool:
@@ -481,7 +496,7 @@ onsubmit="return confirm('Make a new key? The current key stops working.')">
         if account is None or account.is_admin:
             return RedirectResponse("/account", status_code=303)
         key = self.billing.issue_key(account.id)
-        response = self._key_page(request, key, "Your new API key")
+        response = self._key_page(request, key, "Your new API key", rotated=True)
         self._set_session(response, account.id, request)
         return response
 
@@ -583,6 +598,52 @@ def _meter(label: str, used: float, total: float) -> str:
     left = max(0.0, total - used)
     return (f'<p><strong>{_e(label)}:</strong> {minutes(left)} of {minutes(total)} minutes left</p>'
             f'<div class="meter"><span style="width:{pct}%"></span></div>')
+
+
+def _copy_button(target_id: str, label: str) -> str:
+    return (f'<button type="button" onclick="navigator.clipboard.writeText(document.getElementById('
+            f"'{target_id}').textContent);this.textContent='Copied'\">{_e(label)}</button>")
+
+
+def muse_prompt(mcp_url: str) -> str:
+    """The one message a Muse user sends to add the agent (kept in sync with the README)."""
+    return (
+        "Build a custom integration to my phone-calling agent. It's an MCP server over streamable "
+        f"HTTP at {mcp_url} and needs a bearer token (ask me through the secure credential flow). "
+        "It can call any business for any phone errand: ordering pickup food or drinks, scheduling, "
+        "rescheduling or cancelling appointments, checking status, asking questions, getting "
+        "quotes, or booking within limits I set. Connect, list the tools, test list_calls, and save "
+        "it as a reusable skill. Always confirm the business, number, and details with me before "
+        "starting a call, and require my approval for call tools. Businesses may call the agent "
+        "back: when a call ends in voicemail or \"we'll call you back\", offer to schedule a task "
+        "that runs get_updates every couple of hours and tells me what they said. If a call tool "
+        "returns payment_required, tell me the message and the billing link; don't retry."
+    )
+
+
+def _muse_steps(base: str, *, first_step: int, key_step: bool = False) -> str:
+    """Numbered cards that walk an existing Muse user through adding the agent."""
+    n = first_step
+    parts = []
+    if key_step:
+        parts.append(f"""<div class="card"><h2>Step {n}: Have your API key ready</h2><p>It's the
+<code>mva_...</code> key you copied when you signed up. Lost it? Make a new one above.</p></div>""")
+        n += 1
+    parts.append(f"""<div class="card"><h2>Step {n}: Send Muse this message</h2>
+<p>Open a chat with Muse, paste this, and send it.</p>
+<pre class="prompt" id="muse-prompt">{_e(muse_prompt(base + "/mcp"))}</pre>
+<div class="row">{_copy_button("muse-prompt", "Copy message")}</div></div>""")
+    parts.append(f"""<div class="card"><h2>Step {n + 1}: Paste your key when Muse asks</h2>
+<p>Muse connects and shows a secure credential prompt. Paste your API key there,
+<strong>never in the chat</strong>. Muse tests the connection and saves the agent as a skill, so
+you only do this once.</p></div>""")
+    parts.append(f"""<div class="card"><h2>Step {n + 2}: Ask Muse to make a call</h2><ul>
+<li><em>"Book a table for 2 at Luigi's (+1…) Friday at 7:30, flexible 6:30 to 8:30."</em></li>
+<li><em>"Get a quote from Bob's Handyman (+1…) to replace a kitchen faucet."</em></li>
+<li><em>"Call my dentist (+1…) and move my Thursday appointment to next Tuesday afternoon."</em></li>
+</ul><p class="muted">Muse confirms the details with you before every call and tells you how it
+went. Approval settings live in Muse's Settings.</p></div>""")
+    return "\n".join(parts)
 
 
 def _logout_form() -> str:
