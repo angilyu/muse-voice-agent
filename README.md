@@ -11,6 +11,10 @@ reports back a structured result.
 [Privacy Policy](https://angilyu.github.io/muse-voice-agent/privacy.html) ·
 [Terms of Service](https://angilyu.github.io/muse-voice-agent/terms.html)
 
+**Use it with Muse:** [sign up free](https://muse-voice-agent.onrender.com/pricing) (10 free minutes,
+no card) and follow the [2-minute setup](https://angilyu.github.io/muse-voice-agent/#setup): send Muse
+one message, paste your API key when Muse asks, and start asking it to make calls.
+
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![MCP](https://img.shields.io/badge/protocol-MCP-6f42c1)
 ![LangGraph](https://img.shields.io/badge/agent-LangGraph-1c3c3c)
@@ -520,6 +524,10 @@ muse-voice-billing revoke --email user@example.com
 ```
 
 ## Connect your assistant
+
+Using the hosted service? [Sign up](https://muse-voice-agent.onrender.com/pricing) and the page after
+sign-up walks you through these steps with your URL and key filled in (also on the
+[product page](https://angilyu.github.io/muse-voice-agent/#setup)).
 
 Point any MCP client at `https://<your-host>/mcp` (streamable HTTP) with an API key from
 `https://<your-host>/account` (or `MCP_AUTH_TOKEN`) as the bearer token. For
