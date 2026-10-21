@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MCP tool reference | Muse Voice Agent</title>
+  <meta name="description" content="Reference for the Muse Voice Agent MCP tools: place_call, book_restaurant_reservation, request_handyman_quote, get_call_status, list_calls and get_updates.">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="icon" type="image/png" href="icon-512.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.svg" alt="">Muse Voice Agent</a>
+      <nav>
+        <a href="./">Home</a>
+        <a href="tools.html" aria-current="page">MCP tools</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <h1>MCP tool reference</h1>
+    <p class="lede">Six tools let an AI assistant place phone calls, follow their progress, and collect
+      callbacks.</p>
+
+    <h2 id="connect">Connection</h2>
+    <table>
+      <tr><th>Protocol</th><td><a href="https://modelcontextprotocol.io">Model Context Protocol</a>, streamable HTTP transport</td></tr>
+      <tr><th>Endpoint</th><td><code>https://&lt;server&gt;/mcp</code></td></tr>
+      <tr><th>Authentication</th><td><code>Authorization: Bearer &lt;token&gt;</code> on every request. Requests without a valid token get <code>401</code>.</td></tr>
+      <tr><th>Health check</th><td><code>GET /healthz</code> (no token needed) returns <code>{"ok": true}</code></td></tr>
+    </table>
+
+    <h2 id="flow">Typical flow</h2>
+    <ol>
+      <li>Confirm the business, phone number and brief with the user.</li>
+      <li>Call <code>place_call</code> (or a specialized shortcut). It returns a <code>call_id</code> immediately.</li>
+      <li>Poll <code>get_call_status</code> about every 20 seconds until <code>done</code> is <code>true</code>. Calls usually take 1 to 5 minutes.</li>
+      <li>Tell the user the summary, key details, unanswered questions and suggested next steps from the <code>report</code>.</li>
+      <li>Whenever a response includes <code>unread_updates &gt; 0</code>, call <code>get_updates</code> and tell the user what the business said when it called back.</li>
+    </ol>
+    <p>Phone numbers use E.164 format, for example <code>+14155550123</code>.</p>
+
+    <section class="tool" id="place_call">
+      <h2><code>place_call</code></h2>
+      <p>General-purpose call for any errand: questions, availability, quotes, pickup orders,
+        reservations, and scheduling, rescheduling or cancelling appointments.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>business_name</code></td><td>string, required</td><td>Name of the business.</td></tr>
+        <tr><td><code>phone_number</code></td><td>string, required</td><td>Business phone number (E.164).</td></tr>
+        <tr><td><code>customer_name</code></td><td>string, required</td><td>Full name of the user the call is for. The agent introduces itself as their assistant.</td></tr>
+        <tr><td><code>goal</code></td><td>string, required</td><td>One or two sentences on what the call should accomplish, including exact items when ordering.</td></tr>
+        <tr><td><code>questions</code></td><td>string[]</td><td>Up to 10 specific questions. Each comes back in the report's <code>answers</code>.</td></tr>
+        <tr><td><code>shareable_details</code></td><td>object</td><td>Extra details the agent may share, e.g. <code>{"email": "alex@example.com"}</code>. Name and callback number are always allowed. Never include card numbers or SSNs.</td></tr>
+        <tr><td><code>authority</code></td><td>enum</td><td><code>info_only</code> (default, commits to nothing) or <code>may_commit_within_limits</code> (may book, order, schedule or cancel within limits). <code>may_book_within_limits</code> is an alias.</td></tr>
+        <tr><td><code>limits</code></td><td>string</td><td>Required when the agent may commit. Free-text limits, e.g. "Oct 10–12 only, max $250/night, no deposit".</td></tr>
+        <tr><td><code>max_spend</code></td><td>number</td><td>Maximum total spend.</td></tr>
+        <tr><td><code>max_deposit</code></td><td>number</td><td>Maximum deposit or prepayment. Defaults to none.</td></tr>
+        <tr><td><code>max_cancellation_fee</code></td><td>number</td><td>Maximum cancellation or no-show fee. Defaults to none.</td></tr>
+        <tr><td><code>allowed_date_time_window</code></td><td>string</td><td>Allowed date and time window.</td></tr>
+        <tr><td><code>party_size_min</code>, <code>party_size_max</code></td><td>integer</td><td>Allowed party size range.</td></tr>
+        <tr><td><code>callback_number</code></td><td>string</td><td>The user's number for the business to call back. The agent may share it.</td></tr>
+        <tr><td><code>assistant_name</code></td><td>string</td><td>The assistant's own name. The agent opens with "Hi, this is {assistant_name}, an AI assistant calling on behalf of {customer_name}."</td></tr>
+      </table>
+    </section>
+
+    <section class="tool" id="book_restaurant_reservation">
+      <h2><code>book_restaurant_reservation</code></h2>
+      <p>Shortcut tuned for booking a restaurant table.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>restaurant_name</code></td><td>string, required</td><td>Name of the restaurant.</td></tr>
+        <tr><td><code>phone_number</code></td><td>string, required</td><td>Restaurant phone number (E.164).</td></tr>
+        <tr><td><code>customer_name</code></td><td>string, required</td><td>Full name of the user.</td></tr>
+        <tr><td><code>party_size</code></td><td>integer, required</td><td>Number of guests.</td></tr>
+        <tr><td><code>date</code></td><td>string, required</td><td>Requested date, e.g. "Fri Oct 10".</td></tr>
+        <tr><td><code>time</code></td><td>string, required</td><td>Requested time, e.g. "7:30 PM".</td></tr>
+        <tr><td><code>flexibility</code></td><td>string</td><td>Acceptable alternatives, e.g. "6:30–8:30pm same day". Without it, the agent only collects the closest available times.</td></tr>
+        <tr><td><code>special_requests</code></td><td>string</td><td>Seating, allergies or occasion.</td></tr>
+        <tr><td><code>shareable_details</code>, <code>callback_number</code>, <code>assistant_name</code></td><td></td><td>Same as <code>place_call</code>.</td></tr>
+      </table>
+    </section>
+
+    <section class="tool" id="request_handyman_quote">
+      <h2><code>request_handyman_quote</code></h2>
+      <p>Shortcut for asking a handyman or contractor for a price and availability. It never books.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>business_name</code></td><td>string, required</td><td>Business or person.</td></tr>
+        <tr><td><code>phone_number</code></td><td>string, required</td><td>Phone number (E.164).</td></tr>
+        <tr><td><code>customer_name</code></td><td>string, required</td><td>Full name of the user.</td></tr>
+        <tr><td><code>job_description</code></td><td>string, required</td><td>What needs doing, e.g. "replace a leaking kitchen faucet".</td></tr>
+        <tr><td><code>location</code></td><td>string, required</td><td>City, neighborhood or ZIP. Avoid a full street address.</td></tr>
+        <tr><td><code>preferred_timing</code></td><td>string</td><td>e.g. "weekday mornings next week".</td></tr>
+        <tr><td><code>budget</code></td><td>string</td><td>Mentioned only if the business asks.</td></tr>
+        <tr><td><code>shareable_details</code>, <code>callback_number</code>, <code>assistant_name</code></td><td></td><td>Same as <code>place_call</code>.</td></tr>
+      </table>
+    </section>
+
+    <h3>What the call tools return</h3>
+    <p>All three call tools return immediately with the call record: <code>call_id</code>,
+      <code>status</code>, <code>done</code>, <code>business_name</code>, <code>phone_number</code> and
+      <code>next_step</code>. Invalid input returns <code>{"error": "invalid_request"}</code>; a call the
+      server won't place (for example a number outside the allowed dialing regions, or too many calls at once) returns
+      <code>{"error": "rejected"}</code>.</p>
+
+    <section class="tool" id="get_call_status">
+      <h2><code>get_call_status</code></h2>
+      <p>Read-only. Gets the status and result of a call.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>call_id</code></td><td>string, required</td><td>The id returned when the call started.</td></tr>
+        <tr><td><code>include_transcript</code></td><td>boolean</td><td>Include the speaker-labeled transcript. Defaults to yes once the call is done.</td></tr>
+      </table>
+      <p>Once <code>done</code> is <code>true</code>, the response includes a <code>report</code> with the
+        original request, who answered (<code>person</code>, <code>voicemail</code>,
+        <code>phone_menu</code>, <code>no_answer</code> or <code>not_connected</code>), start and end
+        times, duration, how the call ended, whether the agent committed on the user's behalf, an
+        answer for each question, unanswered questions and suggested next steps. It also lists any
+        callbacks linked to this call.</p>
+    </section>
+
+    <section class="tool" id="list_calls">
+      <h2><code>list_calls</code></h2>
+      <p>Read-only. Lists recent calls, newest first, without reports or transcripts.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>limit</code></td><td>integer</td><td>1 to 50. Default 10.</td></tr>
+      </table>
+    </section>
+
+    <section class="tool" id="get_updates">
+      <h2><code>get_updates</code></h2>
+      <p>Collects calls businesses made back to the agent that haven't been reported yet. Each update is
+        returned once, then marked as seen.</p>
+      <table>
+        <tr><th>Parameter</th><th>Type</th><th>Description</th></tr>
+        <tr><td><code>limit</code></td><td>integer</td><td>1 to 50. Default 20. Oldest first.</td></tr>
+      </table>
+      <p>Each update has <code>kind</code>: <code>callback</code> (a business returned one of your calls;
+        <code>original_call</code> identifies it) or <code>message</code> (an unknown caller left a
+        message). <code>remaining</code> says how many are still unread. The server can't push
+        notifications, so assistants should check <code>get_updates</code> on a schedule after a call
+        ends in voicemail or a promised callback.</p>
+    </section>
+
+    <h2 id="values">Status and outcome values</h2>
+    <table>
+      <tr><th>Field</th><th>Values</th></tr>
+      <tr><td><code>status</code></td><td>In progress: <code>queued</code>, <code>dispatched</code>, <code>dialing</code>, <code>in_progress</code>. Final: <code>completed</code>, <code>failed</code>, <code>no_answer</code>.</td></tr>
+      <tr><td><code>outcome</code></td><td><code>booked</code>, <code>ordered</code>, <code>quote_received</code>, <code>info_received</code>, <code>unavailable</code>, <code>declined</code>, <code>needs_followup</code>, <code>voicemail</code></td></tr>
+      <tr><td><code>direction</code></td><td><code>outbound</code> or <code>inbound</code>. Inbound callbacks set <code>callback_of</code> to the original <code>call_id</code>.</td></tr>
+    </table>
+
+    <h2 id="example">Example</h2>
+<pre><code>// tools/call
+{
+  "name": "place_call",
+  "arguments": {
+    "business_name": "Golden Gate Bakery",
+    "phone_number": "+14155550123",
+    "customer_name": "Alex Kim",
+    "assistant_name": "Eva",
+    "goal": "Find out whether they have egg tarts today and until what time.",
+    "questions": ["Do you have egg tarts today?", "What time do you close?"]
+  }
+}
+
+// result
+{
+  "call_id": "3f9c1a7b2e4d",
+  "status": "queued",
+  "done": false,
+  "next_step": "Poll get_call_status with this call_id until done is true."
+}</code></pre>
+
+    <div class="note">The agent always says it's an AI, discloses recording, won't share payment
+      details or unapproved personal information, and never commits beyond the limits you pass.
+      See the <a href="./">home page</a> for the full list of safeguards.</div>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">
+      <a href="./">Home</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Service</a>
+      <a href="mailto:angilyu@gmail.com">Support</a>
+      <div>&copy; 2026 Wenjing Yu</div>
+    </div>
+  </footer>
+</body>
+</html>

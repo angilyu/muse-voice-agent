@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Muse Voice Agent: give your AI assistant a phone</title>
+  <meta name="description" content="An MCP server that lets your AI assistant phone businesses for you: book tables, get quotes, place pickup orders, check availability and ask questions, then report back.">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link rel="icon" type="image/png" href="icon-512.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="site">
+    <div class="wrap">
+      <a class="brand" href="./"><img src="icon.svg" alt="">Muse Voice Agent</a>
+      <nav>
+        <a href="./" aria-current="page">Home</a>
+        <a href="tools.html">MCP tools</a>
+        <a href="privacy.html">Privacy</a>
+        <a href="terms.html">Terms</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <img src="icon.svg" alt="Muse Voice Agent icon">
+      <div>
+        <h1>Give your AI assistant a phone.</h1>
+        <p class="lede">Muse Voice Agent is an MCP server that lets your AI assistant call businesses on
+          your behalf. It books tables, gets quotes, places pickup orders, checks availability and asks
+          questions, then reports back with a structured result.</p>
+      </div>
+    </section>
+
+    <h2>How it works</h2>
+    <ol>
+      <li><strong>You ask your assistant.</strong> For example: "Book a table for 4 at Nopa on Friday
+        around 7:30" or "Get quotes from two handymen to fix a leaking faucet."</li>
+      <li><strong>Your assistant confirms the brief and calls a tool.</strong> It sends the business,
+        phone number, your name, the goal, any questions, and what the agent is allowed to agree to.</li>
+      <li><strong>The voice agent makes the call.</strong> It introduces itself as an AI assistant
+        calling on your behalf, discloses that the call may be recorded, and handles phone menus,
+        holds and voicemail.</li>
+      <li><strong>You get a report.</strong> Outcome, answers to each question, confirmation details,
+        what still needs your attention, and the transcript.</li>
+      <li><strong>Callbacks are handled.</strong> If the business calls back later, the agent answers,
+        links the call to your original request and leaves an update for your assistant.</li>
+    </ol>
+
+    <h2>What it can do</h2>
+    <div class="cards">
+      <div class="card"><h3>Reservations</h3><p>Book a table within the date, time and party-size range you set.</p></div>
+      <div class="card"><h3>Quotes</h3><p>Ask handymen and contractors for prices and availability without committing.</p></div>
+      <div class="card"><h3>Pickup orders</h3><p>Place pay-at-pickup orders within a spending limit.</p></div>
+      <div class="card"><h3>Appointments</h3><p>Schedule, reschedule or cancel within the limits you approve.</p></div>
+      <div class="card"><h3>Questions</h3><p>Check hours, stock, pricing, order status or anything else you need to know.</p></div>
+      <div class="card"><h3>Callbacks</h3><p>Answer businesses that call back and pass the news to your assistant.</p></div>
+    </div>
+
+    <h2>Built-in safeguards</h2>
+    <ul>
+      <li><strong>Always identifies as AI.</strong> Every call opens with "an AI assistant calling on
+        behalf of" you, and it answers honestly if asked whether it's a person.</li>
+      <li><strong>Recording disclosure.</strong> Calls start with "This call may be recorded."</li>
+      <li><strong>No payment details or secrets.</strong> Card numbers and Social Security numbers are
+        rejected before a call starts and blocked if the agent tries to say them. If a business needs
+        payment by phone, the agent stops and asks you to follow up.</li>
+      <li><strong>Only details you approve.</strong> The agent shares your name and callback number,
+        plus anything you explicitly allow for that call. Other personal details are withheld.</li>
+      <li><strong>Commits only within your limits.</strong> By default the agent only gathers
+        information. It books or orders only when you allow it, and only within the spending, deposit,
+        fee, time and party-size limits you set.</li>
+      <li><strong>Errands only.</strong> It's for calls you ask for. It is not for telemarketing, sales,
+        or emergency calls.</li>
+    </ul>
+
+    <h2>Connecting</h2>
+    <p>Muse Voice Agent speaks the <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
+      over streamable HTTP at the <code>/mcp</code> endpoint. Every request needs a bearer token
+      (<code>Authorization: Bearer &lt;token&gt;</code>). See the <a href="tools.html">MCP tool
+      reference</a> for what each tool does.</p>
+    <p>Source code: <a href="https://github.com/angilyu/muse-voice-agent">github.com/angilyu/muse-voice-agent</a></p>
+
+    <h2>Support</h2>
+    <p>Questions, problems or data requests: <a href="mailto:angilyu@gmail.com">angilyu@gmail.com</a>.</p>
+
+    <p class="meta">Muse Voice Agent is an independent project by Wenjing Yu. It is not affiliated with
+      or endorsed by Meta, OpenAI, Retell AI or Twilio.</p>
+  </main>
+
+  <footer class="site">
+    <div class="wrap">
+      <a href="tools.html">MCP tools</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="terms.html">Terms of Service</a>
+      <a href="mailto:angilyu@gmail.com">Support</a>
+      <div>&copy; 2026 Wenjing Yu</div>
+    </div>
+  </footer>
+</body>
+</html>

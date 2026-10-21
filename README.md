@@ -6,6 +6,11 @@ your behalf. It can place pickup food or drink orders, schedule/reschedule/cance
 a table, get a handyman quote, check hotel availability, or ask whether your repair is ready, and it
 reports back a structured result.
 
+**Website:** [angilyu.github.io/muse-voice-agent](https://angilyu.github.io/muse-voice-agent/) ·
+[MCP tool docs](https://angilyu.github.io/muse-voice-agent/tools.html) ·
+[Privacy Policy](https://angilyu.github.io/muse-voice-agent/privacy.html) ·
+[Terms of Service](https://angilyu.github.io/muse-voice-agent/terms.html)
+
 ![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue)
 ![MCP](https://img.shields.io/badge/protocol-MCP-6f42c1)
 ![LangGraph](https://img.shields.io/badge/agent-LangGraph-1c3c3c)
@@ -510,6 +515,7 @@ src/muse_voice_agent/
   keepalive.py    Self-ping for hosts that sleep when idle
   config.py       Settings from env
 scripts/          Twilio trunk and Retell agent setup, MCP smoke test
+docs/             Public website (GitHub Pages): home, MCP tool docs, privacy policy, terms, icon
 tests/            Graph, MCP server, Retell websocket and keepalive tests
 ```
 
