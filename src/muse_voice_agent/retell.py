@@ -32,7 +32,7 @@ from .graph import CallControl, CallOutcome, build_call_graph
 from .outcome_fallback import has_business_speech, infer_outcome
 from .pickup import classify_line, is_note
 from .report import build_report
-from .store import FINAL_STATUSES, CallStore
+from .store import ADMIN_ACCOUNT_ID, FINAL_STATUSES, CallStore
 from .tasks import InboundMessage, parse_task
 
 logger = logging.getLogger("muse_voice_agent.retell")
@@ -422,6 +422,8 @@ class RetellLLMSession:
             status="in_progress",
             provider_call_id=self.retell_call_id,
             origin=parent.get("origin") if parent else None,
+            # Callbacks belong to whoever placed the original call; unmatched callers to the admin.
+            account_id=(parent.get("account_id") if parent else None) or ADMIN_ACCOUNT_ID,
         )
         if business != record["business_name"]:
             self.store.update_call(record["id"], business_name=business)

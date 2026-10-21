@@ -389,10 +389,12 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
 ## Safety and responsible use
 
 - **Authentication.** Every HTTP request needs `Authorization: Bearer <MCP_AUTH_TOKEN>`;
-  `/healthz` is the only open path. Retell's websocket can't send headers, so it uses an
+  `/healthz`, the account pages and the Stripe webhook (which checks Stripe's signature) are the
+  only open paths. Retell's websocket can't send headers, so it uses an
   unguessable path secret (`RETELL_WS_SECRET`), and it only attaches to calls this server started.
-- **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3) and
-  `MAX_CALL_SECONDS` (default 300).
+- **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3),
+  `MAX_CONCURRENT_CALLS_PER_ACCOUNT` (default 2) and `MAX_CALL_SECONDS` (default 300).
+- **Accounts are isolated.** Each API key only sees its own calls and callbacks.
 - **Honest.** Every call opens with a fixed line, "Hi, this is [Eva, ]an AI assistant calling on
   behalf of {name}." It's streamed to text-to-speech before the LLM runs, so the business hears it at once.
   If asked, it always says it's an AI, and it never claims to be human.
@@ -447,13 +449,66 @@ The `Dockerfile` builds only the MCP server, without the LiveKit extra, and list
    `RETELL_WS_SECRET`, and `PUBLIC_BASE_URL=https://<service>.onrender.com`.
 3. Free instances sleep after 15 idle minutes. Set `KEEPALIVE_SECONDS=600` and the server pings its
    own public `/healthz` to stay awake, using about 744 of the 750 free hours a month. Free disks
-   are ephemeral, so the SQLite call log resets on each deploy.
+   are ephemeral, so the SQLite call log resets on each deploy. For [billing](#accounts-and-billing),
+   attach a persistent disk (e.g. at `/var/data`) and set `CALL_DB_PATH=/var/data/calls.db`,
+   otherwise accounts and keys are lost on deploy.
 
 Behind a corporate proxy, build with `--build-arg PYPI_INDEX_URL=<mirror>/simple/`.
 
+## Accounts and billing
+
+Each user gets their own API key. New accounts get `FREE_TRIAL_MINUTES` (default 10) of call time
+for free; after that, new calls need a monthly Stripe subscription to one of two plans:
+
+| Plan | Price | Minutes per month |
+| --- | --- | --- |
+| Starter | $5 | `STARTER_MINUTES` (default 50) |
+| Plus | $20 | `PLUS_MINUTES` (default 200) |
+
+Prices are whatever the Stripe prices say; `0` minutes means unlimited. Unused minutes don't roll
+over. Users switch plans or cancel in the Stripe billing portal. An upgrade keeps the current
+period, so the bigger allowance applies right away. When Starter runs out, the error suggests
+upgrading to Plus.
+
+- **What counts.** Talk time on outbound calls, from pickup to hang-up. Unanswered calls,
+  callbacks from businesses, and status checks are free. Free minutes are used first.
+- **When it's checked.** Before dialing. If the allowance is used up, `place_call` (and the
+  shortcuts) return `{"error": "payment_required", "message": "...", "billing_url": "..."}` and
+  nothing is dialed, so the assistant can tell the user in plain language. A call in progress is
+  never cut off. Results include a `billing_notice` when two or fewer minutes are left.
+- **Pages.** `/pricing` (sign up with an email, get a key), `/account` (sign in with the key, see
+  usage, subscribe to a plan, change plan or cancel, rotate the key). Rotating or revoking a key
+  signs out every browser that used the old one. Checkout and the billing portal are hosted by
+  Stripe; this server stores only the Stripe customer/subscription ids, never card details.
+- **Admin.** `MCP_AUTH_TOKEN` still works as an unmetered admin key that sees legacy calls and
+  callbacks from unknown numbers.
+
+**Stripe setup:**
+1. Create two recurring monthly prices, $5 (Starter) and $20 (Plus), and put their ids in
+   `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PLUS`. Put the secret key in `STRIPE_SECRET_KEY`.
+   Sign-ups stay closed until the key and at least one price are set.
+2. Add a webhook endpoint at `https://<your-host>/stripe/webhook` for `checkout.session.completed`,
+   `customer.subscription.created`, `customer.subscription.updated`,
+   `customer.subscription.deleted`, `invoice.paid` and `invoice.payment_failed`. Put its signing
+   secret in `STRIPE_WEBHOOK_SECRET`.
+3. In Settings → Billing → Customer portal, allow customers to update payment methods, view
+   invoices and cancel subscriptions, and turn on switching plans with both prices.
+4. Use test-mode keys first and pay with card `4242 4242 4242 4242`.
+
+**Admin commands.** Run them where the database lives: locally with `uv run muse-voice-billing`, or
+on Render from the service's Shell with `python -m muse_voice_agent.billing_cli`:
+
+```bash
+muse-voice-billing list                                                  # accounts, usage, plans
+muse-voice-billing create-comp --email reviewer@example.com --minutes 60  # prints a key
+muse-voice-billing issue-key --email user@example.com                    # lost key: replace, print
+muse-voice-billing revoke --email user@example.com
+```
+
 ## Connect your assistant
 
-Point any MCP client at `https://<your-host>/mcp` (streamable HTTP) with the bearer token. For
+Point any MCP client at `https://<your-host>/mcp` (streamable HTTP) with an API key from
+`https://<your-host>/account` (or `MCP_AUTH_TOKEN`) as the bearer token. For
 **Meta Muse**, send one message:
 
 > Build a custom integration to my phone-calling agent. It's an MCP server over streamable HTTP at
@@ -465,8 +520,9 @@ Point any MCP client at `https://<your-host>/mcp` (streamable HTTP) with the bea
 > business, number, and details with me before starting a call, and require my approval for call tools.
 > Businesses may call the agent back: when a call ends in voicemail or "we'll call you back", offer
 > to schedule a task that runs `get_updates` every couple of hours and tells me what they said.
+> If a call tool returns `payment_required`, tell me the message and the billing link; don't retry.
 
-Enter `MCP_AUTH_TOKEN` in Muse's secure credential prompt, never in the chat. Then try:
+Enter the API key in Muse's secure credential prompt, never in the chat. Then try:
 
 - *"Book a table for 2 at Luigi's (+1…) Friday at 7:30, flexible 6:30–8:30."*
 - *"Call HeyTea (+1…) and order two Jasmine green milk teas, 25% sugar, less ice, defaults otherwise."*
@@ -498,12 +554,24 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `DEFAULT_CALLBACK_NUMBER` | — | Used when the client doesn't pass one |
 | `DEFAULT_CUSTOMER_NAME` | — | LiveKit console agent only. MCP call tools require the client to pass `customer_name` |
 | `KEEPALIVE_SECONDS` | `0` | When greater than 0, the server pings its own `/healthz` at this interval |
+| `CALL_DB_PATH` | `data/calls.db` | SQLite file for calls, accounts and keys; put it on a persistent disk |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | — | Billing; sign-ups are closed until the key and a price are set |
+| `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_PLUS` | — | Stripe price ids for the $5 and $20 monthly plans |
+| `FREE_TRIAL_MINUTES` | `10` | Free minutes per new account |
+| `STARTER_MINUTES` / `PLUS_MINUTES` | `50` / `200` | Minutes per paid period (`0` = unlimited) |
+| `BILLING_GRACE_DAYS` | `3` | Days a past-due subscription keeps working |
+| `MAX_CONCURRENT_CALLS_PER_ACCOUNT` / `SIGNUPS_PER_IP_PER_DAY` | `2` / `3` | Abuse limits |
+| `BILLING_SESSION_SECRET` / `SUPPORT_EMAIL` | derived / — | Account-page cookie key; contact shown on billing pages |
 
 ## Project layout
 
 ```text
 src/muse_voice_agent/
-  mcp_server.py   MCP tools, bearer auth, /healthz, ASGI app
+  mcp_server.py   MCP tools, API-key auth and call gating, /healthz, ASGI app
+  billing.py      Accounts, hashed API keys, free/paid minute allowances
+  billing_web.py  /pricing and /account pages, Stripe Checkout/portal, Stripe webhook
+  stripe_api.py   Small httpx Stripe client and webhook signature check
+  billing_cli.py  muse-voice-billing admin commands
   tasks.py        Brief models (general, restaurant, handyman), validation, system prompts
   pickup.py       Classifies business lines: screener, voicemail, phone menu, or a person
   graph.py        LangGraph conversation graph, CallControl, and the call tools (record_outcome, end_call, press_digits, wait_on_hold)
@@ -516,7 +584,7 @@ src/muse_voice_agent/
   config.py       Settings from env
 scripts/          Twilio trunk and Retell agent setup, MCP smoke test
 docs/             Public website (GitHub Pages): home, MCP tool docs, privacy policy, terms, icon
-tests/            Graph, MCP server, Retell websocket and keepalive tests
+tests/            Graph, MCP server, billing, Retell websocket and keepalive tests
 ```
 
 ## Development

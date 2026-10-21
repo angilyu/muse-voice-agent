@@ -49,6 +49,14 @@
       <li>Call recordings and transcripts. Every call starts with "This call may be recorded."</li>
       <li>Call results: outcome, summary, confirmation details, answers, timing and how the call ended.</li>
     </ul>
+    <h3>Your account and billing</h3>
+    <ul>
+      <li>Your email address, plan, subscription status, and how many call minutes you've used.</li>
+      <li>Your API key, stored only as a one-way hash, and the IP address used to sign up (to limit
+        abuse).</li>
+      <li>If you subscribe, Stripe collects your payment details. We receive and store only your Stripe
+        customer and subscription identifiers and billing status, never your card number.</li>
+    </ul>
     <h3>Callbacks</h3>
     <ul>
       <li>When someone calls the Service's number, we receive their phone number and the call content,
@@ -65,7 +73,8 @@
     <ul>
       <li>Payment card numbers, Social Security numbers and similar secrets. Requests containing them
         are rejected, and the agent is blocked from saying them on calls.</li>
-      <li>We don't create user accounts, use advertising, or place tracking cookies. This website is
+      <li>We don't use advertising or tracking cookies. The account page sets one sign-in cookie, used
+        only to keep you signed in. This website is
         hosted on GitHub Pages, which may log visitor IP addresses under
         <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub's privacy statement</a>.</li>
     </ul>
@@ -81,6 +90,8 @@
       <li>To place the calls you request and say only what you approved.</li>
       <li>To report results, transcripts and callbacks back to your assistant.</li>
       <li>To keep the Service safe: enforcing limits, blocking sensitive data and preventing misuse.</li>
+      <li>To run your account: measuring call minutes, applying your plan, and billing you through
+        Stripe.</li>
       <li>To troubleshoot problems and improve call quality, including reviewing transcripts and
         recordings of past calls.</li>
     </ul>
@@ -104,6 +115,8 @@
             decides what the agent says, using the call request and the conversation so far.</li>
           <li><a href="https://render.com/privacy">Render</a>: hosting the server, its call database and
             its logs.</li>
+          <li><a href="https://stripe.com/privacy">Stripe</a>: subscriptions, payments, invoices and the
+            billing portal.</li>
         </ul>
       </li>
       <li><strong>When required by law</strong>, or to protect the safety of people or the Service.</li>
@@ -114,10 +127,11 @@
       can look up past calls and handle callbacks. Recordings and transcripts stored with Retell AI and
       server logs at Render are kept under those providers' retention settings. When you ask us to
       delete your information, we delete it from our database and request deletion from these providers
-      where their tools allow.</p>
+      where their tools allow. Billing records kept by Stripe may be retained as required for tax and
+      accounting.</p>
 
     <h2>Security</h2>
-    <p>Access to the Service requires a secret token, connections use HTTPS, calls are limited to
+    <p>Access to the Service requires a secret API key (stored only as a hash), connections use HTTPS, calls are limited to
       approved number ranges, and the number of simultaneous calls is capped. No system is perfectly
       secure, so please don't ask the agent to share anything you wouldn't say to the business
       yourself.</p>

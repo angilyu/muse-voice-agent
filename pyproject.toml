@@ -28,6 +28,7 @@ livekit = ["livekit-agents[langchain]~=1.8"]
 [project.scripts]
 muse-voice-agent = "muse_voice_agent.agent:main"
 muse-voice-mcp = "muse_voice_agent.mcp_server:main"
+muse-voice-billing = "muse_voice_agent.billing_cli:main"
 
 [build-system]
 requires = ["uv_build>=0.9.27,<0.10.0"]

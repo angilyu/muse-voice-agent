@@ -34,6 +34,19 @@ def _list(name: str, default: str) -> list[str]:
 
 
 @dataclass(frozen=True)
+class Plan:
+    key: str
+    name: str
+    price_id: str
+    minutes: int  # included per billing period; 0 = unlimited
+    price_hint: str  # shown when the Stripe price can't be loaded
+
+    @property
+    def minutes_label(self) -> str:
+        return "Unlimited call minutes" if self.minutes <= 0 else f"{self.minutes} call minutes a month"
+
+
+@dataclass(frozen=True)
 class LLMModelSpec:
     model: str
     reasoning_effort: str | None = None
@@ -148,6 +161,30 @@ class Settings:
     default_customer_name: str = field(default_factory=lambda: _str("DEFAULT_CUSTOMER_NAME"))
     default_callback_number: str = field(default_factory=lambda: _str("DEFAULT_CALLBACK_NUMBER"))
 
+    # Billing: every API key belongs to an account. New accounts get FREE_TRIAL_MINUTES of call
+    # time, then need an active Stripe subscription. MCP_AUTH_TOKEN stays an unmetered admin key.
+    stripe_secret_key: str = field(default_factory=lambda: _str("STRIPE_SECRET_KEY"), repr=False)
+    stripe_webhook_secret: str = field(
+        default_factory=lambda: _str("STRIPE_WEBHOOK_SECRET"), repr=False
+    )
+    free_trial_minutes: int = field(default_factory=lambda: _int("FREE_TRIAL_MINUTES", 10))
+    # Monthly plans: a Stripe recurring price id and the call minutes it includes per billing
+    # period (0 = unlimited). A plan without a price id isn't offered.
+    stripe_price_starter: str = field(default_factory=lambda: _str("STRIPE_PRICE_STARTER"))
+    starter_minutes: int = field(default_factory=lambda: _int("STARTER_MINUTES", 50))
+    stripe_price_plus: str = field(default_factory=lambda: _str("STRIPE_PRICE_PLUS"))
+    plus_minutes: int = field(default_factory=lambda: _int("PLUS_MINUTES", 200))
+    billing_grace_days: int = field(default_factory=lambda: _int("BILLING_GRACE_DAYS", 3))
+    max_concurrent_calls_per_account: int = field(
+        default_factory=lambda: _int("MAX_CONCURRENT_CALLS_PER_ACCOUNT", 2)
+    )
+    signups_per_ip_per_day: int = field(default_factory=lambda: _int("SIGNUPS_PER_IP_PER_DAY", 3))
+    # Signs account-page session cookies; derived from MCP_AUTH_TOKEN when unset.
+    billing_session_secret: str = field(
+        default_factory=lambda: _str("BILLING_SESSION_SECRET"), repr=False
+    )
+    support_email: str = field(default_factory=lambda: _str("SUPPORT_EMAIL", "angilyu@gmail.com"))
+
     # Storage
     call_db_path: Path = field(
         default_factory=lambda: Path(_str("CALL_DB_PATH", str(PROJECT_ROOT / "data" / "calls.db")))
@@ -171,6 +208,35 @@ class Settings:
         else:
             return [f"VOICE_BACKEND (unknown value {self.voice_backend!r}; use retell or livekit)"]
         return [k for k, v in required.items() if not v]
+
+    @property
+    def plans(self) -> list[Plan]:
+        """Subscription plans on offer, cheapest first."""
+        plans = [
+            Plan("starter", "Starter", self.stripe_price_starter, self.starter_minutes, "$5/month"),
+            Plan("plus", "Plus", self.stripe_price_plus, self.plus_minutes, "$20/month"),
+        ]
+        return [p for p in plans if p.price_id]
+
+    def plan(self, key: str) -> Plan | None:
+        return next((p for p in self.plans if p.key == key), None)
+
+    def plan_for_price(self, price_id: str | None) -> Plan | None:
+        return next((p for p in self.plans if price_id and p.price_id == price_id), None)
+
+    @property
+    def billing_configured(self) -> bool:
+        """Sign-ups and checkout need Stripe; without it only existing keys work."""
+        return bool(self.stripe_secret_key and self.plans)
+
+    @property
+    def billing_url(self) -> str:
+        """Where users sign up, subscribe and manage their key."""
+        return f"{self.public_base_url}/account" if self.public_base_url else "/account"
+
+    @property
+    def pricing_url(self) -> str:
+        return f"{self.public_base_url}/pricing" if self.public_base_url else "/pricing"
 
     def retell_llm_websocket_url(self) -> str:
         """URL Retell dials for the custom LLM; Retell appends /{retell_call_id}."""

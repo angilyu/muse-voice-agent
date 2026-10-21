@@ -16,6 +16,7 @@
       <nav>
         <a href="./" aria-current="page">Home</a>
         <a href="tools.html">MCP tools</a>
+        <a href="#pricing">Pricing</a>
         <a href="privacy.html">Privacy</a>
         <a href="terms.html">Terms</a>
       </nav>
@@ -81,11 +82,27 @@
         or emergency calls.</li>
     </ul>
 
+    <h2 id="pricing">Pricing</h2>
+    <p>Every new account gets <strong>10 free minutes</strong> of calls, no card needed. After that, pick a
+      monthly plan:</p>
+    <ul>
+      <li><strong>Starter: $5/month</strong> for 50 call minutes a month.</li>
+      <li><strong>Plus: $20/month</strong> for 200 call minutes a month.</li>
+    </ul>
+    <p>Only talk time counts: unanswered calls, callbacks from businesses and checking on a call are
+      free. Unused minutes don't roll over. Switch plans or cancel anytime.</p>
+    <p><a class="button" href="https://muse-voice-agent.onrender.com/pricing">See plans and get an API key</a>
+      &nbsp; <a href="https://muse-voice-agent.onrender.com/account">Manage your account</a></p>
+    <p>If you run out of minutes, your assistant tells you before any call is placed and gives you the
+      link to subscribe. Calls already in progress are never cut off. Payments are handled by
+      <a href="https://stripe.com">Stripe</a>.</p>
+
     <h2>Connecting</h2>
     <p>Muse Voice Agent speaks the <a href="https://modelcontextprotocol.io">Model Context Protocol</a>
-      over streamable HTTP at the <code>/mcp</code> endpoint. Every request needs a bearer token
-      (<code>Authorization: Bearer &lt;token&gt;</code>). See the <a href="tools.html">MCP tool
-      reference</a> for what each tool does.</p>
+      over streamable HTTP at the <code>/mcp</code> endpoint. Every request needs your API key as a bearer token
+      (<code>Authorization: Bearer &lt;api key&gt;</code>). See the <a href="tools.html">MCP tool
+      reference</a> for what each tool does. Get a key at
+      <a href="https://muse-voice-agent.onrender.com/pricing">muse-voice-agent.onrender.com/pricing</a>.</p>
     <p>Source code: <a href="https://github.com/angilyu/muse-voice-agent">github.com/angilyu/muse-voice-agent</a></p>
 
     <h2>Support</h2>
@@ -98,6 +115,7 @@
   <footer class="site">
     <div class="wrap">
       <a href="tools.html">MCP tools</a>
+      <a href="https://muse-voice-agent.onrender.com/pricing">Pricing</a>
       <a href="privacy.html">Privacy Policy</a>
       <a href="terms.html">Terms of Service</a>
       <a href="mailto:angilyu@gmail.com">Support</a>

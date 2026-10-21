@@ -14,7 +14,6 @@ Retell agent is re-pointed at it on startup.
 from __future__ import annotations
 
 import asyncio
-import hmac
 import logging
 from typing import Any, Callable
 
@@ -26,16 +25,21 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from .billing import Account, Billing, BillingError
+from .billing_web import BillingWeb, is_web_path
 from .config import Settings, get_settings
 from .dispatcher import CallRejected, start_call
 from .keepalive import KeepAliveMiddleware
 from .report import build_report, speaker_transcript
 from .retell import RetellWebsocketRouter, sync_agent_websocket_url
 from .safety import recording_disclosure_required, reject_sensitive_payload
-from .store import FINAL_STATUSES, CallStore
+from .store import ADMIN_ACCOUNT_ID, FINAL_STATUSES, CallStore
 from .tasks import Authority, GeneralCall, HandymanQuote, RestaurantReservation
 
 logger = logging.getLogger("muse_voice_agent.mcp")
+
+# ASGI scope key where BearerAuthMiddleware leaves the authenticated account id for tools.
+ACCOUNT_SCOPE_KEY = "muse_voice_agent.account_id"
 
 INSTRUCTIONS = """\
 Places real phone calls to businesses on the user's behalf using an AI voice agent.
@@ -79,6 +83,10 @@ Places real phone calls to businesses on the user's behalf using an AI voice age
   opens with "Hi, this is {assistant_name}, an AI assistant calling on behalf of {customer_name}."
 - Always confirm the business, phone number, and the brief with the user before calling.
 - Phone numbers should be E.164 (e.g. +14155550123).
+- If a call tool returns error="payment_required", no call was placed. Tell the user the message
+  as written and share billing_url; don't retry until they say they've subscribed. If a response
+  has billing_notice, pass it on. Checking past calls (get_call_status, list_calls, get_updates)
+  always works.
 """
 
 
@@ -116,18 +124,26 @@ def _public_view(
     return view
 
 
-def build_server(settings: Settings | None = None, store: CallStore | None = None) -> MCPServer:
+def build_server(
+    settings: Settings | None = None,
+    store: CallStore | None = None,
+    billing: Billing | None = None,
+) -> MCPServer:
     settings = settings or get_settings()
     store = store or CallStore(settings.call_db_path)
+    billing = billing or Billing(settings, store)
     mcp = MCPServer(name="muse-voice-agent", instructions=INSTRUCTIONS, version="0.1.0")
 
-    def _with_unread(view: dict[str, Any]) -> dict[str, Any]:
-        unread = store.count_unseen_inbound()
+    def _with_unread(view: dict[str, Any], account_id: str) -> dict[str, Any]:
+        unread = store.count_unseen_inbound(account_id)
         if unread:
             view["unread_updates"] = unread
         return view
 
     async def _start(task_cls: type, ctx: Context | None = None, **kwargs: Any) -> dict[str, Any]:
+        account = billing.get_account(_account_id(ctx))
+        if account is None:
+            return {"error": "unauthorized", "message": "Unknown account."}
         try:
             reject_sensitive_payload(kwargs, "tool_input", exclude_fields={"phone_number", "callback_number"})
             disclose, state = recording_disclosure_required(
@@ -140,7 +156,18 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             )
             kwargs["recording_disclosure_state"] = state
             task = task_cls(**kwargs)
-            record = await start_call(task, settings, store)
+            # Check billing before dialing: telephony costs start the moment a call is placed.
+            bucket = billing.authorize_call(account)
+            notice = billing.low_balance_notice(account, bucket)
+            record = await start_call(
+                task, settings, store, account_id=account.id, billing_bucket=bucket
+            )
+        except BillingError as e:
+            return {
+                "error": "payment_required",
+                "message": str(e),
+                "billing_url": settings.billing_url,
+            }
         except ValidationError as e:
             return {"error": "invalid_request", "message": str(e)}
         except ValueError as e:
@@ -150,7 +177,9 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
         store.update_call(record["id"], origin=_origin(ctx))
         view = _public_view(record)
         view["next_step"] = "Poll get_call_status with this call_id until done is true."
-        return _with_unread(view)
+        if notice:
+            view["billing_notice"] = notice
+        return _with_unread(view, account.id)
 
     @mcp.tool(
         annotations=ToolAnnotations(
@@ -346,7 +375,7 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
 
     @mcp.tool(annotations=ToolAnnotations(title="Get call status", readOnlyHint=True))
     async def get_call_status(
-        call_id: str, include_transcript: bool | None = None
+        call_id: str, include_transcript: bool | None = None, ctx: Context | None = None
     ) -> dict[str, Any]:
         """Get the status and result of a call started by this server.
 
@@ -362,8 +391,9 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             include_transcript: Include the speaker-labeled transcript (business/assistant).
                 Defaults to only once the call is done.
         """
+        account_id = _account_id(ctx)
         record = store.get_call(call_id)
-        if record is None:
+        if record is None or record.get("account_id") != account_id:
             return {"error": "not_found", "message": f"No call with id {call_id}"}
         if include_transcript is None:
             include_transcript = record["status"] in FINAL_STATUSES
@@ -374,21 +404,24 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 include_transcript=include_transcript,
                 include_report=True,
                 callback_records=callbacks,
-            )
+            ),
+            account_id,
         )
 
     @mcp.tool(annotations=ToolAnnotations(title="List recent calls", readOnlyHint=True))
-    async def list_calls(limit: int = 10) -> dict[str, Any]:
+    async def list_calls(limit: int = 10, ctx: Context | None = None) -> dict[str, Any]:
         """List the most recent calls (newest first).
 
         Args:
             limit: Max number of calls to return (1-50).
         """
         limit = max(1, min(limit, 50))
-        return _with_unread({"calls": [_public_view(r) for r in store.list_calls(limit)]})
+        account_id = _account_id(ctx)
+        calls = store.list_calls(limit, account_id=account_id)
+        return _with_unread({"calls": [_public_view(r) for r in calls]}, account_id)
 
     @mcp.tool(annotations=ToolAnnotations(title="Get callback updates", readOnlyHint=False))
-    async def get_updates(limit: int = 20) -> dict[str, Any]:
+    async def get_updates(limit: int = 20, ctx: Context | None = None) -> dict[str, Any]:
         """Collect calls businesses made back to the agent that you haven't seen yet.
 
         Each update is a finished inbound call. kind="callback" means a business called back about
@@ -401,7 +434,8 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
             limit: Max number of updates to return (1-50). Oldest first.
         """
         limit = max(1, min(limit, 50))
-        records = store.list_unseen_inbound(limit)
+        account_id = _account_id(ctx)
+        records = store.list_unseen_inbound(limit, account_id=account_id)
         updates = []
         for r in records:
             update: dict[str, Any] = {
@@ -418,9 +452,23 @@ def build_server(settings: Settings | None = None, store: CallStore | None = Non
                 }
             updates.append(update)
         store.mark_seen([r["id"] for r in records])
-        return {"updates": updates, "remaining": store.count_unseen_inbound()}
+        return {"updates": updates, "remaining": store.count_unseen_inbound(account_id)}
 
     return mcp
+
+
+def _account_id(ctx: Context | None) -> str:
+    """Account behind the current MCP request.
+
+    Over HTTP, BearerAuthMiddleware authenticates every request and records its account in the
+    ASGI scope. In-process clients (tests, stdio) have no HTTP request and act as the admin.
+    """
+    try:
+        request = ctx.request_context.request if ctx else None
+    except Exception:  # noqa: BLE001 - no request context
+        request = None
+    scope = getattr(request, "scope", None) or {}
+    return scope.get(ACCOUNT_SCOPE_KEY) or ADMIN_ACCOUNT_ID
 
 
 def _origin(ctx: Context | None) -> str:
@@ -434,11 +482,12 @@ def _origin(ctx: Context | None) -> str:
 
 
 class BearerAuthMiddleware:
-    """Requires `Authorization: Bearer <token>` on every HTTP request except /healthz."""
+    """Requires a bearer API key (or the admin MCP_AUTH_TOKEN) on every HTTP request except
+    /healthz, and records the key's account in the scope for the tools."""
 
-    def __init__(self, app: ASGIApp, token: str):
+    def __init__(self, app: ASGIApp, billing: Billing):
         self.app = app
-        self.token = token.encode()
+        self.billing = billing
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] == "http":
@@ -446,11 +495,34 @@ class BearerAuthMiddleware:
                 await JSONResponse({"ok": True})(scope, receive, send)
                 return
             headers = dict(scope.get("headers") or [])
-            auth = headers.get(b"authorization", b"")
-            scheme, _, supplied = auth.partition(b" ")
-            if scheme.lower() != b"bearer" or not hmac.compare_digest(supplied.strip(), self.token):
-                await JSONResponse({"error": "unauthorized"}, status_code=401)(scope, receive, send)
+            auth = headers.get(b"authorization", b"").decode("latin-1")
+            scheme, _, supplied = auth.partition(" ")
+            account: Account | None = None
+            if scheme.lower() == "bearer":
+                account = self.billing.authenticate(supplied)
+            if account is None:
+                body = {
+                    "error": "unauthorized",
+                    "message": "Missing, unknown or revoked API key. Get or replace your key at "
+                    f"{self.billing.settings.billing_url}.",
+                }
+                await JSONResponse(body, status_code=401)(scope, receive, send)
                 return
+            scope[ACCOUNT_SCOPE_KEY] = account.id
+        await self.app(scope, receive, send)
+
+
+class WebRouter:
+    """Sends account/pricing pages and the Stripe webhook to `web`, everything else to `app`."""
+
+    def __init__(self, app: ASGIApp, web: ASGIApp):
+        self.app = app
+        self.web = web
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http" and is_web_path(scope["path"]):
+            await self.web(scope, receive, send)
+            return
         await self.app(scope, receive, send)
 
 
@@ -463,16 +535,17 @@ def build_app(
     if not settings.mcp_auth_token:
         raise SystemExit("MCP_AUTH_TOKEN must be set in .env (the server is meant to be public).")
     store = store or CallStore(settings.call_db_path)
-    mcp = build_server(settings, store)
+    billing = Billing(settings, store)
+    mcp = build_server(settings, store, billing)
     # Auth is enforced by the bearer token; Host-header checks would reject tunnel hostnames.
     app = mcp.streamable_http_app(
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
         host=settings.mcp_host,
     )
-    # HTTP requests need the bearer token; websockets are only Retell's (secret-path protected).
-    app = RetellWebsocketRouter(
-        BearerAuthMiddleware(app, settings.mcp_auth_token), settings, store, model_factory
-    )
+    # HTTP requests need an API key (or the admin token) except the account pages and Stripe's
+    # signed webhook; websockets are only Retell's (secret-path protected).
+    app = WebRouter(BearerAuthMiddleware(app, billing), BillingWeb(settings, billing).app())
+    app = RetellWebsocketRouter(app, settings, store, model_factory)
     if settings.keepalive_seconds > 0 and settings.public_base_url:
         app = KeepAliveMiddleware(
             app, f"{settings.public_base_url}/healthz", settings.keepalive_seconds
