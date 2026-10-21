@@ -172,17 +172,20 @@ client_factory: Callable[[Settings], RetellClient] = lambda s: RetellClient(s.re
 
 
 async def sync_agent_websocket_url(settings: Settings) -> str:
-    """Point the Retell agent at our current public URL (quick tunnels change on restart)."""
+    """Point the Retell agent at our current public URL (quick tunnels change on restart) and keep
+    its call-length cap equal to MAX_CALL_SECONDS."""
     url = settings.retell_llm_websocket_url()
+    max_ms = settings.max_call_seconds * 1000
     async with client_factory(settings) as client:
         agent = await client.get_agent(settings.retell_agent_id)
         engine = agent.get("response_engine") or {}
-        if engine.get("type") == "custom-llm" and engine.get("llm_websocket_url") == url:
-            return url
-        await client.update_agent(
-            settings.retell_agent_id,
-            {"response_engine": {"type": "custom-llm", "llm_websocket_url": url}},
-        )
+        update: dict[str, Any] = {}
+        if engine.get("type") != "custom-llm" or engine.get("llm_websocket_url") != url:
+            update["response_engine"] = {"type": "custom-llm", "llm_websocket_url": url}
+        if agent.get("max_call_duration_ms") != max_ms:
+            update["max_call_duration_ms"] = max_ms
+        if update:
+            await client.update_agent(settings.retell_agent_id, update)
     return url
 
 

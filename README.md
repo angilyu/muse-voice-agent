@@ -393,7 +393,8 @@ Depending on the call type, `details` can also include `confirmed_date`, `confir
   only open paths. Retell's websocket can't send headers, so it uses an
   unguessable path secret (`RETELL_WS_SECRET`), and it only attaches to calls this server started.
 - **Who it can call.** `ALLOWED_DIAL_PREFIXES` (default `+1`), `MAX_CONCURRENT_CALLS` (default 3),
-  `MAX_CONCURRENT_CALLS_PER_ACCOUNT` (default 2) and `MAX_CALL_SECONDS` (default 300).
+  `MAX_CONCURRENT_CALLS_PER_ACCOUNT` (default 2) and `MAX_CALL_SECONDS` (default 7200, Retell's
+  2-hour maximum; the server copies it to the Retell agent on startup).
 - **Accounts are isolated.** Each API key only sees its own calls and callbacks.
 - **Honest.** Every call opens with a fixed line, "Hi, this is [Eva, ]an AI assistant calling on
   behalf of {name}." It's streamed to text-to-speech before the LLM runs, so the business hears it at once.
@@ -481,8 +482,7 @@ upgrading to Plus.
   shared by all its calls that are going at once, and the server re-checks it while calls run. When
   it's used up the agent says a short goodbye and hangs up, and the call result includes `cut_off`.
   The overage is billed like any other talk time; a free-minutes call that runs past the free
-  minutes of a subscriber uses plan minutes. `MAX_CALL_SECONDS` still caps every call, so with the
-  default 5-minute cap this only matters if you raise it.
+  minutes of a subscriber uses plan minutes. `MAX_CALL_SECONDS` (2 hours) still caps every call.
 - **Pages.** `/pricing` (enter an email, confirm it with a 6-digit code we email, get a key),
   `/account` (sign in with the key or an emailed code, see usage, subscribe to a plan, change plan
   or cancel, rotate the key). Rotating or revoking a key
@@ -557,7 +557,7 @@ All settings come from environment variables or `.env`; see [`.env.example`](.en
 | `MCP_HOST` / `MCP_PORT` | `127.0.0.1` / `8765` | Bind address (the Docker image uses `0.0.0.0:10000`) |
 | `PUBLIC_BASE_URL` | — | Public https URL; the Retell websocket is synced to it |
 | `ALLOWED_DIAL_PREFIXES` | `+1` | Comma-separated E.164 prefixes the agent may dial |
-| `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `300` / `3` | Limits on call length and simultaneous calls |
+| `MAX_CALL_SECONDS` / `MAX_CONCURRENT_CALLS` | `7200` / `3` | Limits on call length (60–7200 s) and simultaneous calls |
 | `CALL_RECORDING_ENABLED` | `true` | Whether the backend records calls; when true, the agent discloses recording early |
 | `RECORDING_DISCLOSURE_SCOPE` | `always` | `always` (recommended) or `required_states` for known all-party-consent/unknown area codes |
 | `LLM_SERVICE_TIER` | `default` | OpenAI service tier. `default` is standard processing. `priority` cuts about 0.1 to 0.9 s per turn but costs about 2x per token, so it's opt-in only |

@@ -69,6 +69,38 @@ def test_websocket_url_is_derived_from_public_base_url(settings):
     )
 
 
+def test_startup_sync_copies_the_call_length_cap_to_retell(settings, monkeypatch):
+    url = settings.retell_llm_websocket_url()
+    agent = {"response_engine": {"type": "custom-llm", "llm_websocket_url": url},
+             "max_call_duration_ms": 300_000}
+    patches = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "PATCH":
+            patches.append(json.loads(request.content))
+            agent.update(patches[-1])
+        return httpx.Response(200, json=agent)
+
+    monkeypatch.setattr(
+        retell,
+        "client_factory",
+        lambda s: retell.RetellClient(s.retell_api_key, transport=httpx.MockTransport(handler)),
+    )
+    asyncio.run(retell.sync_agent_websocket_url(settings))
+    assert patches == [{"max_call_duration_ms": settings.max_call_seconds * 1000}]
+    asyncio.run(retell.sync_agent_websocket_url(settings))
+    assert len(patches) == 1
+
+
+def test_call_length_cap_defaults_to_two_hours_and_is_clamped(monkeypatch):
+    monkeypatch.delenv("MAX_CALL_SECONDS", raising=False)
+    assert Settings().max_call_seconds == 7200
+    monkeypatch.setenv("MAX_CALL_SECONDS", "99999")
+    assert Settings().max_call_seconds == 7200
+    monkeypatch.setenv("MAX_CALL_SECONDS", "10")
+    assert Settings().max_call_seconds == 60
+
+
 def test_custom_llm_websocket_conversation(settings):
     store = CallStore(settings.call_db_path)
     call_id = store.create_call(_task().model_dump(), dry_run=False)["id"]
