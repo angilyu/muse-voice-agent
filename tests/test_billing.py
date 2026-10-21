@@ -304,6 +304,35 @@ def test_talk_limit_is_minutes_left_plus_overage(http, billing, store, settings)
     ) == pytest.approx(limit - 20 * 60, abs=1)
 
 
+def test_free_minutes_call_that_runs_over_uses_plan_minutes(billing, store):
+    account = billing.create_account("a@example.com")
+    _talk(store, account.id, "free", 540)
+    account = _subscribe(billing, account)
+    assert billing.authorize_call(account) == "free"
+    _talk(store, account.id, "free", 5 * 60)  # 1 free minute left, so 4 go on the plan
+    usage = billing.usage(account)
+    assert usage.free_left == 0
+    assert usage.paid_used == pytest.approx(4 * 60, abs=1)
+    assert billing.authorize_call(account) == "paid"
+    assert billing.talk_seconds_left(account) == pytest.approx(46 * 60 + 20 * 60, abs=1)
+
+    # Free minutes that ran over before the subscription aren't charged to the plan.
+    other = billing.create_account("b@example.com")
+    _talk(store, other.id, "free", 15 * 60)
+    other = _subscribe(billing, other, period_start=time.time() + 1)
+    assert billing.usage(other).paid_used == 0
+
+
+def test_time_left_is_shared_by_the_accounts_calls(billing, store):
+    account = billing.create_account("a@example.com")
+    _talk(store, account.id, "free", 540)
+    assert billing.talk_seconds_left(account) == pytest.approx(21 * 60, abs=1)
+    _talk(store, account.id, "free", 15 * 60)
+    _talk(store, account.id, "free", 15 * 60)
+    # Two calls ran 15 minutes each: 1 free minute plus the 20-minute allowance is 9 minutes gone.
+    assert billing.talk_seconds_left(account) == pytest.approx(-9 * 60, abs=1)
+
+
 def test_past_due_grace_then_inactive(billing, store):
     account = billing.create_account("a@example.com")
     _talk(store, account.id, "free", 600)

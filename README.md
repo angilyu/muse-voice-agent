@@ -477,10 +477,12 @@ upgrading to Plus.
   nothing is dialed, so the assistant can tell the user in plain language. Results include a
   `billing_notice` when two or fewer minutes are left.
 - **Calls that run over.** A call that starts with minutes left can finish even if it goes past
-  them, by up to `CALL_OVERAGE_MINUTES` (default 20). At that point the agent says a short goodbye
-  and hangs up, and the call result includes `cut_off`. The overage is billed like any other talk
-  time. `MAX_CALL_SECONDS` still caps every call, so with the default 5-minute cap this only
-  matters if you raise it.
+  them, by up to `CALL_OVERAGE_MINUTES` (default 20). The overage is one allowance per account,
+  shared by all its calls that are going at once, and the server re-checks it while calls run. When
+  it's used up the agent says a short goodbye and hangs up, and the call result includes `cut_off`.
+  The overage is billed like any other talk time; a free-minutes call that runs past the free
+  minutes of a subscriber uses plan minutes. `MAX_CALL_SECONDS` still caps every call, so with the
+  default 5-minute cap this only matters if you raise it.
 - **Pages.** `/pricing` (enter an email, confirm it with a 6-digit code we email, get a key),
   `/account` (sign in with the key or an emailed code, see usage, subscribe to a plan, change plan
   or cancel, rotate the key). Rotating or revoking a key

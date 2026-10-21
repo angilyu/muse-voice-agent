@@ -12,6 +12,7 @@ from starlette.websockets import WebSocketDisconnect
 from test_graph import FakeToolModel
 
 from muse_voice_agent import retell
+from muse_voice_agent.billing import Billing
 from muse_voice_agent.config import Settings
 from muse_voice_agent.dispatcher import start_call
 from muse_voice_agent.mcp_server import build_app, build_server
@@ -220,8 +221,16 @@ def test_call_is_ended_politely_at_its_talk_limit(settings, monkeypatch):
     )
     store = CallStore(settings.call_db_path)
     model = FakeToolModel(messages=iter([AIMessage(content="Do you have a table at 7?")] * 3))
+    settings = replace(settings, call_overage_minutes=0)
+    billing = Billing(settings, store)
+    account = billing.create_account("a@example.com", free_seconds=60)
+    # The account's other call has used all but a second of its time.
+    other = store.create_call(_task().model_dump(), dry_run=False, account_id=account.id,
+                              billing_bucket="free")
+    store.update_call(other["id"], status="in_progress", started_at=time.time() - 59)
     call_id, client, path = _bound_session(settings, store, model)
-    store.update_call(call_id, talk_limit_seconds=0.3)
+    store.update_call(call_id, account_id=account.id, billing_bucket="free",
+                      talk_limit_seconds=billing.talk_limit_seconds(account, "free"))
     with client.websocket_connect(path) as ws:
         ws.receive_json(), ws.receive_json()
         ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})
@@ -255,7 +264,13 @@ def test_no_talk_limit_watcher_when_the_call_cap_comes_first(settings, monkeypat
     store = CallStore(settings.call_db_path)
     model = FakeToolModel(messages=iter([AIMessage(content="Hi!")]))
     call_id, client, path = _bound_session(settings, store, model)
-    store.update_call(call_id, talk_limit_seconds=settings.max_call_seconds + 1)
+    account = Billing(settings, store).create_account("a@example.com")
+    store.update_call(
+        call_id,
+        account_id=account.id,
+        billing_bucket="free",
+        talk_limit_seconds=settings.max_call_seconds * settings.max_concurrent_calls_per_account,
+    )
     with client.websocket_connect(path) as ws:
         ws.receive_json(), ws.receive_json()
         ws.send_json({"interaction_type": "call_details", "call": {"metadata": {"muse_call_id": call_id}}})

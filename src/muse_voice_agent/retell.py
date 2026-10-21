@@ -27,6 +27,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from starlette.types import ASGIApp, Receive, Scope, Send
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
+from .billing import Billing
 from .config import Settings
 from .graph import CallControl, CallOutcome, build_call_graph
 from .outcome_fallback import has_business_speech, infer_outcome
@@ -408,10 +409,14 @@ class RetellLLMSession:
         if (
             self.settings is not None
             and record.get("direction") != "inbound"
+            and record.get("account_id")
             and isinstance(limit, (int, float))
-            and limit < self.settings.max_call_seconds
+            # Parallel calls share the allowance, so the cap alone may not keep this call within it.
+            and limit < self.settings.max_call_seconds * self._parallel_calls()
         ):
-            self._limit_watcher = asyncio.create_task(self._enforce_talk_limit(float(limit)))
+            self._limit_watcher = asyncio.create_task(
+                self._enforce_talk_limit(record["account_id"])
+            )
 
     async def _create_inbound_call(self, call: dict[str, Any]) -> dict[str, Any] | None:
         if self.settings is None:
@@ -513,8 +518,16 @@ class RetellLLMSession:
         except Exception as e:  # noqa: BLE001
             logger.warning("silent-pickup watcher failed (retell call %s): %s", self.retell_call_id, e)
 
-    async def _enforce_talk_limit(self, limit: float) -> None:
-        """End the call politely once its talk time reaches the account's limit."""
+    def _parallel_calls(self) -> int:
+        assert self.settings is not None
+        return max(1, self.settings.max_concurrent_calls_per_account)
+
+    async def _enforce_talk_limit(self, account_id: str) -> None:
+        """End the call politely once the account is past its minutes plus the overage allowance.
+
+        The account's time left is re-read while the call runs, so it covers the account's other
+        calls in progress and a plan upgrade in the middle of the call.
+        """
         assert self.settings is not None
         try:
             async with client_factory(self.settings) as client:
@@ -528,10 +541,27 @@ class RetellLLMSession:
                         return
                     await asyncio.sleep(1.0)
             started = call.get("start_timestamp")
-            wait = limit
-            if isinstance(started, (int, float)):
-                wait = max(0.0, started / 1000 + limit - time.time())
-            await asyncio.sleep(wait)
+            record = self.store.get_call(self.call_id) if self.call_id else None
+            if record and (isinstance(started, (int, float)) or not record.get("started_at")):
+                # Count this call's talk time against the account while it's still going.
+                self.store.update_call(
+                    record["id"],
+                    started_at=started / 1000
+                    if isinstance(started, (int, float))
+                    else time.time(),
+                )
+            billing = Billing(self.settings, self.store)
+            while True:
+                if self._closed:
+                    return
+                account = billing.get_account(account_id)
+                left = billing.talk_seconds_left(account) if account else None
+                if left is None:
+                    return
+                if left <= 0:
+                    break
+                # With n calls running, the account's time can run out n times as fast.
+                await asyncio.sleep(max(0.5, min(60.0, left / self._parallel_calls())))
             if self._closed:
                 return
             logger.info("retell call %s reached its talk limit; ending it", self.retell_call_id)

@@ -365,21 +365,42 @@ class Billing:
             paid_used = self.store.billed_seconds(
                 account.id, "paid", since=account.current_period_start
             )
+            # A call that starts on the last free minutes keeps going on the plan's minutes.
+            overflow = max(0.0, free_used - account.free_seconds)
+            if overflow:
+                paid_used += min(
+                    overflow,
+                    self.store.billed_seconds(
+                        account.id, "free", since=account.current_period_start
+                    ),
+                )
+                free_used = float(account.free_seconds)
         return Usage(free_used, account.free_seconds, paid_used, paid_total)
+
+    def talk_seconds_left(self, account: Account) -> float | None:
+        """Talk time the account may still use, counting calls in progress and the overage allowance.
+
+        Goes negative once the account is past its allowance. None means no limit (unmetered
+        accounts and unlimited plans).
+        """
+        if account.is_admin:
+            return None
+        usage = self.usage(account)
+        if usage.paid_total is None:
+            return None
+        overage = max(0, self.settings.call_overage_minutes) * 60
+        return (
+            usage.free_total - usage.free_used + usage.paid_total - usage.paid_used + overage
+        )
 
     def talk_limit_seconds(self, account: Account, bucket: str | None) -> float | None:
         """Talk time after which a new call is ended: minutes left now plus the overage allowance.
 
         None means no limit (unmetered accounts and unlimited plans).
         """
-        if bucket is None or account.is_admin:
+        if bucket is None:
             return None
-        usage = self.usage(account)
-        paid_left = usage.paid_left if account.subscription_active() else 0.0
-        if paid_left is None:
-            return None
-        overage = max(0, self.settings.call_overage_minutes) * 60
-        return usage.free_left + paid_left + overage
+        return self.talk_seconds_left(account)
 
     def authorize_call(self, account: Account) -> str | None:
         """Pick the allowance a new call draws on, or raise BillingError. None = unmetered."""
