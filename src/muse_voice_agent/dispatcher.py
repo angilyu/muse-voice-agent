@@ -9,7 +9,7 @@ import time
 from typing import Any
 
 from .config import Settings
-from .store import CallStore
+from .store import ADMIN_ACCOUNT_ID, CallStore
 from .tasks import AnyTask, GeneralCall, RestaurantReservation, opening_line
 
 logger = logging.getLogger("muse_voice_agent.dispatcher")
@@ -21,7 +21,7 @@ class CallRejected(Exception):
     pass
 
 
-def _check_allowed(task: AnyTask, settings: Settings, store: CallStore):
+def _check_allowed(task: AnyTask, settings: Settings, store: CallStore, account_id: str):
     if settings.allowed_dial_prefixes and not any(
         task.phone_number.startswith(p) for p in settings.allowed_dial_prefixes
     ):
@@ -32,12 +32,22 @@ def _check_allowed(task: AnyTask, settings: Settings, store: CallStore):
         raise CallRejected(
             f"Too many calls in progress (max {settings.max_concurrent_calls}). Try again shortly."
         )
+    per_account = settings.max_concurrent_calls_per_account
+    if account_id != ADMIN_ACCOUNT_ID and per_account and store.count_active(account_id) >= per_account:
+        raise CallRejected(
+            f"You already have {per_account} calls in progress. Wait for one to finish, then try again."
+        )
 
 
 async def start_call(
-    task: AnyTask, settings: Settings, store: CallStore
+    task: AnyTask,
+    settings: Settings,
+    store: CallStore,
+    *,
+    account_id: str = ADMIN_ACCOUNT_ID,
+    billing_bucket: str | None = None,
 ) -> dict[str, Any]:
-    _check_allowed(task, settings, store)
+    _check_allowed(task, settings, store, account_id)
 
     if not settings.dry_run:
         missing = settings.missing_for_live_calls()
@@ -46,7 +56,12 @@ async def start_call(
                 f"Live calling is not configured; set {', '.join(missing)} in .env or use DRY_RUN=true"
             )
 
-    record = store.create_call(task.model_dump(), dry_run=settings.dry_run)
+    record = store.create_call(
+        task.model_dump(),
+        dry_run=settings.dry_run,
+        account_id=account_id,
+        billing_bucket=billing_bucket,
+    )
     call_id = record["id"]
 
     if settings.dry_run:

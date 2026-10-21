@@ -31,9 +31,22 @@
     <table>
       <tr><th>Protocol</th><td><a href="https://modelcontextprotocol.io">Model Context Protocol</a>, streamable HTTP transport</td></tr>
       <tr><th>Endpoint</th><td><code>https://&lt;server&gt;/mcp</code></td></tr>
-      <tr><th>Authentication</th><td><code>Authorization: Bearer &lt;token&gt;</code> on every request. Requests without a valid token get <code>401</code>.</td></tr>
+      <tr><th>Authentication</th><td><code>Authorization: Bearer &lt;api key&gt;</code> on every request. Get a key at <a href="https://muse-voice-agent.onrender.com/pricing">/pricing</a> and manage it at <a href="https://muse-voice-agent.onrender.com/account">/account</a>. Requests without a valid key get <code>401</code>. Each key only sees its own calls.</td></tr>
       <tr><th>Health check</th><td><code>GET /healthz</code> (no token needed) returns <code>{"ok": true}</code></td></tr>
     </table>
+
+    <h2 id="billing">Minutes and billing</h2>
+    <p>New accounts include 10 free minutes; after that a monthly plan includes 50 (Starter, $5) or 200
+      (Plus, $20) minutes per billing period. Only talk time on outbound calls counts. The allowance is checked
+      before dialing. When it's used up, the call tools place no call and return:</p>
+<pre><code>{
+  "error": "payment_required",
+  "message": "You've used your 10 free minutes. Subscribe to keep placing calls: https://…/account",
+  "billing_url": "https://…/account"
+}</code></pre>
+    <p>Show the <code>message</code> and link to the user and don't retry. <code>get_call_status</code>,
+      <code>list_calls</code> and <code>get_updates</code> keep working. When two or fewer minutes are
+      left, call results also include a <code>billing_notice</code> string to pass on.</p>
 
     <h2 id="flow">Typical flow</h2>
     <ol>
