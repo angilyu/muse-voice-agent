@@ -653,6 +653,8 @@ def test_signup_verifies_email_then_shows_key_once(web, billing, outbox):
     assert account and account.email == "new@example.com" and account.free_seconds == 600
     assert "https://voice.example/mcp" in r.text
     assert "Send Muse this message" in r.text and "secure credential prompt" in r.text
+    assert r.text.index("Step 2: Paste your API key") < r.text.index('id="key"')  # key shown in step 2
+    assert "Copy your API key" not in r.text
     assert SESSION_COOKIE in r.cookies
 
     page = web.get("/account")
